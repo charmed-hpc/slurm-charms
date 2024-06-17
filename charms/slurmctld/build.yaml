@@ -1,3 +1,4 @@
 external-libraries:
   - charms.operator_libs_linux.v1.systemd
   - charms.hpc_libs.v0.slurm_ops
+  - charms.grafana_agent.v0.cos_agent

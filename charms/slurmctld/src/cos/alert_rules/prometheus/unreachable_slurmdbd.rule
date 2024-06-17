@@ -1,0 +1,12 @@
+alert: SlurmTooManyFailedDbdMessages
+expr: max_over_time(slurm_dbd_agent_queue_size{%%juju_topology%%}[1m]) > 5000
+for: 1s
+labels:
+  severity: critical
+annotations:
+  summary: Slurm controller {{ $labels.juju_model }}/{{ $labels.juju_unit }} cannot reach SlurmDBD
+  description: >
+    The maximum amount of pending messages from the Slurm controller {{ $labels.juju_model }}/{{ $labels.juju_unit }}
+    to SlurmDBD exceeded 5000 in the past minute. This can indicate a problem to reach SlurmDBD
+    or its backing database.
+    LABELS = {{ $labels }}

@@ -1,0 +1,12 @@
+alert: SlurmHighCPUUsage
+expr: (slurm_cpu_load{%%juju_topology%%} / slurm_cpus_total{%%juju_topology%%}) * 100 > 90
+for: 5m
+labels:
+  severity: warning
+annotations:
+  summary: CPU usage for the cluster managed by the Slurm controller {{ $labels.juju_model }}/{{ $labels.juju_unit }} reached 90%
+  description: >
+    The total CPU usage for all nodes in the cluster managed by the Slurm controller
+    {{ $labels.juju_model }}/{{ $labels.juju_unit }} reached 90%. This could indicate that the cluster
+    is reaching its maximum computing capacity.
+    LABELS = {{ $labels }}
