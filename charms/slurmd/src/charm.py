@@ -27,9 +27,9 @@ from ops import (
 )
 from slurm_conf_editor import Node, Partition
 from slurmd_ops import SlurmdManager
-from utils import slurmd
 
 from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore[import-untyped]
+    Service,
     ServiceStartedEvent,
     ServiceStoppedEvent,
     SystemdNotices,
@@ -61,7 +61,7 @@ class SlurmdCharm(CharmBase):
 
         self._slurmd_manager = SlurmdManager()
         self._slurmctld = Slurmctld(self, "slurmctld")
-        self._systemd_notices = SystemdNotices(self, ["slurmd"])
+        self._systemd_notices = SystemdNotices(self, [Service("snap.slurm.slurmd", "slurmd")])
 
         event_handler_bindings = {
             self.on.install: self._on_install,
@@ -83,7 +83,6 @@ class SlurmdCharm(CharmBase):
 
         if self._slurmd_manager.install():
             self.unit.set_workload_version(self._slurmd_manager.version())
-            slurmd.override_service()
             self._systemd_notices.subscribe()
 
             self._stored.slurm_installed = True
@@ -143,7 +142,7 @@ class SlurmdCharm(CharmBase):
 
         if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
             if slurmctld_host is not None:
-                slurmd.override_default(slurmctld_host)
+                self._slurmd_manager.set_conf_server(slurmctld_host)
                 self._stored.slurmctld_host = slurmctld_host
                 logger.debug(f"slurmctld_host={slurmctld_host}")
             else:
@@ -179,7 +178,8 @@ class SlurmdCharm(CharmBase):
         else:
             logger.error("## Unable to restart munge")
 
-        slurmd.restart()
+        self._slurmd_manager._manager.enable()
+        self._slurmd_manager._manager.restart()
         self._check_status()
 
     def _on_slurmctld_unavailable(self, event) -> None:
@@ -189,7 +189,7 @@ class SlurmdCharm(CharmBase):
         self._stored.nhc_params = ""
         self._stored.munge_key = ""
         self._stored.slurmctld_host = ""
-        slurmd.stop()
+        self._slurmd_manager._manager.disable()
         self._check_status()
 
     def _on_slurmd_started(self, _: ServiceStartedEvent) -> None:
@@ -205,7 +205,8 @@ class SlurmdCharm(CharmBase):
         # Trigger reconfiguration of slurmd node.
         self._new_node = False
         self._slurmctld.set_node()
-        slurmd.restart()
+        self._slurmd_manager._manager.enable()
+        self._slurmd_manager._manager.restart()
         logger.debug("### This node is not new anymore")
 
     def _on_show_nhc_config(self, event: ActionEvent) -> None:

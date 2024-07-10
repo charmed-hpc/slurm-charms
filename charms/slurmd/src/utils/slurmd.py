@@ -32,21 +32,6 @@ import charms.operator_libs_linux.v1.systemd as systemd  # type: ignore [import-
 _logger = logging.getLogger(__name__)
 
 
-def start() -> None:
-    """Start slurmd service."""
-    systemd.service_start("slurmd")
-
-
-def stop() -> None:
-    """Stop slurmd service."""
-    systemd.service_stop("slurmd")
-
-
-def restart() -> None:
-    """Restart slurmd service."""
-    systemd.service_restart("slurmd")
-
-
 def override_default(host: str) -> None:
     """Override the /etc/default/slurmd file.
 

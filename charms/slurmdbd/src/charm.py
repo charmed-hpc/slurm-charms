@@ -5,11 +5,17 @@
 """Slurmdbd Operator Charm."""
 
 import logging
+from pathlib import Path
 from time import sleep
 from typing import Any, Dict, Union
 from urllib.parse import urlparse
 
-from constants import CHARM_MAINTAINED_PARAMETERS, SLURM_ACCT_DB
+from constants import (
+    CHARM_MAINTAINED_PARAMETERS,
+    JWT_RSA_PATH,
+    SLURM_ACCT_DB,
+    SLURMDBD_DEFAULTS_FILE,
+)
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
     ActiveStatus,
@@ -22,8 +28,9 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmdbd_ops import SlurmdbdOpsManager
+from slurmdbd_ops import LegacySlurmdbdManager, SlurmdbdManager
 
+import charms.hpc_libs.v0.slurm_ops as slurm
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseRequires,
@@ -47,7 +54,9 @@ class SlurmdbdCharm(CharmBase):
         )
 
         self._db = DatabaseRequires(self, relation_name="database", database_name=SLURM_ACCT_DB)
-        self._slurmdbd_ops_manager = SlurmdbdOpsManager()
+        self._slurmdbd = SlurmdbdManager()
+        # Legacy manager provides operations we're still fleshing out.
+        self._legacy_manager = LegacySlurmdbdManager()
         self._slurmctld = Slurmctld(self, "slurmctld")
 
         event_handler_bindings = {
@@ -70,19 +79,31 @@ class SlurmdbdCharm(CharmBase):
 
         self.unit.status = WaitingStatus("Installing slurmdbd")
 
-        if self._slurmdbd_ops_manager.install() is not False:
-            self.unit.set_workload_version(self._slurmdbd_ops_manager.version)
+        try:
+            slurm.install()
+            self.unit.set_workload_version(slurm.version())
+
+            self._slurmdbd.munge.enable()
+
+            logger.debug("## Munge started successfully")
+
+            # Small hack to be able to pass environment variables to the slurmdbd service.
+            try:
+                override = Path("/etc/systemd/system/snap.slurm.slurmdbd.service.d/override.conf")
+                override.parent.mkdir(exist_ok=True, parents=True)
+                override.write_text(f"""[Service]\nEnvironmentFile=-{SLURMDBD_DEFAULTS_FILE}""")
+                SLURMDBD_DEFAULTS_FILE.parent.mkdir(exist_ok=True, parents=True)
+            except OSError as e:
+                raise slurm.SlurmOpsError(f"{e}")
+
             self._stored.slurm_installed = True
+        except slurm.SlurmOpsError as e:
+            self.unit.status = BlockedStatus("error installing slurmdbd. check log for more info")
+            logger.error(e.message)
+            event.defer()
+            return
 
-            if self._slurmdbd_ops_manager.start_munge():
-                logger.debug("## Munge started successfully")
-            else:
-                logger.error("## Unable to start munge")
-                self.unit.status = BlockedStatus("Error restarting munge")
-                event.defer()
-                return
-
-            self.unit.status = ActiveStatus("slurmdbd successfully installed")
+        self.unit.status = ActiveStatus("slurmdbd successfully installed")
         self._check_status()
 
     def _on_update_status(self, event: UpdateStatusEvent) -> None:
@@ -96,12 +117,11 @@ class SlurmdbdCharm(CharmBase):
             return
 
         if (jwt := event.jwt_rsa) is not None:
-            self._slurmdbd_ops_manager.write_jwt_rsa(jwt)
+            self._legacy_manager.write_jwt_rsa(jwt)
 
         if (munge_key := event.munge_key) is not None:
-            self._slurmdbd_ops_manager.stop_munge()
-            self._slurmdbd_ops_manager.write_munge_key(munge_key)
-            self._slurmdbd_ops_manager.start_munge()
+            self._slurmdbd.munge.set_key(munge_key)
+            self._slurmdbd.munge.restart()
 
         # Don't try to write the config before the database has been created.
         # Otherwise, this will trigger a defer on this event, which we don't really need
@@ -173,7 +193,7 @@ class SlurmdbdCharm(CharmBase):
             # Make sure to strip the file:// off the front of the first endpoint
             # otherwise slurmdbd will not be able to connect to the database
             socket = urlparse(socket_endpoints[0]).path
-            self._slurmdbd_ops_manager.set_environment_var(mysql_unix_port=f'"{socket}"')
+            self._legacy_manager.set_environment_var(mysql_unix_port=f'"{socket}"')
         elif tcp_endpoints:
             # This must be using TCP endpoint and the connection information will
             # be host_address:port. Only one remote mysql service will be configured
@@ -195,7 +215,7 @@ class SlurmdbdCharm(CharmBase):
                 }
             )
             # Make sure that the MYSQL_UNIX_PORT is removed from the env file.
-            self._slurmdbd_ops_manager.set_environment_var(mysql_unix_port=None)
+            self._legacy_manager.set_environment_var(mysql_unix_port=None)
         else:
             # This is 100% an error condition that the charm doesn't know how to handle
             # and is an unexpected condition. This happens when there are commas but no
@@ -242,19 +262,17 @@ class SlurmdbdCharm(CharmBase):
             slurmdbd_full_config = {
                 **CHARM_MAINTAINED_PARAMETERS,
                 **self._stored.db_info,
-                **{"DbdHost": self._slurmdbd_ops_manager.hostname},
+                **{"DbdHost": self._slurmdbd.hostname},
                 **{"DbdAddr": f"{binding.network.ingress_address}"},
                 **self._get_user_supplied_parameters(),
             }
 
             if self._slurmctld.is_joined:
                 slurmdbd_full_config["AuthAltTypes"] = "auth/jwt"
-                slurmdbd_full_config["AuthAltParameters"] = (
-                    '"jwt_key=/var/spool/slurmdbd/jwt_hs256.key"'
-                )
+                slurmdbd_full_config["AuthAltParameters"] = f'"jwt_key={JWT_RSA_PATH}"'
 
-            self._slurmdbd_ops_manager.stop_slurmdbd()
-            self._slurmdbd_ops_manager.write_slurmdbd_conf(slurmdbd_full_config)
+            self._slurmdbd.disable()
+            self._legacy_manager.write_slurmdbd_conf(slurmdbd_full_config)
 
             # At this point, we must guarantee that slurmdbd is correctly
             # initialized. Its startup might take a while, so we have to wait
@@ -265,9 +283,7 @@ class SlurmdbdCharm(CharmBase):
             # Enforce that no one other than the leader tries to set
             # application relation data.
             if self.model.unit.is_leader():
-                self._slurmctld.set_slurmdbd_host_on_app_relation_data(
-                    self._slurmdbd_ops_manager.hostname
-                )
+                self._slurmctld.set_slurmdbd_host_on_app_relation_data(self._slurmdbd.hostname)
         else:
             logger.debug("Cannot get network binding. Please Debug.")
             event.defer()
@@ -292,18 +308,19 @@ class SlurmdbdCharm(CharmBase):
     def _check_slurmdbd(self, max_attemps: int = 5) -> None:
         """Ensure slurmdbd is up and running."""
         logger.debug("## Checking if slurmdbd is active")
+        self._slurmdbd.enable()
 
         for i in range(max_attemps):
-            if self._slurmdbd_ops_manager.is_slurmdbd_active():
+            if self._slurmdbd.active():
                 logger.debug("## Slurmdbd running")
                 break
             else:
                 logger.warning("## Slurmdbd not running, trying to start it")
                 self.unit.status = WaitingStatus("Starting slurmdbd ...")
-                self._slurmdbd_ops_manager.restart_slurmdbd()
+                self._slurmdbd.restart()
                 sleep(3 + i)
 
-        if self._slurmdbd_ops_manager.is_slurmdbd_active():
+        if self._slurmdbd.active():
             self._check_status()
         else:
             self.unit.status = BlockedStatus("Cannot start slurmdbd.")

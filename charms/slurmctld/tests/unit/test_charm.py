@@ -23,16 +23,19 @@ from charm import SlurmctldCharm
 from ops.model import BlockedStatus
 from ops.testing import Harness
 
+from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
+
 ops.testing.SIMULATE_CAN_CONNECT = True
 
 
 class TestCharm(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(SlurmctldCharm)
+        self.harness.set_leader(is_leader=True)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
-    @patch("slurmctld_ops.SlurmctldManager.hostname", return_val="localhost")
+    @patch("charms.hpc_libs.v0.slurm_ops.SlurmManagerBase.hostname", return_val="localhost")
     def test_hostname(self, hostname) -> None:
         """Test that the hostname property works."""
         self.assertEqual(self.harness.charm.hostname, hostname)
@@ -73,16 +76,18 @@ class TestCharm(unittest.TestCase):
         )
 
     # @unittest.expectedFailure
-    @patch("slurmctld_ops.SlurmctldManager.install", return_value=False)
-    def test_install_fail(self, _) -> None:
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
+    def test_install_fail(self, install) -> None:
         """Test that the on_install method works when slurmctld fails to install.
 
         Notes:
             This method is expected to fail due to the 'version' file missing.
         """
+        install.side_effect = SlurmOpsError("err")
         self.harness.charm.on.install.emit()
         self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmctld")
+            self.harness.charm.unit.status,
+            BlockedStatus("error installing slurmctld. check log for more info"),
         )
 
     def test_check_status_slurm_not_installed(self) -> None:
@@ -96,7 +101,7 @@ class TestCharm(unittest.TestCase):
             res, False, msg="_check_status returned value True instead of expected value False."
         )
 
-    @patch("slurmctld_ops.SlurmctldManager.check_munged", return_value=False)
+    @patch("slurmctld_ops.LegacySlurmctldManager.check_munged", return_value=False)
     def test_check_status_bad_munge(self, _) -> None:
         """Test that the check_status method works when munge encounters an error."""
         setattr(self.harness.charm._stored, "slurm_installed", True)  # Patch StoredState

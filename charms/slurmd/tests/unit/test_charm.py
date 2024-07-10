@@ -56,6 +56,7 @@ class TestCharm(unittest.TestCase):
         defer.assert_called()
 
     @patch("slurmd_ops.SlurmdManager.install")
+    @patch("slurmd_ops.SlurmdManager.version", return_value="23.11.7")
     @patch("pathlib.Path.read_text", return_value="v1.0.0")
     @patch("ops.model.Unit.set_workload_version")
     @patch("ops.model.Resources.fetch")

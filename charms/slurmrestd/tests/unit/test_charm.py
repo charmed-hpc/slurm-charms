@@ -33,9 +33,10 @@ class TestCharm(unittest.TestCase):
         "interface_slurmctld.Slurmctld.is_joined",
         new_callable=PropertyMock(return_value=True),
     )
-    @patch("slurmrestd_ops.SlurmrestdManager.version", return_value="1.1.1")
-    @patch("slurmrestd_ops.SlurmrestdManager.install")
-    @patch("slurmrestd_ops.CharmedHPCPackageLifecycleManager.install")
+    @patch("os.chown")
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
+    @patch("charms.hpc_libs.v0.slurm_ops.version", return_value="23.11.7")
+    @patch("slurmrestd_ops.LegacySlurmrestdManager.check_munged", return_value=True)
     def test_install_success(self, *_):
         self.harness.charm._stored.slurmctld_available = True
         self.harness.charm.on.install.emit()
@@ -52,7 +53,7 @@ class TestCharm(unittest.TestCase):
         "interface_slurmctld.Slurmctld.is_joined",
         new_callable=PropertyMock(return_value=True),
     )
-    @patch("slurmrestd_ops.SlurmrestdManager.check_munged", return_value=True)
+    @patch("slurmrestd_ops.LegacySlurmrestdManager.check_munged", return_value=True)
     def test_update_status_success(self, *_):
         self.harness.charm._stored.slurm_installed = True
 

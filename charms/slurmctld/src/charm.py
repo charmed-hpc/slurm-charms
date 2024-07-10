@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# Copyright 2020 Omnivector Solutions, LLC
+# Copyright 2020-2024 Omnivector, LLC.
 # See LICENSE file for licensing details.
 
-"""SlurmctldCharm."""
+"""Slurmctld charm operator."""
 
 import logging
 import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
-from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, SLURM_CONF_PATH
+from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, SLURM_CONF_PATH, SNAP_COMMON
 from interface_slurmd import (
     PartitionAvailableEvent,
     PartitionUnavailableEvent,
@@ -39,7 +39,10 @@ from ops import (
     main,
 )
 from slurm_conf_editor import slurm_conf_as_string
-from slurmctld_ops import SlurmctldManager, is_container
+from slurmctld_ops import LegacySlurmctldManager, is_container
+from utils import SlurmctldManager, scontrol
+
+import charms.hpc_libs.v0.slurm_ops as slurm
 
 logger = logging.getLogger()
 
@@ -64,7 +67,9 @@ class SlurmctldCharm(CharmBase):
             user_supplied_slurm_conf_params=str(),
         )
 
-        self._slurmctld_manager = SlurmctldManager()
+        self._slurmctld = SlurmctldManager()
+        # Legacy manager provides operations we're still fleshing out.
+        self._legacy_manager = LegacySlurmctldManager()
 
         self._slurmd = Slurmd(self, "slurmd")
         self._slurmdbd = Slurmdbd(self, "slurmdbd")
@@ -90,37 +95,31 @@ class SlurmctldCharm(CharmBase):
 
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations for slurmctld."""
-        self.unit.status = WaitingStatus("Installing slurmctld")
-
-        if self._slurmctld_manager.install():
-
-            # Store the munge_key and jwt_rsa key in the stored state.
-            # NOTE: Use secrets instead of stored state when secrets are supported the framework.
-            if self.model.unit.is_leader():
-                jwt_rsa = self._slurmctld_manager.generate_jwt_rsa()
-                self._stored.jwt_rsa = jwt_rsa
-
-                munge_key = self._slurmctld_manager.generate_munge_key()
-                self._stored.munge_key = munge_key
-
-                self._slurmctld_manager.stop_munged()
-                self._slurmctld_manager.write_munge_key(munge_key)
-                self._slurmctld_manager.start_munged()
-
-                self._slurmctld_manager.stop_slurmctld()
-                self._slurmctld_manager.write_jwt_rsa(jwt_rsa)
-                self._slurmctld_manager.start_slurmctld()
-
-                self.unit.set_workload_version(self._slurmctld_manager.version())
-                self.slurm_installed = True
-            else:
-                self.unit.status = BlockedStatus("Only singleton slurmctld is supported.")
-                logger.debug("Secondary slurmctld not supported.")
-                event.defer()
-        else:
-            self.unit.status = BlockedStatus("Error installing slurmctld")
-            logger.error("Cannot install slurmctld, please debug.")
+        if not self.unit.is_leader():
+            self.unit.status = BlockedStatus("multiple slurmctld controllers not supported")
+            logger.error("multiple controllers not support. we're working on enabling support :)")
             event.defer()
+            return
+
+        self.unit.status = WaitingStatus("installing slurmctld")
+        try:
+            slurm.install()
+            self.unit.set_workload_version(slurm.version())
+
+            self._stored.munge_key = self._slurmctld.munge.get_key()
+
+            jwt_rsa = self._legacy_manager.generate_jwt_rsa()
+            self._stored.jwt_rsa = jwt_rsa
+            self._legacy_manager.write_jwt_rsa(jwt_rsa)
+
+            self._slurmctld.enable()
+            self._slurmctld.munge.enable()
+            self.slurm_installed = True
+        except slurm.SlurmOpsError as e:
+            self.unit.status = BlockedStatus("error installing slurmctld. check log for more info")
+            logger.error(e.message)
+            event.defer()
+            return
 
         self._on_write_slurm_conf(event)
 
@@ -234,16 +233,15 @@ class SlurmctldCharm(CharmBase):
             return
 
         if slurm_config := self._assemble_slurm_conf():
-            self._slurmctld_manager.stop_slurmctld()
-            self._slurmctld_manager.write_slurm_conf(slurm_config)
+            self._slurmctld.disable()
+            self._legacy_manager.write_slurm_conf(slurm_config)
 
             # Write out any user_supplied_cgroup_parameters to /etc/slurm/cgroup.conf.
             if user_supplied_cgroup_parameters := self.config.get("cgroup-parameters", ""):
-                self._slurmctld_manager.write_cgroup_conf(str(user_supplied_cgroup_parameters))
+                self._legacy_manager.write_cgroup_conf(str(user_supplied_cgroup_parameters))
 
-            self._slurmctld_manager.start_slurmctld()
-
-            self._slurmctld_manager.slurm_cmd("scontrol", "reconfigure")
+            self._slurmctld.enable()
+            scontrol("reconfigure")
 
             # Transitioning Nodes
             #
@@ -301,7 +299,7 @@ class SlurmctldCharm(CharmBase):
             accounting_params = {
                 "AccountingStorageHost": slurmdbd_host,
                 "AccountingStorageType": "accounting_storage/slurmdbd",
-                "AccountingStoragePass": "/var/run/munge/munge.socket.2",
+                "AccountingStoragePass": f"{SNAP_COMMON}/run/munge/munged.socket.2",
                 "AccountingStoragePort": "6819",
             }
 
@@ -354,7 +352,7 @@ class SlurmctldCharm(CharmBase):
             self.unit.status = BlockedStatus("Error installing slurmctld")
             return False
 
-        if not self._slurmctld_manager.check_munged():
+        if not self._legacy_manager.check_munged():
             self.unit.status = BlockedStatus("Error configuring munge key")
             return False
 
@@ -372,8 +370,7 @@ class SlurmctldCharm(CharmBase):
     def _resume_nodes(self, nodelist: List[str]) -> None:
         """Run scontrol to resume the specified node list."""
         nodes = ",".join(nodelist)
-        update_cmd = f"update nodename={nodes} state=resume"
-        self._slurmctld_manager.slurm_cmd("scontrol", update_cmd)
+        scontrol("update", f"nodename={nodes}", "state=resume")
 
     @property
     def cluster_name(self) -> str:
@@ -399,7 +396,7 @@ class SlurmctldCharm(CharmBase):
     @property
     def hostname(self) -> str:
         """Return the hostname."""
-        return self._slurmctld_manager.hostname
+        return self._slurmctld.hostname
 
     @property
     def _slurmd_ingress_address(self) -> str:

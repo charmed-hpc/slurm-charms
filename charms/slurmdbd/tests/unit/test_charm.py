@@ -23,6 +23,8 @@ from charm import SlurmdbdCharm
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
 
+import charms.hpc_libs.v0.slurm_ops as slurm
+
 ops.testing.SIMULATE_CAN_CONNECT = True
 
 
@@ -32,8 +34,11 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=True)
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.start_munge", return_value=True)
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
+    @patch("charms.hpc_libs.v0.slurm_ops.version", return_value="23.11.7")
+    @patch("charms.hpc_libs.v0.slurm_ops.MungeManager.enable")
+    @patch("pathlib.Path.mkdir")
+    @patch("pathlib.Path.write_text")
     def test_install_success(self, *_) -> None:
         """Test that slurmdbd can successfully be installed.
 
@@ -45,17 +50,18 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.install.emit()
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=False)
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
     def test_install_fail(self, install) -> None:
+        install.side_effect = slurm.SlurmOpsError("failed to install")
         """Test that slurmdbd install fail handler works."""
         self.harness.set_leader(True)
         self.harness.charm.on.install.emit()
         self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmdbd.")
+            self.harness.charm.unit.status,
+            BlockedStatus("error installing slurmdbd. check log for more info"),
         )
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install")
-    def test_check_status_slurm_not_installed(self, install) -> None:
+    def test_check_status_slurm_not_installed(self, *_) -> None:
         """Test that _check_status method works if slurm is not installed."""
         self.harness.charm._stored.slurm_installed = False
         res = self.harness.charm._check_status()
@@ -66,9 +72,10 @@ class TestCharm(unittest.TestCase):
             res, msg="_check_status returned value True instead of expected value False."
         )
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.is_slurmdbd_active", return_value=True)
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
+    @patch("slurmdbd_ops.SlurmdbdManager.enable")
+    @patch("slurmdbd_ops.SlurmdbdManager.restart")
+    @patch("slurmdbd_ops.SlurmdbdManager.active", return_value=True)
     def test_check_slurmdbd(self, *_) -> None:
         """Test that _check_slurmdbd method works."""
         self.harness.charm._check_slurmdbd(max_attemps=1)
@@ -77,9 +84,10 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.sleep")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.is_slurmdbd_active", return_value=False)
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
+    @patch("slurmdbd_ops.SlurmdbdManager.enable")
+    @patch("slurmdbd_ops.SlurmdbdManager.restart")
+    @patch("slurmdbd_ops.SlurmdbdManager.active", return_value=False)
     def test_check_slurmdbd_slurm_not_active(self, *_) -> None:
         """Test that proper block status is thrown if slurm is not active."""
         self.harness.charm._stored.slurm_installed = True
@@ -114,7 +122,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
+    @patch("slurmdbd_ops.LegacySlurmdbdManager.set_environment_var")
     def test__on_database_created_socket_endpoints(
         self, _set_environment_var, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -136,7 +144,7 @@ class TestCharm(unittest.TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
+    @patch("slurmdbd_ops.LegacySlurmdbdManager.set_environment_var")
     def test__on_database_created_socket_multiple_endpoints(
         self, _set_environment_var, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -159,7 +167,7 @@ class TestCharm(unittest.TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
+    @patch("slurmdbd_ops.LegacySlurmdbdManager.set_environment_var")
     def test__on_database_created_tcp_endpoint(
         self, _set_environment_var, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -183,7 +191,7 @@ class TestCharm(unittest.TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
+    @patch("slurmdbd_ops.LegacySlurmdbdManager.set_environment_var")
     def test__on_database_created_multiple_tcp_endpoints(
         self, _set_environment_var, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -207,9 +215,9 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.db_info, db_info)
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=True)
+    @patch("charms.hpc_libs.v0.slurm_ops.install")
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
+    @patch("slurmdbd_ops.LegacySlurmdbdManager.set_environment_var")
     def test__on_database_created_ipv6_tcp_endpoints(
         self,
         _set_environment_var,

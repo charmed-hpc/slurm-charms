@@ -26,18 +26,6 @@ from utils import slurmd
 class TestSlurmd(unittest.TestCase):
     """Unit tests for methods in slurmd utility module."""
 
-    @patch("charms.operator_libs_linux.v1.systemd._systemctl")
-    def test_start(self, _) -> None:
-        slurmd.start()
-
-    @patch("charms.operator_libs_linux.v1.systemd._systemctl")
-    def test_stop(self, _) -> None:
-        slurmd.stop()
-
-    @patch("charms.operator_libs_linux.v1.systemd._systemctl")
-    def test_restart(self, _) -> None:
-        slurmd.restart()
-
     @patch("pathlib.Path.write_text")
     def test_overwrite_default(self, _) -> None:
         slurmd.override_default("127.0.0.1")

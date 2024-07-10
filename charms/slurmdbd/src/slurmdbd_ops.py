@@ -2,207 +2,70 @@
 """SlurmdbdOpsManager."""
 import logging
 import os
-import socket
 import subprocess
 import textwrap
-from base64 import b64decode
 from datetime import datetime
 from grp import getgrnam
-from pathlib import Path
 from pwd import getpwnam
 from typing import Optional
 
-import distro
 from constants import (
+    JWT_RSA_PATH,
     SLURM_GROUP,
     SLURM_USER,
+    SLURMDBD_CONF_PATH,
     SLURMDBD_DEFAULTS_FILE,
-    STATE_DIR,
-    UBUNTU_HPC_PPA_KEY,
 )
 
-import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
+from charms.hpc_libs.v0.slurm_ops import ServiceType, SlurmManagerBase
 
 logger = logging.getLogger()
 
 
-class SlurmdbdManagerError(BaseException):
-    """Exception for use with SlurmdbdManager."""
+class SlurmdbdManager(SlurmManagerBase):
+    """Manage slurmdbd service operations."""
 
-    def __init__(self, message):
-        super().__init__(message)
-        self.message = message
-
-
-class CharmedHPCPackageLifecycleManager:
-    """Facilitate ubuntu-hpc slurm component package lifecycles."""
-
-    def __init__(self, package_name: str):
-        self._package_name = package_name
-        self._keyring_path = Path(f"/usr/share/keyrings/ubuntu-hpc-{self._package_name}.asc")
-
-    def _repo(self) -> apt.DebianRepository:
-        """Return the ubuntu-hpc repo."""
-        ppa_url: str = "https://ppa.launchpadcontent.net/ubuntu-hpc/slurm-wlm-23.02/ubuntu"
-        sources_list: str = (
-            f"deb [signed-by={self._keyring_path}] {ppa_url} {distro.codename()} main"
-        )
-        return apt.DebianRepository.from_repo_line(sources_list)
-
-    def install(self) -> bool:
-        """Install package using lib apt."""
-        package_installed = False
-
-        if self._keyring_path.exists():
-            self._keyring_path.unlink()
-        self._keyring_path.write_text(UBUNTU_HPC_PPA_KEY)
-
-        repositories = apt.RepositoryMapping()
-        repositories.add(self._repo())
-
-        try:
-            apt.update()
-            apt.add_package([self._package_name])
-            package_installed = True
-        except apt.PackageNotFoundError:
-            logger.error(f"'{self._package_name}' not found in package cache or on system.")
-        except apt.PackageError as e:
-            logger.error(f"Could not install '{self._package_name}'. Reason: {e.message}")
-
-        return package_installed
-
-    def uninstall(self) -> None:
-        """Uninstall the package using libapt."""
-        if apt.remove_package(self._package_name):
-            logger.info(f"'{self._package_name}' removed from system.")
-        else:
-            logger.error(f"'{self._package_name}' not found on system.")
-
-        repositories = apt.RepositoryMapping()
-        repositories.disable(self._repo())
-
-        if self._keyring_path.exists():
-            self._keyring_path.unlink()
-
-    def upgrade_to_latest(self) -> None:
-        """Upgrade package to latest."""
-        try:
-            slurm_package = apt.DebianPackage.from_system(self._package_name)
-            slurm_package.ensure(apt.PackageState.Latest)
-            logger.info(f"Updated '{self._package_name}' to: {slurm_package.version.number}.")
-        except apt.PackageNotFoundError:
-            logger.error(f"'{self._package_name}' not found in package cache or on system.")
-        except apt.PackageError as e:
-            logger.error(f"Could not install '{self._package_name}'. Reason: {e.message}")
-
-    def version(self) -> str:
-        """Return the package version."""
-        slurmdbd_vers = ""
-        try:
-            slurmdbd_vers = apt.DebianPackage.from_installed_package(
-                self._package_name
-            ).version.number
-        except apt.PackageNotFoundError:
-            logger.error(f"'{self._package_name}' not found on system.")
-        return slurmdbd_vers
+    def __init__(self) -> None:
+        super().__init__(service=ServiceType.SLURMDBD)
 
 
-class SlurmdbdOpsManager:
-    """SlurmdbdOpsManager."""
-
-    def __init__(self):
-        """Set the initial attribute values."""
-        self._slurm_component = "slurmdbd"
-        self._munge_package = CharmedHPCPackageLifecycleManager("munge")
-        self._slurmdbd_package = CharmedHPCPackageLifecycleManager("slurmdbd")
-
-    def install(self) -> bool:
-        """Install slurmdbd and munge to the system and setup paths."""
-        if self._slurmdbd_package.install() is not True:
-            return False
-        systemd.service_stop("slurmdbd")
-
-        if self._munge_package.install() is not True:
-            return False
-        systemd.service_stop("munge")
-
-        # Create the state directory as it is not created as part of the package installation.
-        STATE_DIR.mkdir()
-        slurm_user_uid = getpwnam(SLURM_USER).pw_uid
-        slurm_group_gid = getgrnam(SLURM_GROUP).gr_gid
-        os.chown(f"{STATE_DIR}", slurm_user_uid, slurm_group_gid)
-
-        return True
+class LegacySlurmdbdManager:
+    """Legacy slurmdbd ops manager."""
 
     def write_slurmdbd_conf(self, slurmdbd_parameters: dict) -> None:
         """Render slurmdbd.conf."""
-        slurmdbd_conf = Path("/etc/slurm/slurmdbd.conf")
         slurm_user_uid = getpwnam(SLURM_USER).pw_uid
         slurm_group_gid = getgrnam(SLURM_GROUP).gr_gid
 
         header = textwrap.dedent(
             f"""
             #
-            # {slurmdbd_conf} generated at {datetime.now()}
+            # {SLURMDBD_CONF_PATH} generated at {datetime.now()}
             #
 
             """
         )
-        slurmdbd_conf.write_text(
+        SLURMDBD_CONF_PATH.write_text(
             header + "\n".join([f"{k}={v}" for k, v in slurmdbd_parameters.items() if v != ""])
         )
 
-        slurmdbd_conf.chmod(0o600)
-        os.chown(f"{slurmdbd_conf}", slurm_user_uid, slurm_group_gid)
-
-    def write_munge_key(self, munge_key_data: str) -> None:
-        """Base64 decode and write the munge key."""
-        munge_key_path = Path("/etc/munge/munge.key")
-        munge_key_path.write_bytes(b64decode(munge_key_data.encode()))
+        SLURMDBD_CONF_PATH.chmod(0o600)
+        os.chown(f"{SLURMDBD_CONF_PATH}", slurm_user_uid, slurm_group_gid)
 
     def write_jwt_rsa(self, jwt_rsa: str) -> None:
         """Write the jwt_rsa key and set permissions."""
-        jwt_rsa_path = STATE_DIR / "jwt_hs256.key"
         slurm_user_uid = getpwnam(SLURM_USER).pw_uid
         slurm_group_gid = getgrnam(SLURM_GROUP).gr_gid
 
-        jwt_rsa_path.write_text(jwt_rsa)
-        jwt_rsa_path.chmod(0o600)
+        JWT_RSA_PATH.write_text(jwt_rsa)
+        JWT_RSA_PATH.chmod(0o600)
 
-        os.chown(f"{jwt_rsa_path}", slurm_user_uid, slurm_group_gid)
-
-    def stop_slurmdbd(self) -> None:
-        """Stop slurmdbd."""
-        systemd.service_stop("slurmdbd")
-
-    def is_slurmdbd_active(self) -> bool:
-        """Get if slurmdbd daemon is active or not."""
-        return systemd.service_running("slurmdbd")
-
-    def stop_munge(self) -> None:
-        """Stop munge."""
-        systemd.service_stop("munge")
-
-    def start_munge(self) -> bool:
-        """Start the munged process.
-
-        Return True on success, and False otherwise.
-        """
-        logger.debug("Starting munge.")
-        try:
-            systemd.service_start("munge")
-        # Ignore pyright error for is not a valid exception class, reportGeneralTypeIssues
-        except SlurmdbdManagerError(
-            "Cannot start munge."
-        ) as e:  # pyright: ignore [reportGeneralTypeIssues]
-            logger.error(e)
-            return False
-        return self.check_munged()
+        os.chown(f"{JWT_RSA_PATH}", slurm_user_uid, slurm_group_gid)
 
     def check_munged(self) -> bool:
         """Check if munge is working correctly."""
-        if not systemd.service_running("munge"):
+        if not systemd.service_running("snap.slurm.munged"):
             return False
 
         output = ""
@@ -210,11 +73,14 @@ class SlurmdbdOpsManager:
         try:
             logger.debug("## Testing if munge is working correctly")
             munge = subprocess.Popen(
-                ["munge", "-n"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                ["slurm.munge", "-n"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             if munge is not None:
                 unmunge = subprocess.Popen(
-                    ["unmunge"], stdin=munge.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    ["slurm.unmunge"],
+                    stdin=munge.stdout,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 )
                 output = unmunge.communicate()[0].decode()
             if "Success" in output:
@@ -225,22 +91,6 @@ class SlurmdbdOpsManager:
             logger.error(f"## Error testing munge: {e}")
 
         return False
-
-    def restart_slurmdbd(self) -> bool:
-        """Restart the slurmdbd process.
-
-        Return True on success, and False otherwise.
-        """
-        logger.debug("Attempting to restart slurmdbd.")
-        try:
-            systemd.service_restart("slurmdbd")
-        # Ignore pyright error for is not a valid exception class, reportGeneralTypeIssues
-        except SlurmdbdManagerError(
-            "Cannot restart slurmdbd."
-        ) as e:  # pyright: ignore [reportGeneralTypeIssues]
-            logger.error(e)
-            return False
-        return True
 
     # Originally contributed by @wolsen
     # https://github.com/charmed-hpc/slurmdbd-operator/commit/2b47acda7f51aea8699886c49783eaf0de691747
@@ -308,13 +158,3 @@ class SlurmdbdOpsManager:
             f.seek(0)
             f.truncate()
             f.writelines(updated_contents)
-
-    @property
-    def hostname(self) -> str:
-        """Return the hostname."""
-        return socket.gethostname().split(".")[0]
-
-    @property
-    def version(self) -> str:
-        """Return slurmdbd version."""
-        return self._slurmdbd_package.version()
