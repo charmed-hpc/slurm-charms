@@ -1,0 +1,3 @@
+external-libraries:
+  - charms.operator_libs_linux.v0.apt
+  - charms.operator_libs_linux.v1.systemd

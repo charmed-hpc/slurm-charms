@@ -8,4 +8,5 @@ __pycache__/
 .idea
 .vscode/
 version
-.ruff_cache
+.ruff_cache/
+_build

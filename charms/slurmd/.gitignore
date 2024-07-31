@@ -1,0 +1,2 @@
+# Disable woke checking for nhc.conf.tmpl
+src/templates/nhc.conf.tmpl
