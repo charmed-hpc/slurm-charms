@@ -10,3 +10,4 @@ __pycache__/
 version
 .ruff_cache/
 _build
+.charmhub.secret

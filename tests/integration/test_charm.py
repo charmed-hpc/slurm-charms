@@ -103,8 +103,11 @@ async def test_build_and_deploy_against_edge(
     await ops_test.model.integrate(f"{SLURMDBD}:database", f"{SLURMDBD}-{ROUTER}:database")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[SLURMCTLD], status="active", timeout=1000)
+        await ops_test.model.wait_for_idle(apps=[SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD], status="active", timeout=1000)
         assert ops_test.model.applications["slurmctld"].units[0].workload_status == "active"
+        assert ops_test.model.applications["slurmd"].units[0].workload_status == "active"
+        assert ops_test.model.applications["slurmdbd"].units[0].workload_status == "active"
+        assert ops_test.model.applications["slurmrestd"].units[0].workload_status == "active"
 
 
 @pytest.mark.abort_on_fail

@@ -1,0 +1,70 @@
+# Copyright 2024 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Bug Report
+description: File a bug report
+labels: ["Type: Bug", "Status: Triage"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thanks for taking the time to fill out this bug report! Before submitting your issue, please make
+        sure you are using the latest version of the charm. If not, please switch to the latest version of this charm
+        before posting your report to make sure it's not already solved.
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: >
+        Provide a description of the issue you are facing. If applicable, add screenshots to help explain the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: To Reproduce
+      description: >
+        Please provide a step-by-step instruction of how to reproduce the behaviour.
+      placeholder: |
+        1. `juju deploy ...`
+        2. `juju integrate ...`
+        3. `juju status --integrations`
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >
+        We need to know a bit more about the context in which you run the charm.
+        - Are you running Juju locally, on lxd, in multipass or on some other platform?
+        - What track and channel you deployed the charm from (ie. `latest/edge` or similar).
+        - Version of any applicable components, like the juju snap, the model controller, lxd, microk8s, and/or multipass.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: >
+        Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+        Fetch the logs using `juju debug-log --replay`. Additional details on how to retrieve logs are available in the juju
+        documentation at https://juju.is/docs/juju/log.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context

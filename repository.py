@@ -239,6 +239,9 @@ def main_cli():
     stage_parser.add_argument("--dry-run", action="store_true", default=False, help="Dry run.")
     stage_parser.set_defaults(func=stage_cli)
 
+    gen_token_parser = subparsers.add_parser("generate-token", help="Generate Charmhub token to publish charms.")
+    gen_token_parser.set_defaults(func=gen_token_cli)
+
     clean_parser = subparsers.add_parser("clean", help="Clean charm(s).")
     _add_charm_argument(clean_parser)
     clean_parser.add_argument("--dry-run", action="store_true", default=False, help="Dry run.")
@@ -331,6 +334,25 @@ def stage_cli(
             dry_run=dry_run,
         )
 
+def gen_token_cli(
+    slurm_charms: [str],
+    **kwargs,
+):
+    """Generate Charmhub token to publish charms."""
+    args = [
+        "charmcraft",
+        "login",
+        "--export=.charmhub.secret"
+    ] + [f"--charm={charm}" for charm in slurm_charms] + [
+        "--permission=package-manage-metadata",
+        "--permission=package-manage-releases",
+        "--permission=package-manage-revisions",
+        "--permission=package-view-metadata",
+        "--permission=package-view-releases",
+        "--permission=package-view-revisions",
+        "--ttl=7776000" # 90 days
+    ]
+    subprocess.run(args, check=True)
 
 def clean_cli(
     charms: list[SlurmCharm],
@@ -539,7 +561,7 @@ def integration_tests_cli(
 
     for charm in charms:
         stage_charm(charm, internal_libraries, external_libraries, templates)
-        local_charms[f"{charm.path.name.upper()}_DIR"] = charm.path
+        local_charms[f"{charm.path.name.upper()}_DIR"] = charm.build_path
 
     subprocess.run(
         "pytest -v -s --tb native --log-cli-level=INFO ./tests/integration".split() + rest,

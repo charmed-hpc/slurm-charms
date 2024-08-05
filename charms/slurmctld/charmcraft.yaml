@@ -16,7 +16,7 @@ description: |
 links:
   contact: https://matrix.to/#/#hpc:ubuntu.com
 
-  issues: 
+  issues:
   - https://github.com/charmed-hpc/slurmctld-operator/issues
 
   source:
