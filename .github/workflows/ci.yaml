@@ -20,7 +20,6 @@ on:
       - main
       - experimental
 
-
 jobs:
   inclusive-naming-check:
     name: Inclusive naming check
