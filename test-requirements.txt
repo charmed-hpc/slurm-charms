@@ -1,4 +1,4 @@
-ops==2.14.0
+ops==2.15.0
 distro==1.9.0
 pycryptodome==3.20.0
 dbus-fast>=1.90.2
