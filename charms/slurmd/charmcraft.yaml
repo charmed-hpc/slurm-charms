@@ -7,7 +7,7 @@ summary: |
 description: |
   This charm provides slurmd, munged, and the bindings to other utilities
   that make lifecycle operations a breeze.
-  
+
   slurmd is the compute node daemon of SLURM. It monitors all tasks running
   on the compute node, accepts work (tasks), launches tasks, and kills
   running tasks upon request.
@@ -15,11 +15,11 @@ description: |
 links:
   contact: https://matrix.to/#/#hpc:ubuntu.com
 
-  issues: 
-  - https://github.com/charmed-hpc/slurmd-operator/issues
+  issues:
+  - https://github.com/charmed-hpc/slurm-charms/issues
 
   source:
-  - https://github.com/charmed-hpc/slurmd-operator
+  - https://github.com/charmed-hpc/slurm-charms
 
 assumes:
   - juju
@@ -59,8 +59,8 @@ config:
         Additional partition configuration parameters, specified as a space separated `key=value`
         in a single line. Find a list of all possible partition configuration parameters
         [here](https://slurm.schedmd.com/slurm.conf.html#SECTION_PARTITION-CONFIGURATION).
-        
-  
+
+
         Example usage:
         ```bash
          $ juju config slurmd partition-config="DefaultTime=45:00 MaxTime=1:00:00"

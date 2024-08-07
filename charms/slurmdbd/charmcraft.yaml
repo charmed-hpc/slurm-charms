@@ -19,11 +19,11 @@ description: |
 links:
   contact: https://matrix.to/#/#hpc:ubuntu.com
 
-  source:
-    - https://github.com/omnivector-solutions/slurmdbd-operator
-
   issues:
-    - https://github.com/omnivector-solutions/slurmdbd-operator/issues
+  - https://github.com/charmed-hpc/slurm-charms/issues
+
+  source:
+  - https://github.com/charmed-hpc/slurm-charms
 
 requires:
   database:

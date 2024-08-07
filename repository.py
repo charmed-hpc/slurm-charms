@@ -258,7 +258,7 @@ def main_cli():
     fetch_lib_parser.add_argument("libraries", type=str, nargs="*", help="Libraries to fetch.")
     fetch_lib_parser.set_defaults(func=fetch_lib_cli)
 
-    fmt_parser = subparsers.add_parser("fmt", help="Apply correct formatting to code")
+    fmt_parser = subparsers.add_parser("fmt", help="Apply formatting standards to code.")
     fmt_parser.set_defaults(func=fmt_cli)
 
     lint_parser = subparsers.add_parser("lint", help="Check code against coding style standards")
@@ -417,7 +417,7 @@ def fmt_cli(
     slurm_charms: [str],
     **kwargs,
 ):
-    """Apply correct formatting to code."""
+    """Apply formatting standards to code. """
     files = get_source_dirs(slurm_charms)
     logging.info(f"Running black for directories {files}")
     subprocess.run(["black", "--config", "pyproject.toml"] + files, cwd=ROOT_DIR, check=True)

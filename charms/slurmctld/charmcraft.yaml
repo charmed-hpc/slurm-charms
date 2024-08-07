@@ -17,10 +17,10 @@ links:
   contact: https://matrix.to/#/#hpc:ubuntu.com
 
   issues:
-  - https://github.com/charmed-hpc/slurmctld-operator/issues
+  - https://github.com/charmed-hpc/slurm-charms/issues
 
   source:
-  - https://github.com/charmed-hpc/slurmctld-operator
+  - https://github.com/charmed-hpc/slurm-charms
 
 requires:
   slurmd:
@@ -51,7 +51,7 @@ config:
       default: osd-cluster
       description: |
         Name to be recorded in database for jobs from this cluster.
-  
+
         This is important if a single database is used to record information from
         multiple Slurm-managed clusters.
 
@@ -67,7 +67,7 @@ config:
       default: ""
       description: |
         User supplied Slurm configuration as a multiline string.
-  
+
         Example usage:
         $ juju config slurmcltd slurm-conf-parameters="$(cat additional.conf)"
 
@@ -78,13 +78,13 @@ config:
         ConstrainCores=yes
       description: |
         User supplied configuration for `cgroup.conf`.
-  
+
     health-check-params:
       default: ""
       type: string
       description: |
         Extra parameters for NHC command.
-  
+
         This option can be used to customize how NHC is called, e.g. to send an
         e-mail to an admin when NHC detects an error set this value to.
         `-M admin@domain.com`.
@@ -103,7 +103,7 @@ actions:
   show-current-config:
     description: |
       Display the currently used `slurm.conf`.
-  
+
       Example usage:
 
       ```bash
@@ -114,7 +114,7 @@ actions:
   drain:
     description: |
       Drain specified nodes.
-  
+
       Example usage:
       $ juju run slurmctld/leader drain nodename="node-[1,2]" reason="Updating kernel"
     params:
@@ -130,10 +130,10 @@ actions:
   resume:
     description: |
       Resume specified nodes.
-  
+
       Note: Newly added nodes will remain in the `down` state until configured,
       with the `node-configured` action.
-  
+
       Example usage: $ juju run slurmctld/leader resume nodename="node-[1,2]"
     params:
       nodename:
