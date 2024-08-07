@@ -44,6 +44,7 @@ def charm_base(request) -> str:
     """Get slurmctld charm base to use."""
     return request.config.option.charm_base
 
+
 @pytest.fixture(scope="module")
 async def slurmctld_charm(request, ops_test: OpsTest) -> Union[str, Path]:
     """Pack slurmctld charm to use for integration tests.

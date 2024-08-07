@@ -30,6 +30,7 @@ SLURMDBD = "slurmdbd"
 SLURMRESTD = "slurmrestd"
 DATABASE = "mysql"
 ROUTER = "mysql-router"
+SLURM_APPS = [SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD]
 
 
 @pytest.mark.abort_on_fail
@@ -44,9 +45,7 @@ async def test_build_and_deploy_against_edge(
     slurmrestd_charm,
 ) -> None:
     """Test that the slurmctld charm can stabilize against slurmd, slurmdbd, slurmrestd, and MySQL."""
-    logger.info(
-        f"Deploying {SLURMCTLD} against {SLURMD}, {SLURMDBD}, {SLURMRESTD}, and {DATABASE}"
-    )
+    logger.info(f"Deploying {', '.join(SLURM_APPS)}, and {DATABASE}")
     # Pack charms and download NHC resource for the slurmd operator.
     slurmctld, slurmd, slurmdbd, slurmrestd = await asyncio.gather(
         slurmctld_charm, slurmd_charm, slurmdbd_charm, slurmrestd_charm
@@ -103,11 +102,9 @@ async def test_build_and_deploy_against_edge(
     await ops_test.model.integrate(f"{SLURMDBD}:database", f"{SLURMDBD}-{ROUTER}:database")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD], status="active", timeout=1000)
-        assert ops_test.model.applications["slurmctld"].units[0].workload_status == "active"
-        assert ops_test.model.applications["slurmd"].units[0].workload_status == "active"
-        assert ops_test.model.applications["slurmdbd"].units[0].workload_status == "active"
-        assert ops_test.model.applications["slurmrestd"].units[0].workload_status == "active"
+        await ops_test.model.wait_for_idle(apps=SLURM_APPS, status="active", timeout=1000)
+        for app in SLURM_APPS:
+            assert ops_test.model.applications[app].units[0].workload_status == "active"
 
 
 @pytest.mark.abort_on_fail
@@ -117,12 +114,13 @@ async def test_build_and_deploy_against_edge(
     stop=tenacity.stop_after_attempt(3),
     reraise=True,
 )
-async def test_slurmctld_is_active(ops_test: OpsTest) -> None:
-    """Test that slurmctld is active inside Juju unit."""
-    logger.info("Checking that slurmctld is active inside Juju unit")
-    slurmctld_unit = ops_test.model.applications["slurmctld"].units[0]
-    res = (await slurmctld_unit.ssh("systemctl is-active slurmctld")).strip("\n")
-    assert res == "active"
+async def test_munge_is_active(ops_test: OpsTest) -> None:
+    """Test that munge is active inside all the SLURM units."""
+    for app in SLURM_APPS:
+        logger.info(f"Checking that munge is active inside {app}.")
+        unit = ops_test.model.applications[app].units[0]
+        res = (await unit.ssh("systemctl is-active munge")).strip("\n")
+        assert res == "active"
 
 
 @pytest.mark.abort_on_fail
@@ -132,12 +130,13 @@ async def test_slurmctld_is_active(ops_test: OpsTest) -> None:
     stop=tenacity.stop_after_attempt(3),
     reraise=True,
 )
-async def test_slurmctld_port_listen(ops_test: OpsTest) -> None:
-    """Test that slurmctld is listening on port 6817."""
-    logger.info("Checking that slurmctld is listening on port 6817")
-    slurmctld_unit = ops_test.model.applications["slurmctld"].units[0]
-    res = await slurmctld_unit.ssh("sudo lsof -t -n -iTCP:6817 -sTCP:LISTEN")
-    assert res != ""
+async def test_services_are_active(ops_test: OpsTest) -> None:
+    """Test that the SLURM services are active inside the SLURM units."""
+    for app in SLURM_APPS:
+        logger.info(f"Checking that the {app} service is active inside the {app} unit.")
+        unit = ops_test.model.applications[app].units[0]
+        res = (await unit.ssh(f"systemctl is-active {app}")).strip("\n")
+        assert res == "active"
 
 
 @pytest.mark.abort_on_fail
@@ -147,9 +146,24 @@ async def test_slurmctld_port_listen(ops_test: OpsTest) -> None:
     stop=tenacity.stop_after_attempt(3),
     reraise=True,
 )
-async def test_munge_is_active(ops_test: OpsTest) -> None:
-    """Test that munge is active inside Juju unit."""
-    logger.info("Checking that munge is active inside Juju unit")
-    slurmctld_unit = ops_test.model.applications["slurmctld"].units[0]
-    res = (await slurmctld_unit.ssh("systemctl is-active munge")).strip("\n")
-    assert res == "active"
+async def test_slurmctld_port_listen(ops_test: OpsTest) -> None:
+    """Test that slurmctld is listening on port 6817."""
+    logger.info("Checking that slurmctld is listening on port 6817")
+    slurmctld_unit = ops_test.model.applications[SLURMCTLD].units[0]
+    res = await slurmctld_unit.ssh("sudo lsof -t -n -iTCP:6817 -sTCP:LISTEN")
+    assert res != ""
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.order(5)
+@tenacity.retry(
+    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
+    stop=tenacity.stop_after_attempt(3),
+    reraise=True,
+)
+async def test_slurmdbd_port_listen(ops_test: OpsTest) -> None:
+    """Test that slurmdbd is listening on port 6819."""
+    logger.info("Checking that slurmdbd is listening on port 6819")
+    slurmdbd_unit = ops_test.model.applications[SLURMDBD].units[0]
+    res = await slurmdbd_unit.ssh("sudo lsof -t -n -iTCP:6819 -sTCP:LISTEN")
+    assert res != ""

@@ -419,6 +419,7 @@ def fmt_cli(
 ):
     """Apply correct formatting to code."""
     files = get_source_dirs(slurm_charms)
+    files.append(str(ROOT_DIR / "tests"))
     logging.info(f"Running black for directories {files}")
     subprocess.run(["black", "--config", "pyproject.toml"] + files, cwd=ROOT_DIR, check=True)
 
@@ -430,6 +431,7 @@ def lint_cli(
 ):
     """Check code against coding style standards."""
     files = get_source_dirs(slurm_charms)
+    files.append(str(ROOT_DIR / "tests"))
     logging.info("Target directories: {files}")
     if fix:
         logging.info("Trying to automatically fix the lint errors.")
