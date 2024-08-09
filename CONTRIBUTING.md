@@ -28,7 +28,7 @@ Matrix chat](https://matrix.to/#/#hpc:ubuntu.com).
 
 ## Using the issue tracker
 
-The issue tracker is the preferred way for tracking [bug reports](#bug-reports), [feature requests](#feature-requests),
+The issue tracker is the preferred way for tracking [bug reports](#bug-reports), [enhancement proposals](#enhancement-proposals),
 and [submitted pull requests](#pull-requests), but please follow these guidelines for the issue tracker:
 
 * Please __do not__ use the issue tracker for personal issues and/or support requests.
@@ -88,7 +88,7 @@ already been reported by someone else.
 3. __Check if the issue has already been fixed__ &mdash; try to reproduce your issue
 using the latest version of the Slurm charms.
 
-4. __Isolate the problem__ &mdash; the more pinpointed the issue with the Slurm chharms
+4. __Isolate the problem__ &mdash; the more pinpointed the issue with the Slurm charms
 is, the easier it is to fix.
 
 A good bug report should not leave others needing to chase you for more information.
@@ -107,11 +107,11 @@ maintainers quickly fix issues with the Slurm charms.
 The Charmed HPC core developers may already know what they want to add to the Slurm charms,
 but they are always open to new ideas and potential improvements. GitHub Discussions is
 a good place for discussing open-ended questions that pertain to the entire Charmed HPC
-project, but more focused enhancement proposal discussion can start within the issue
+project, but more focused enhancement proposal discussions can start within the issue
 tracker.
 
-Please note that not all proposals may be incorporated into the documentation. Also, please
-know that spamming the maintainers to incorporate something you want into the documentation
+Please note that not all proposals may be incorporated into the the Slurm charms. Also, please
+know that spamming the maintainers to incorporate something you want into the Slurm charms
 will not improve the likelihood of being implemented; it may result in you receiving a
 temporary ban from the repository.
 
@@ -121,14 +121,15 @@ Good pull requests &mdash; patches, improvements, new features &mdash;
 are a huge help. Pull requests should remain focused and not contain commits not
 related to what you are contributing.
 
-__Ask first__ before embarking on any __significant__ pull request such as add new sections,
-changing the layout, or heavily revising existing sections; otherwise, you risk spending a
-lot of time working on something that Charmed HPC's maintainers may not want to merge into the
-documentation! For trivial changes, or contributions that do not require a large amount of time,
-you can go ahead and make a pull request.
+__Ask first__ before embarking on any __significant__ pull request such as
+implementing new features, refactoring methods, or incorporating new libraries;
+otherwise, you risk spending a lot of time working on something that the Charmed HPC
+core developers may not want to merge into the the Slurm charms! For trivial changes,
+or contributions that do not require a large amount of time, you can go ahead and
+open a pull request.
 
 Adhering to the following process is the best way to get your contribution accepted into
-Charmed HPC's documentation:
+the Slurm charms:
 
 1. [Fork](https://help.github.com/articles/fork-a-repo/) the project, clone your fork,
    and configure the remotes:
@@ -219,18 +220,18 @@ The following guidelines must be adhered to if you are writing code to be merged
 
   * We can test against the latest commit to the Slurm charms rather than
     pull what is currently published to edge on Charmhub.
-    * If the integration tests we're to pull the Slurm charms from the edge
-      branch on Charmhub, we can potentially waste CI minutes as we cannot
-      test breaking changes easily compared to just using the latest commit.
+    * Testing breaking changes is easier since we don't need to test between
+      multiple separate PRs or branches on multiple repositories.
   * It's easier to enable CI testing for development branches. We can test
-    the `experimental` development branch in the CI rather pipeline rather than need to create a separate workflow file off of `main`.
+    the `experimental` development branch in the CI pipeline rather than needing
+    to create a separate workflow file off of `main`.
   * We only need one branch protection to cover the Slurm charms.
   * We only need one set of integration tests for all the Slurm charms
     rather than multiple independent tests that repeat common operations.
   * We only need one extensive set of documentation rather than individual
     sets scoped per Slurm charm.
 
-### Juju & Operators
+### Juju and charmed operators
 
 * Adhere to the operator development best practices outlined in the [operator development styleguide](https://juju.is/docs/sdk/styleguide).
 
