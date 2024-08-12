@@ -311,6 +311,7 @@ class SlurmctldCharm(CharmBase):
             "SlurmctldHost": self.hostname,
             "SlurmctldParameters": _assemble_slurmctld_parameters(),
             "ProctrackType": "proctrack/linuxproc" if is_container() else "proctrack/cgroup",
+            "TaskPlugin": "task/affinity" if is_container() else "task/cgroup,task/affinity",
             **accounting_params,
             **CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
             **slurmd_parameters,
