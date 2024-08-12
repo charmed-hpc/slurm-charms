@@ -22,6 +22,10 @@ links:
   source:
   - https://github.com/charmed-hpc/slurm-charms
 
+peers:
+  slurmctld-peer:
+    interface: slurmctld-peer
+
 requires:
   slurmd:
     interface: slurmd

@@ -9,7 +9,7 @@ import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
-from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, SLURM_CONF_PATH
+from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, PEER_RELATION, SLURM_CONF_PATH
 from interface_slurmd import (
     PartitionAvailableEvent,
     PartitionUnavailableEvent,
@@ -307,7 +307,7 @@ class SlurmctldCharm(CharmBase):
 
         slurm_conf = {
             "ClusterName": self.cluster_name,
-            "SlurmctldAddr": self._slurmd_ingress_address,
+            "SlurmctldAddr": self._ingress_address,
             "SlurmctldHost": self.hostname,
             "SlurmctldParameters": _assemble_slurmctld_parameters(),
             "ProctrackType": "proctrack/linuxproc" if is_container() else "proctrack/cgroup",
@@ -325,7 +325,7 @@ class SlurmctldCharm(CharmBase):
         user_supplied_parameters = {}
         if custom_config := self.config.get("slurm-conf-parameters"):
             user_supplied_parameters = {
-                line.split("=")[0]: line.split("=")[1]
+                line.split("=")[0]: line.split("=",1)[1]
                 for line in str(custom_config).split("\n")
                 if not line.startswith("#") and line.strip() != ""
             }
@@ -402,12 +402,9 @@ class SlurmctldCharm(CharmBase):
         return self._slurmctld_manager.hostname
 
     @property
-    def _slurmd_ingress_address(self) -> str:
+    def _ingress_address(self) -> str:
         """Return the ingress_address from the slurmd relation if it exists."""
-        ingress_address = ""
-        if binding := self.model.get_binding("slurmd"):
-            ingress_address = f"{binding.network.ingress_address}"
-        return ingress_address
+        return self.model.get_binding(PEER_RELATION).network.ingress_address
 
     @property
     def slurm_installed(self) -> bool:

@@ -3,6 +3,8 @@
 """This module provides constants for the slurmctld-operator charm."""
 from pathlib import Path
 
+PEER_RELATION = "slurmctld-peer"
+
 SLURM_CONF_PATH = Path("/etc/slurm/slurm.conf")
 SLURM_USER = "slurm"
 SLURM_GROUP = "slurm"

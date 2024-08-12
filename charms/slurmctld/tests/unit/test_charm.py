@@ -171,3 +171,12 @@ class TestCharm(unittest.TestCase):
         """Test that the on_slurmdbd_unavailable method works."""
         self.harness.charm._slurmdbd.on.slurmdbd_unavailable.emit()
         self.assertEqual(self.harness.charm._stored.slurmdbd_host, "")
+
+    def test_get_user_supplied_parameters(self) -> None:
+        """Test that user supplied parameters are parsed correctly."""
+        self.harness.add_relation('slurmctld-peer', 'slurmctld')
+        self.harness.update_config({"slurm-conf-parameters": 'JobAcctGatherFrequency=task=30,network=40'})
+        self.assertEqual(
+            self.harness.charm._assemble_slurm_conf()["JobAcctGatherFrequency"],
+            "task=30,network=40"
+        )
