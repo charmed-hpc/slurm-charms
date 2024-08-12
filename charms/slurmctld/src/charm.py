@@ -10,6 +10,7 @@ import subprocess
 from typing import Any, Dict, List, Optional, Union
 
 from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, PEER_RELATION, SLURM_CONF_PATH
+from custom_exceptions import IngressAddressUnavailableError
 from interface_slurmd import (
     PartitionAvailableEvent,
     PartitionUnavailableEvent,
@@ -276,7 +277,6 @@ class SlurmctldCharm(CharmBase):
     def _assemble_slurm_conf(self) -> Dict[str, Any]:
         """Return the slurm.conf parameters."""
         user_supplied_parameters = self._get_user_supplied_parameters()
-
         slurmd_parameters = self._slurmd.get_new_nodes_and_nodes_and_partitions()
 
         def _assemble_slurmctld_parameters() -> str:
@@ -325,7 +325,7 @@ class SlurmctldCharm(CharmBase):
         user_supplied_parameters = {}
         if custom_config := self.config.get("slurm-conf-parameters"):
             user_supplied_parameters = {
-                line.split("=")[0]: line.split("=",1)[1]
+                line.split("=")[0]: line.split("=", 1)[1]
                 for line in str(custom_config).split("\n")
                 if not line.startswith("#") and line.strip() != ""
             }
@@ -404,7 +404,16 @@ class SlurmctldCharm(CharmBase):
     @property
     def _ingress_address(self) -> str:
         """Return the ingress_address from the slurmd relation if it exists."""
-        return self.model.get_binding(PEER_RELATION).network.ingress_address
+        if (peer_binding := self.model.get_binding(PEER_RELATION)) is not None:
+            try:
+                logger.debug(
+                    "Getting ingress_address: %s",
+                    peer_binding.network.ingress_address,
+                )
+                return str(peer_binding.network.ingress_address)
+            except TypeError:
+                pass
+        raise IngressAddressUnavailableError
 
     @property
     def slurm_installed(self) -> bool:

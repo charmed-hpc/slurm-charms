@@ -174,9 +174,11 @@ class TestCharm(unittest.TestCase):
 
     def test_get_user_supplied_parameters(self) -> None:
         """Test that user supplied parameters are parsed correctly."""
-        self.harness.add_relation('slurmctld-peer', 'slurmctld')
-        self.harness.update_config({"slurm-conf-parameters": 'JobAcctGatherFrequency=task=30,network=40'})
+        self.harness.add_relation("slurmctld-peer", "slurmctld")
+        self.harness.update_config(
+            {"slurm-conf-parameters": "JobAcctGatherFrequency=task=30,network=40"}
+        )
         self.assertEqual(
             self.harness.charm._assemble_slurm_conf()["JobAcctGatherFrequency"],
-            "task=30,network=40"
+            "task=30,network=40",
         )
