@@ -405,14 +405,11 @@ class SlurmctldCharm(CharmBase):
     def _ingress_address(self) -> str:
         """Return the ingress_address from the slurmd relation if it exists."""
         if (peer_binding := self.model.get_binding(PEER_RELATION)) is not None:
-            try:
-                logger.debug(
-                    "Getting ingress_address: %s",
-                    peer_binding.network.ingress_address,
-                )
-                return str(peer_binding.network.ingress_address)
-            except TypeError:
-                pass
+            logger.debug(
+                "Getting ingress_address: %s",
+                peer_binding.network.ingress_address,
+            )
+            return str(peer_binding.network.ingress_address)
         raise IngressAddressUnavailableError
 
     @property
