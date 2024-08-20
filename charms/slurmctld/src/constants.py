@@ -26,7 +26,7 @@ CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "SlurmdSpoolDir": "/var/spool/slurmd",
     "SlurmctldParameters": "enable_configless",
     "SlurmctldLogFile": "/var/log/slurm/slurmctld.log",
-    "SlurmdLogFile": "/var/log/slurm/slurmctld.log",
+    "SlurmdLogFile": "/var/log/slurm/slurmd.log",
     "SlurmdPidFile": "/var/run/slurmd.pid",
     "SlurmctldPidFile": "/var/run/slurmctld.pid",
     "SlurmUser": SLURM_USER,
