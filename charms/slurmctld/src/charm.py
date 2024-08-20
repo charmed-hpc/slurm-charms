@@ -326,7 +326,7 @@ class SlurmctldCharm(CharmBase):
         user_supplied_parameters = {}
         if custom_config := self.config.get("slurm-conf-parameters"):
             user_supplied_parameters = {
-                line.split("=")[0]: line.split("=")[1]
+                line.split("=")[0]: line.split("=", 1)[1]
                 for line in str(custom_config).split("\n")
                 if not line.startswith("#") and line.strip() != ""
             }
