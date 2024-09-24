@@ -166,6 +166,7 @@ class SlurmdManager:
             return False
 
         self.render_nhc_config()
+        self.render_nhc_wrapper("")
 
         spool_dir = Path("/var/spool/slurmd")
         spool_dir.mkdir()
@@ -271,10 +272,10 @@ class SlurmdManager:
         return True
 
     def render_nhc_wrapper(self, params: str) -> None:
-        """Render the /usr/sbin/omni-nhc-wrapper script."""
-        logger.debug(f"## rendering /usr/sbin/omni-nhc-wrapper: {params}")
+        """Render the /usr/sbin/charmed-nhc-wrapper script."""
+        logger.debug(f"## rendering /usr/sbin/charmed-nhc-wrapper: {params}")
 
-        target = Path("/usr/sbin/omni-nhc-wrapper")
+        target = Path("/usr/sbin/charmed-nhc-wrapper")
 
         target.write_text(
             textwrap.dedent(

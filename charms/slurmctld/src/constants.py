@@ -15,7 +15,7 @@ CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "GresTypes": "gpu",
     "HealthCheckInterval": "600",
     "HealthCheckNodeState": "ANY,CYCLE",
-    "HealthCheckProgram": "/usr/sbin/omni-nhc-wrapper",
+    "HealthCheckProgram": "/usr/sbin/charmed-nhc-wrapper",
     "MailProg": "/usr/bin/mail.mailutils",
     "PluginDir": "/usr/lib/x86_64-linux-gnu/slurm-wlm",
     "PlugStackConfig": "/etc/slurm/plugstack.conf.d/plugstack.conf",
