@@ -1,0 +1,36 @@
+name: Nightly TICS scan
+
+on:
+  schedule:
+    - cron: '15 17 * * *' # Every day at 17:15 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  TICS:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install tox pylint flake8
+          python3 -m pip install --requirement test-requirements.txt
+
+      - name: Run coverage tests
+        run: |
+          tox -e unit
+
+      - name: TICS GitHub Action
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: slurm-charms
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          branchdir: ${{ env.GITHUB_WORKSPACE }}
+          ticsAuthToken: ${{ secrets.TICS_AUTH_TOKEN }}
+          installTics: true
+          calc: ALL
