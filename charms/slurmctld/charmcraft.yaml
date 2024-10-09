@@ -1,4 +1,4 @@
-# Copyright 2020 Omnivector Solutions, LLC
+# Copyright 2024 Omnivector Corp.
 # See LICENSE file for licensing details.
 name: slurmctld
 summary: |
@@ -29,6 +29,10 @@ requires:
     interface: slurmdbd
   slurmrestd:
     interface: slurmrestd
+
+peers:
+  slurmctld-peer:
+    interface: slurmctld-peer
 
 assumes:
   - juju
