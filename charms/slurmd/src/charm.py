@@ -93,8 +93,18 @@ class SlurmdCharm(CharmBase):
 
         self._check_status()
 
-    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
+    def _on_config_changed(self, event: ConfigChangedEvent) -> None:  # noqa: C901
         """Handle charm configuration changes."""
+        if gpu := self.model.config.get("gpu"):
+            if gpu == "amd":
+                if not self._slurmd_manager.rocm_manager.is_installed():
+                    self._slurmd_manager.rocm_manager.install()
+                    self.unit.reboot(now=True)
+                self._slurmd_manager.rocm_manager.post_install()
+            else:
+                self.unit.status = BlockedStatus("Invalid value for option `gpu`")
+                return
+
         if nhc_conf := self.model.config.get("nhc-conf"):
             if nhc_conf != self._stored.nhc_conf:
                 self._stored.nhc_conf = nhc_conf
