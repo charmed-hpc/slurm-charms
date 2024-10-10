@@ -10,15 +10,23 @@ permissions:
 
 jobs:
   TICS:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install requirements
         run: |
-          python3 -m pip install tox pylint flake8
-          python3 -m pip install --requirement test-requirements.txt
+          sudo apt update -y
+          sudo apt install python3-venv -y
+
+      - name: Create and activate virtual environment
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install tox pylint flake8
+          pip install --requirement test-requirements.txt
+          echo PATH=$PATH >> $GITHUB_ENV
 
       - name: Run coverage tests
         run: |
