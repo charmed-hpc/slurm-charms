@@ -15,7 +15,7 @@ from shutil import rmtree
 from typing import Any, Dict
 
 import distro
-from constants import MUNGE_KEY_PATH, SLURM_GROUP, SLURM_USER, UBUNTU_HPC_PPA_KEY
+from constants import MUNGE_KEY_PATH, ROCM_PPA_KEY, SLURM_GROUP, SLURM_USER, UBUNTU_HPC_PPA_KEY
 
 import charms.operator_libs_linux.v0.apt as apt  # type: ignore [import-untyped]
 import charms.operator_libs_linux.v1.systemd as systemd  # type: ignore [import-untyped]
@@ -130,6 +130,88 @@ class CommonPackagesLifecycleManager:
         return package_installed
 
 
+class ROCmPackagesLifecycleManager:
+    """Facilitate ROCm packages lifecycles."""
+
+    _LD_FILE = Path("/etc/ld.so.conf.d/rocm.conf")
+    _PATH_FILE = Path("PATH=$PATH:/opt/rocm-6.2.0/bin")
+
+    def install(self) -> None:
+        """Install ROCm required packages.
+
+        NOTE: The machine will require a restart after installation to enable the `amdgpu-dkms` module.
+
+        Raises:
+            SlurmdException if the installation failed.
+        """
+        try:
+            arch = subprocess.check_output(["dpkg", "--print-architecture"], text=True).strip()
+        except subprocess.CalledProcessError as e:
+            raise SlurmdException(
+                f"failed to determine the system architecture. reason: {e.stderr}"
+            )
+
+        amdgpu_repo = apt.DebianRepository(
+            enabled=True,
+            repotype="deb",
+            uri="https://repo.radeon.com/amdgpu/6.2/ubuntu",
+            release=distro.codename(),
+            groups=["main"],
+            options={"arch": arch},
+        )
+        amdgpu_repo.import_key(ROCM_PPA_KEY)
+
+        rocm_repo = apt.DebianRepository(
+            enabled=True,
+            repotype="deb",
+            uri="https://repo.radeon.com/rocm/apt/6.2",
+            release=distro.codename(),
+            groups=["main"],
+            options={"arch": arch},
+        )
+        rocm_repo.import_key(ROCM_PPA_KEY)
+
+        repositories = apt.RepositoryMapping()
+        repositories.add(amdgpu_repo)
+        repositories.add(rocm_repo)
+
+        rocm_pin = Path("/etc/apt/preferences.d/rocm-pin-600")
+        rocm_pin.parent.mkdir(parents=True, exist_ok=True)
+        rocm_pin.write_text("Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600")
+
+        apt.update()
+        apt.add_package(["amdgpu-dkms", "rocm"])
+
+    def is_installed(self) -> bool:
+        """Check if the ROCm packages have been installed."""
+        try:
+            for package in ["amdgpu-dkms", "rocm"]:
+                apt.DebianPackage.from_installed_package(package)
+        except apt.PackageNotFoundError:
+            return False
+
+        return True
+
+    def post_install(self) -> None:
+        """Execute post-installation steps for the ROCm packages.
+
+        Raises:
+            SlurmdException if the post-installation steps failed.
+        """
+        self._LD_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self._LD_FILE.write_text("/opt/rocm/lib\n/opt/rocm/lib64")
+
+        try:
+            subprocess.check_call(["ldconfig"], text=True)
+        except subprocess.CalledProcessError as e:
+            raise SlurmdException(
+                f"could not execute the post-installation step. reason: {e.stdout}"
+            )
+
+        self._PATH_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self._PATH_FILE.write_text("PATH=$PATH:/opt/rocm-6.2.0/bin")
+
+
 class SlurmdManager:
     """SlurmdManager."""
 
@@ -138,6 +220,7 @@ class SlurmdManager:
         self._slurmd_package = CharmedHPCPackageLifecycleManager("slurmd")
         self._slurm_client_package = CharmedHPCPackageLifecycleManager("slurm-client")
         self._common_packages = CommonPackagesLifecycleManager()
+        self.rocm_manager = ROCmPackagesLifecycleManager()
 
     def install(self) -> bool:
         """Install slurmd, slurm-client, munge, and common packages to the system."""

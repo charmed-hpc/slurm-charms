@@ -78,6 +78,20 @@ config:
          $ juju config slurmd nhc-conf="$(cat extra-nhc.conf)"
         ```
 
+    gpu:
+      default: ""
+      type: string
+      description: >
+        Type of GPU driver to install.
+
+        Available options: [`amd`].
+
+        Example usage:
+        ```bash
+         $ juju config slurmd gpu=amd
+        ```
+
+
 actions:
   node-configured:
     description: Remove a node from DownNodes when the reason is `New node`.
