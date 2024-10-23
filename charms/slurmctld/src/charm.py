@@ -204,7 +204,7 @@ class SlurmctldCharm(CharmBase):
         event.log(f"Resuming {nodes}.")
 
         try:
-            cmd = f"scontrol update nodename={nodes} state=resume"
+            cmd = f"scontrol update nodename={nodes} state=idle"
             subprocess.check_output(shlex.split(cmd))
             event.set_results({"status": "resuming", "nodes": nodes})
         except subprocess.CalledProcessError as e:
