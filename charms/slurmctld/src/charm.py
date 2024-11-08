@@ -9,7 +9,7 @@ import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
-from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, SLURM_CONF_PATH
+from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS
 from interface_slurmd import (
     PartitionAvailableEvent,
     PartitionUnavailableEvent,
@@ -17,15 +17,8 @@ from interface_slurmd import (
     SlurmdAvailableEvent,
     SlurmdDepartedEvent,
 )
-from interface_slurmdbd import (
-    Slurmdbd,
-    SlurmdbdAvailableEvent,
-    SlurmdbdUnavailableEvent,
-)
-from interface_slurmrestd import (
-    Slurmrestd,
-    SlurmrestdAvailableEvent,
-)
+from interface_slurmdbd import Slurmdbd, SlurmdbdAvailableEvent, SlurmdbdUnavailableEvent
+from interface_slurmrestd import Slurmrestd, SlurmrestdAvailableEvent
 from ops import (
     ActionEvent,
     ActiveStatus,
@@ -38,8 +31,10 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurm_conf_editor import slurm_conf_as_string
-from slurmctld_ops import SlurmctldManager, is_container
+from slurmutils.models import CgroupConfig, SlurmConfig
+
+from charms.hpc_libs.v0.is_container import is_container
+from charms.hpc_libs.v0.slurm_ops import SlurmctldManager, SlurmOpsError
 
 logger = logging.getLogger()
 
@@ -64,8 +59,7 @@ class SlurmctldCharm(CharmBase):
             user_supplied_slurm_conf_params=str(),
         )
 
-        self._slurmctld_manager = SlurmctldManager()
-
+        self._slurmctld = SlurmctldManager(snap=False)
         self._slurmd = Slurmd(self, "slurmd")
         self._slurmdbd = Slurmdbd(self, "slurmdbd")
         self._slurmrestd = Slurmrestd(self, "slurmrestd")
@@ -90,36 +84,30 @@ class SlurmctldCharm(CharmBase):
 
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations for slurmctld."""
-        self.unit.status = WaitingStatus("Installing slurmctld")
+        self.unit.status = WaitingStatus("installing slurmctld")
+        try:
+            if self.unit.is_leader():
+                self._slurmctld.install()
 
-        if self._slurmctld_manager.install():
+                # TODO: <make github issue> -
+                #  Use Juju secrets instead of StoredState for exchanging keys between units.
+                self._slurmctld.jwt.generate()
+                self._stored.jwt_rsa = self._slurmctld.jwt.get()
+                self._slurmctld.munge.key.generate()
+                self._stored.munge_key = self._slurmctld.munge.key.get()
+                self._slurmctld.munge.service.restart()
+                self._slurmctld.service.restart()
+                self.unit.set_workload_version(self._slurmctld.version())
 
-            # Store the munge_key and jwt_rsa key in the stored state.
-            # NOTE: Use secrets instead of stored state when secrets are supported the framework.
-            if self.model.unit.is_leader():
-                jwt_rsa = self._slurmctld_manager.generate_jwt_rsa()
-                self._stored.jwt_rsa = jwt_rsa
-
-                munge_key = self._slurmctld_manager.generate_munge_key()
-                self._stored.munge_key = munge_key
-
-                self._slurmctld_manager.stop_munged()
-                self._slurmctld_manager.write_munge_key(munge_key)
-                self._slurmctld_manager.start_munged()
-
-                self._slurmctld_manager.stop_slurmctld()
-                self._slurmctld_manager.write_jwt_rsa(jwt_rsa)
-                self._slurmctld_manager.start_slurmctld()
-
-                self.unit.set_workload_version(self._slurmctld_manager.version())
                 self.slurm_installed = True
             else:
-                self.unit.status = BlockedStatus("Only singleton slurmctld is supported.")
-                logger.debug("Secondary slurmctld not supported.")
+                self.unit.status = BlockedStatus("slurmctld high-availability not supported")
+                logger.warning(
+                    "slurmctld high-availability is not supported yet. please scale down application."
+                )
                 event.defer()
-        else:
-            self.unit.status = BlockedStatus("Error installing slurmctld")
-            logger.error("Cannot install slurmctld, please debug.")
+        except SlurmOpsError as e:
+            logger.error(e.message)
             event.defer()
 
         self._on_write_slurm_conf(event)
@@ -154,21 +142,21 @@ class SlurmctldCharm(CharmBase):
             logger.debug("## Emitting write-slurm-config event.")
             self._on_write_slurm_conf(event)
 
-    def _on_update_status(self, event: UpdateStatusEvent) -> None:
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status."""
         self._check_status()
 
     def _on_show_current_config_action(self, event: ActionEvent) -> None:
         """Show current slurm.conf."""
-        slurm_conf = SLURM_CONF_PATH.read_text()
-        event.set_results({"slurm.conf": slurm_conf})
+        event.set_results({"slurm.conf": str(self._slurmctld.config.get())})
 
     def _on_slurmrestd_available(self, event: SlurmrestdAvailableEvent) -> None:
         """Check that we have slurm_config when slurmrestd available otherwise defer the event."""
         if self.model.unit.is_leader():
             if self._check_status():
-                slurm_conf = slurm_conf_as_string(self._assemble_slurm_conf())
-                self._slurmrestd.set_slurm_config_on_app_relation_data(slurm_conf)
+                self._slurmrestd.set_slurm_config_on_app_relation_data(
+                    str(self._slurmctld.config.load())
+                )
                 return
             logger.debug("Cluster not ready yet, deferring event.")
             event.defer()
@@ -177,7 +165,7 @@ class SlurmctldCharm(CharmBase):
         self._stored.slurmdbd_host = event.slurmdbd_host
         self._on_write_slurm_conf(event)
 
-    def _on_slurmdbd_unavailable(self, event: SlurmdbdUnavailableEvent) -> None:
+    def _on_slurmdbd_unavailable(self, _: SlurmdbdUnavailableEvent) -> None:
         self._stored.slurmdbd_host = ""
         self._check_status()
 
@@ -234,16 +222,17 @@ class SlurmctldCharm(CharmBase):
             return
 
         if slurm_config := self._assemble_slurm_conf():
-            self._slurmctld_manager.stop_slurmctld()
-            self._slurmctld_manager.write_slurm_conf(slurm_config)
+            self._slurmctld.service.disable()
+            self._slurmctld.config.dump(slurm_config)
 
             # Write out any user_supplied_cgroup_parameters to /etc/slurm/cgroup.conf.
             if user_supplied_cgroup_parameters := self.config.get("cgroup-parameters", ""):
-                self._slurmctld_manager.write_cgroup_conf(str(user_supplied_cgroup_parameters))
+                self._slurmctld.cgroup.dump(
+                    CgroupConfig.from_str(str(user_supplied_cgroup_parameters))
+                )
 
-            self._slurmctld_manager.start_slurmctld()
-
-            self._slurmctld_manager.slurm_cmd("scontrol", "reconfigure")
+            self._slurmctld.service.enable()
+            self._slurmctld.scontrol("reconfigure")
 
             # Transitioning Nodes
             #
@@ -267,13 +256,12 @@ class SlurmctldCharm(CharmBase):
 
             # slurmrestd needs the slurm.conf file, so send it every time it changes.
             if self._slurmrestd.is_joined is not False:
-                slurm_conf = slurm_conf_as_string(slurm_config)
-                self._slurmrestd.set_slurm_config_on_app_relation_data(slurm_conf)
+                self._slurmrestd.set_slurm_config_on_app_relation_data(str(slurm_config))
         else:
             logger.debug("## Should write slurm.conf, but we don't have it. " "Deferring.")
             event.defer()
 
-    def _assemble_slurm_conf(self) -> Dict[str, Any]:
+    def _assemble_slurm_conf(self) -> SlurmConfig:
         """Return the slurm.conf parameters."""
         user_supplied_parameters = self._get_user_supplied_parameters()
 
@@ -281,9 +269,7 @@ class SlurmctldCharm(CharmBase):
 
         def _assemble_slurmctld_parameters() -> str:
             # Preprocess merging slurmctld_parameters if they exist in the context
-            slurmctld_param_config = CHARM_MAINTAINED_SLURM_CONF_PARAMETERS[
-                "SlurmctldParameters"
-            ].split(",")
+            slurmctld_param_config = ["enable_configless"]
             user_config = []
 
             if (
@@ -305,20 +291,20 @@ class SlurmctldCharm(CharmBase):
                 "AccountingStoragePort": "6819",
             }
 
-        slurm_conf = {
-            "ClusterName": self.cluster_name,
-            "SlurmctldAddr": self._slurmd_ingress_address,
-            "SlurmctldHost": self.hostname,
-            "SlurmctldParameters": _assemble_slurmctld_parameters(),
-            "ProctrackType": "proctrack/linuxproc" if is_container() else "proctrack/cgroup",
-            "TaskPlugin": "task/affinity" if is_container() else "task/cgroup,task/affinity",
+        slurm_conf = SlurmConfig(
+            ClusterName=self.cluster_name,
+            SlurmctldAddr=self._slurmd_ingress_address,
+            SlurmctldHost=self._slurmctld.hostname,
+            SlurmctldParameters=_assemble_slurmctld_parameters(),
+            ProctrackType="proctrack/linuxproc" if is_container() else "proctrack/cgroup",
+            TaskPlugin="task/affinity" if is_container() else "task/cgroup,task/affinity",
             **accounting_params,
             **CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
             **slurmd_parameters,
             **user_supplied_parameters,
-        }
+        )
 
-        logger.debug(f"slurm.conf: {slurm_conf}")
+        logger.debug(f"slurm.conf: {slurm_conf.dict()}")
         return slurm_conf
 
     def _get_user_supplied_parameters(self) -> Dict[Any, Any]:
@@ -333,11 +319,11 @@ class SlurmctldCharm(CharmBase):
         return user_supplied_parameters
 
     def _get_new_node_names_from_slurm_config(
-        self, slurm_config: Dict[str, Any]
+        self, slurm_config: SlurmConfig
     ) -> List[Optional[str]]:
         """Given the slurm_config, return the nodes that are DownNodes with reason 'New node.'."""
         new_node_names = []
-        if down_nodes_from_slurm_config := slurm_config.get("down_nodes"):
+        if down_nodes_from_slurm_config := slurm_config.down_nodes:
             for down_nodes_entry in down_nodes_from_slurm_config:
                 for down_node_name in down_nodes_entry["DownNodes"]:
                     if down_nodes_entry["Reason"] == "New node.":
@@ -352,12 +338,16 @@ class SlurmctldCharm(CharmBase):
         - Munge running
         """
         if self.slurm_installed is not True:
-            self.unit.status = BlockedStatus("Error installing slurmctld")
+            self.unit.status = BlockedStatus(
+                "failed to install slurmctld. see logs for further details"
+            )
             return False
 
-        if not self._slurmctld_manager.check_munged():
-            self.unit.status = BlockedStatus("Error configuring munge key")
-            return False
+        # TODO: https://github.com/charmed-hpc/hpc-libs/issues/18 -
+        #   Re-enable munge sanity check when supported by `slurm_ops` charm library.
+        # if not self._slurmctld.check_munged():
+        #     self.unit.status = BlockedStatus("Error configuring munge key")
+        #     return False
 
         self.unit.status = ActiveStatus("")
         return True
@@ -374,7 +364,7 @@ class SlurmctldCharm(CharmBase):
         """Run scontrol to resume the specified node list."""
         nodes = ",".join(nodelist)
         update_cmd = f"update nodename={nodes} state=resume"
-        self._slurmctld_manager.slurm_cmd("scontrol", update_cmd)
+        self._slurmctld.scontrol(update_cmd)
 
     @property
     def cluster_name(self) -> str:
@@ -400,7 +390,7 @@ class SlurmctldCharm(CharmBase):
     @property
     def hostname(self) -> str:
         """Return the hostname."""
-        return self._slurmctld_manager.hostname
+        return self._slurmctld.hostname
 
     @property
     def _slurmd_ingress_address(self) -> str:

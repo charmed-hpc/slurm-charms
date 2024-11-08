@@ -1,3 +1,5 @@
 external-libraries:
+  - charms.hpc_libs.v0.is_container
+  - charms.hpc_libs.v0.slurm_ops
   - charms.operator_libs_linux.v0.apt
   - charms.operator_libs_linux.v1.systemd

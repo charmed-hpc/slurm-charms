@@ -244,4 +244,4 @@ class Slurmd(Object):
             if len(new_nodes) > 0
             else []
         )
-        return {"down_nodes": new_node_down_nodes, "nodes": nodes, "partitions": partitions}
+        return {"DownNodes": new_node_down_nodes, "Nodes": nodes, "Partitions": partitions}
