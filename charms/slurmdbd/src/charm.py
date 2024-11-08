@@ -22,12 +22,10 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmdbd_ops import SlurmdbdOpsManager
+from slurmutils.models import SlurmdbdConfig
 
-from charms.data_platform_libs.v0.data_interfaces import (
-    DatabaseCreatedEvent,
-    DatabaseRequires,
-)
+from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
+from charms.hpc_libs.v0.slurm_ops import SlurmdbdManager, SlurmOpsError
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +44,9 @@ class SlurmdbdCharm(CharmBase):
             db_info={},
         )
 
-        self._db = DatabaseRequires(self, relation_name="database", database_name=SLURM_ACCT_DB)
-        self._slurmdbd_ops_manager = SlurmdbdOpsManager()
+        self._slurmdbd = SlurmdbdManager(snap=False)
         self._slurmctld = Slurmctld(self, "slurmctld")
+        self._db = DatabaseRequires(self, relation_name="database", database_name=SLURM_ACCT_DB)
 
         event_handler_bindings = {
             self.on.install: self._on_install,
@@ -63,29 +61,26 @@ class SlurmdbdCharm(CharmBase):
 
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations for slurmdbd."""
-        if not self.model.unit.is_leader():
-            self.unit.status = BlockedStatus("Only singleton slurmdbd currently supported.")
-            event.defer()
-            return
+        self.unit.status = WaitingStatus("installing slurmdbd")
+        try:
+            if self.unit.is_leader():
+                self._slurmdbd.install()
+                self.unit.set_workload_version(self._slurmdbd.version())
+                self._slurmdbd.munge.service.enable()
 
-        self.unit.status = WaitingStatus("Installing slurmdbd")
-
-        if self._slurmdbd_ops_manager.install() is not False:
-            self.unit.set_workload_version(self._slurmdbd_ops_manager.version)
-            self._stored.slurm_installed = True
-
-            if self._slurmdbd_ops_manager.start_munge():
-                logger.debug("## Munge started successfully")
+                self._stored.slurm_installed = True
             else:
-                logger.error("## Unable to start munge")
-                self.unit.status = BlockedStatus("Error restarting munge")
+                logger.warning(
+                    "slurmdbd high-availability is not supported yet. please scale down application."
+                )
                 event.defer()
-                return
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            event.defer()
 
-            self.unit.status = ActiveStatus("slurmdbd successfully installed")
         self._check_status()
 
-    def _on_update_status(self, event: UpdateStatusEvent) -> None:
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status."""
         self._check_status()
 
@@ -96,12 +91,11 @@ class SlurmdbdCharm(CharmBase):
             return
 
         if (jwt := event.jwt_rsa) is not None:
-            self._slurmdbd_ops_manager.write_jwt_rsa(jwt)
+            self._slurmdbd.jwt.set(jwt)
 
         if (munge_key := event.munge_key) is not None:
-            self._slurmdbd_ops_manager.stop_munge()
-            self._slurmdbd_ops_manager.write_munge_key(munge_key)
-            self._slurmdbd_ops_manager.start_munge()
+            self._slurmdbd.munge.key.set(munge_key)
+            self._slurmdbd.munge.service.restart()
 
         # Don't try to write the config before the database has been created.
         # Otherwise, this will trigger a defer on this event, which we don't really need
@@ -173,7 +167,7 @@ class SlurmdbdCharm(CharmBase):
             # Make sure to strip the file:// off the front of the first endpoint
             # otherwise slurmdbd will not be able to connect to the database
             socket = urlparse(socket_endpoints[0]).path
-            self._slurmdbd_ops_manager.set_environment_var(mysql_unix_port=f'"{socket}"')
+            self._slurmdbd.mysql_unix_port = f'"{socket}"'
         elif tcp_endpoints:
             # This must be using TCP endpoint and the connection information will
             # be host_address:port. Only one remote mysql service will be configured
@@ -195,7 +189,7 @@ class SlurmdbdCharm(CharmBase):
                 }
             )
             # Make sure that the MYSQL_UNIX_PORT is removed from the env file.
-            self._slurmdbd_ops_manager.set_environment_var(mysql_unix_port=None)
+            del self._slurmdbd.mysql_unix_port
         else:
             # This is 100% an error condition that the charm doesn't know how to handle
             # and is an unexpected condition. This happens when there are commas but no
@@ -207,7 +201,7 @@ class SlurmdbdCharm(CharmBase):
         self._stored.db_info = db_info
         self._write_config_and_restart_slurmdbd(event)
 
-    def _on_slurmctld_unavailable(self, event: SlurmctldUnavailableEvent) -> None:
+    def _on_slurmctld_unavailable(self, _: SlurmctldUnavailableEvent) -> None:
         """Reset state and charm status when slurmctld broken."""
         self._stored.slurmctld_available = False
         self._check_status()
@@ -242,7 +236,7 @@ class SlurmdbdCharm(CharmBase):
             slurmdbd_full_config = {
                 **CHARM_MAINTAINED_PARAMETERS,
                 **self._stored.db_info,
-                **{"DbdHost": self._slurmdbd_ops_manager.hostname},
+                **{"DbdHost": self._slurmdbd.hostname},
                 **{"DbdAddr": f"{binding.network.ingress_address}"},
                 **self._get_user_supplied_parameters(),
             }
@@ -253,8 +247,8 @@ class SlurmdbdCharm(CharmBase):
                     '"jwt_key=/var/spool/slurmdbd/jwt_hs256.key"'
                 )
 
-            self._slurmdbd_ops_manager.stop_slurmdbd()
-            self._slurmdbd_ops_manager.write_slurmdbd_conf(slurmdbd_full_config)
+            self._slurmdbd.service.disable()
+            self._slurmdbd.config.dump(SlurmdbdConfig.from_dict(slurmdbd_full_config))
 
             # At this point, we must guarantee that slurmdbd is correctly
             # initialized. Its startup might take a while, so we have to wait
@@ -265,9 +259,7 @@ class SlurmdbdCharm(CharmBase):
             # Enforce that no one other than the leader tries to set
             # application relation data.
             if self.model.unit.is_leader():
-                self._slurmctld.set_slurmdbd_host_on_app_relation_data(
-                    self._slurmdbd_ops_manager.hostname
-                )
+                self._slurmctld.set_slurmdbd_host_on_app_relation_data(self._slurmdbd.hostname)
         else:
             logger.debug("Cannot get network binding. Please Debug.")
             event.defer()
@@ -294,24 +286,32 @@ class SlurmdbdCharm(CharmBase):
         logger.debug("## Checking if slurmdbd is active")
 
         for i in range(max_attemps):
-            if self._slurmdbd_ops_manager.is_slurmdbd_active():
+            if self._slurmdbd.service.active():
                 logger.debug("## Slurmdbd running")
                 break
             else:
                 logger.warning("## Slurmdbd not running, trying to start it")
-                self.unit.status = WaitingStatus("Starting slurmdbd ...")
-                self._slurmdbd_ops_manager.restart_slurmdbd()
+                self.unit.status = WaitingStatus("starting slurmdbd...")
+                self._slurmdbd.service.restart()
                 sleep(3 + i)
 
-        if self._slurmdbd_ops_manager.is_slurmdbd_active():
+        if self._slurmdbd.service.active():
             self._check_status()
         else:
-            self.unit.status = BlockedStatus("Cannot start slurmdbd.")
+            self.unit.status = BlockedStatus("cannot start slurmdbd")
 
     def _check_status(self) -> bool:
         """Check that we have the things we need."""
+        if self.unit.is_leader() is False:
+            self.unit.status = BlockedStatus(
+                "slurmdbd high-availability not supported. see logs for further details"
+            )
+            return False
+
         if self._stored.slurm_installed is not True:
-            self.unit.status = BlockedStatus("Error installing slurmdbd.")
+            self.unit.status = BlockedStatus(
+                "failed to install slurmdbd. see logs for further details"
+            )
             return False
 
         if self._stored.db_info == {}:
