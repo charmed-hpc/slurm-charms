@@ -5,14 +5,9 @@
 """Slurmd Operator Charm."""
 
 import logging
-import socket
-from dataclasses import fields
 from typing import Any, Dict
 
-from interface_slurmctld import (
-    Slurmctld,
-    SlurmctldAvailableEvent,
-)
+from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
     ActionEvent,
     ActiveStatus,
@@ -25,10 +20,10 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurm_conf_editor import Node, Partition
-from slurmd_ops import SlurmdManager
-from utils import slurmd
+from slurmutils.models.option import NodeOptionSet, PartitionOptionSet
+from utils import machine, nhc, service
 
+from charms.hpc_libs.v0.slurm_ops import SlurmdManager, SlurmOpsError
 from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore[import-untyped]
     ServiceStartedEvent,
     ServiceStoppedEvent,
@@ -59,7 +54,7 @@ class SlurmdCharm(CharmBase):
             user_supplied_partition_parameters={},
         )
 
-        self._slurmd_manager = SlurmdManager()
+        self._slurmd = SlurmdManager(snap=False)
         self._slurmctld = Slurmctld(self, "slurmctld")
         self._systemd_notices = SystemdNotices(self, ["slurmd"])
 
@@ -79,32 +74,36 @@ class SlurmdCharm(CharmBase):
 
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations for slurmd."""
-        self.unit.status = WaitingStatus("Installing slurmd")
+        self.unit.status = WaitingStatus("installing slurmd")
 
-        if self._slurmd_manager.install():
-            self.unit.set_workload_version(self._slurmd_manager.version())
-            slurmd.override_service()
+        try:
+            self._slurmd.install()
+            nhc.install()
+            self.unit.set_workload_version(self._slurmd.version())
+            # TODO: https://github.com/orgs/charmed-hpc/discussions/10 -
+            #  Evaluate if we should continue doing the service override here
+            #  for `juju-systemd-notices`.
+            service.override_service()
             self._systemd_notices.subscribe()
 
             self._stored.slurm_installed = True
-        else:
-            self.unit.status = BlockedStatus("Error installing slurmd")
+        except SlurmOpsError as e:
+            logger.error(e.message)
             event.defer()
 
         self._check_status()
 
-    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
+    def _on_config_changed(self, _: ConfigChangedEvent) -> None:
         """Handle charm configuration changes."""
         if nhc_conf := self.model.config.get("nhc-conf"):
             if nhc_conf != self._stored.nhc_conf:
                 self._stored.nhc_conf = nhc_conf
-                self._slurmd_manager.render_nhc_config(nhc_conf)
+                nhc.generate_config(nhc_conf)
 
         user_supplied_partition_parameters = self.model.config.get("partition-config")
 
         if self.model.unit.is_leader():
             if user_supplied_partition_parameters is not None:
-                tmp_params = {}
                 try:
                     tmp_params = {
                         item.split("=")[0]: item.split("=")[1]
@@ -118,9 +117,7 @@ class SlurmdCharm(CharmBase):
 
                 # Validate the user supplied params are valid params.
                 for parameter in tmp_params:
-                    if parameter not in [
-                        partition_parameter.name for partition_parameter in fields(Partition)
-                    ]:
+                    if parameter not in list(PartitionOptionSet.keys()):
                         logger.error(
                             f"Invalid user supplied partition configuration parameter: {parameter}."
                         )
@@ -131,7 +128,7 @@ class SlurmdCharm(CharmBase):
                 if self._slurmctld.is_joined:
                     self._slurmctld.set_partition()
 
-    def _on_update_status(self, event: UpdateStatusEvent) -> None:
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status."""
         self._check_status()
 
@@ -143,7 +140,7 @@ class SlurmdCharm(CharmBase):
 
         if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
             if slurmctld_host is not None:
-                slurmd.override_default(slurmctld_host)
+                self._slurmd.config_server = f"{slurmctld_host}:6817"
                 self._stored.slurmctld_host = slurmctld_host
                 logger.debug(f"slurmctld_host={slurmctld_host}")
             else:
@@ -153,8 +150,7 @@ class SlurmdCharm(CharmBase):
         if (munge_key := event.munge_key) != self._stored.munge_key:
             if munge_key is not None:
                 self._stored.munge_key = munge_key
-                self._slurmd_manager.write_munge_key(munge_key)
-                logger.debug(f"munge_key={munge_key}")
+                self._slurmd.munge.key.set(munge_key)
             else:
                 logger.debug("'munge_key' not in event data.")
                 return
@@ -162,7 +158,7 @@ class SlurmdCharm(CharmBase):
         if (nhc_params := event.nhc_params) != self._stored.nhc_params:
             if nhc_params is not None:
                 self._stored.nhc_params = nhc_params
-                self._slurmd_manager.render_nhc_wrapper(nhc_params)
+                nhc.generate_wrapper(nhc_params)
                 logger.debug(f"nhc_params={nhc_params}")
             else:
                 logger.debug("'nhc_params' not in event data.")
@@ -174,22 +170,24 @@ class SlurmdCharm(CharmBase):
         self._stored.slurmctld_available = True
 
         # Restart munged and slurmd after we write the event data to their respective locations.
-        if self._slurmd_manager.restart_munged():
-            logger.debug("## Munge restarted successfully")
-        else:
-            logger.error("## Unable to restart munge")
+        try:
+            logger.debug("restarted munge successfully")
+            self._slurmd.munge.service.restart()
+        except SlurmOpsError as e:
+            logger.error("failed to restart munge")
+            logger.error(e.message)
 
-        slurmd.restart()
+        self._slurmd.service.restart()
         self._check_status()
 
-    def _on_slurmctld_unavailable(self, event) -> None:
+    def _on_slurmctld_unavailable(self, _) -> None:
         """Stop slurmd and set slurmctld_available = False when we lose slurmctld."""
         logger.debug("## Slurmctld unavailable")
         self._stored.slurmctld_available = False
         self._stored.nhc_params = ""
         self._stored.munge_key = ""
         self._stored.slurmctld_host = ""
-        slurmd.stop()
+        self._slurmd.service.disable()
         self._check_status()
 
     def _on_slurmd_started(self, _: ServiceStartedEvent) -> None:
@@ -205,14 +203,14 @@ class SlurmdCharm(CharmBase):
         # Trigger reconfiguration of slurmd node.
         self._new_node = False
         self._slurmctld.set_node()
-        slurmd.restart()
+        self._slurmd.service.restart()
         logger.debug("### This node is not new anymore")
 
     def _on_show_nhc_config(self, event: ActionEvent) -> None:
         """Show current nhc.conf."""
-        nhc_conf = self._slurmd_manager.get_nhc_config()
-        event.set_results({"nhc.conf": nhc_conf})
+        event.set_results({"nhc.conf": nhc.get_config()})
 
+    # TODO: Just use the slurmutils models here.
     def _on_node_config_action_event(self, event: ActionEvent) -> None:
         """Get or set the user_supplied_node_conifg.
 
@@ -241,7 +239,7 @@ class SlurmdCharm(CharmBase):
 
             # Validate the user supplied params are valid params.
             for param in node_parameters_tmp:
-                if param not in [node_param.name for node_param in fields(Node)]:
+                if param not in list(NodeOptionSet.keys()):
                     logger.error(f"Invalid user supplied node parameter: {param}.")
                     valid_config = False
 
@@ -270,7 +268,7 @@ class SlurmdCharm(CharmBase):
     @property
     def hostname(self) -> str:
         """Return the hostname."""
-        return socket.gethostname().split(".")[0]
+        return self._slurmd.hostname
 
     @property
     def _user_supplied_node_parameters(self) -> dict[Any, Any]:
@@ -300,7 +298,9 @@ class SlurmdCharm(CharmBase):
         - munge key configured and working
         """
         if self._stored.slurm_installed is not True:
-            self.unit.status = BlockedStatus("Error installing slurmd")
+            self.unit.status = BlockedStatus(
+                "failed to install slurmd. see logs for further details"
+            )
             return False
 
         if self._slurmctld.is_joined is not True:
@@ -311,9 +311,11 @@ class SlurmdCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting on: slurmctld")
             return False
 
-        if not self._slurmd_manager.check_munged():
-            self.unit.status = BlockedStatus("Error configuring munge key")
-            return False
+        # TODO: https://github.com/charmed-hpc/hpc-libs/issues/18 -
+        #   Re-enable munge sanity check when supported by `slurm_ops` charm library.
+        # if not self._slurmd.check_munged():
+        #     self.unit.status = BlockedStatus("Error configuring munge key")
+        #     return False
 
         return True
 
@@ -321,7 +323,7 @@ class SlurmdCharm(CharmBase):
         """Get the node from stored state."""
         node = {
             "node_parameters": {
-                **self._slurmd_manager.get_node_config(),
+                **machine.get_slurmd_info(),
                 **self._user_supplied_node_parameters,
             },
             "new_node": self._new_node,
