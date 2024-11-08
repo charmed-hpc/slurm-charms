@@ -17,7 +17,9 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmrestd_ops import SlurmrestdManager
+from slurmutils.models import SlurmConfig
+
+from charms.hpc_libs.v0.slurm_ops import SlurmOpsError, SlurmrestdManager
 
 logger = logging.getLogger()
 
@@ -33,8 +35,8 @@ class SlurmrestdCharm(CharmBase):
 
         self._stored.set_default(slurm_installed=False)
 
+        self._slurmrestd = SlurmrestdManager(snap=False)
         self._slurmctld = Slurmctld(self, "slurmctld")
-        self._slurmrestd_manager = SlurmrestdManager()
 
         event_handler_bindings = {
             self.on.install: self._on_install,
@@ -47,17 +49,19 @@ class SlurmrestdCharm(CharmBase):
 
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations for slurmrestd."""
-        self.unit.status = WaitingStatus("Installing slurmrestd")
+        self.unit.status = WaitingStatus("installing slurmrestd")
 
-        if self._slurmrestd_manager.install():
-            self.unit.set_workload_version(self._slurmrestd_manager.version())
+        try:
+            self._slurmrestd.install()
+            self.unit.set_workload_version(self._slurmrestd.version())
             self._stored.slurm_installed = True
-        else:
+        except SlurmOpsError as e:
+            logger.error(e.message)
             event.defer()
 
         self._check_status()
 
-    def _on_update_status(self, event: UpdateStatusEvent) -> None:
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status."""
         self._check_status()
 
@@ -68,24 +72,25 @@ class SlurmrestdCharm(CharmBase):
             return
 
         if (event.munge_key is not None) and (event.slurm_conf is not None):
-            self._slurmrestd_manager.stop_slurmrestd()
-            self._slurmrestd_manager.stop_munge()
-            self._slurmrestd_manager.write_munge_key(event.munge_key)
-            self._slurmrestd_manager.write_slurm_conf(event.slurm_conf)
-            self._slurmrestd_manager.start_munge()
-            self._slurmrestd_manager.start_slurmrestd()
+            self._slurmrestd.munge.key.set(event.munge_key)
+            self._slurmrestd.config.dump(SlurmConfig.from_str(event.slurm_conf))
+            self._slurmrestd.munge.service.restart()
+            self._slurmrestd.service.restart()
+
         self._check_status()
 
     def _on_slurmctld_unavailable(self, event: SlurmctldUnavailableEvent) -> None:
         """Stop the slurmrestd daemon if slurmctld is unavailable."""
-        self._slurmrestd_manager.stop_slurmrestd()
-        self._slurmrestd_manager.stop_munge()
+        self._slurmrestd.service.disable()
+        self._slurmrestd.munge.service.disable()
         self._check_status()
 
     def _check_status(self) -> bool:
         """Check the status of our integrated applications."""
         if self._stored.slurm_installed is not True:
-            self.unit.status = BlockedStatus("Error installing slurmrestd")
+            self.unit.status = BlockedStatus(
+                "failed to install slurmrestd. see logs for further details"
+            )
             return False
 
         if not self._slurmctld.is_joined:
