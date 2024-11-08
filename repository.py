@@ -422,6 +422,7 @@ def fmt_cli(
     files.append(str(ROOT_DIR / "tests"))
     logging.info(f"Running black for directories {files}")
     subprocess.run(["black", "--config", "pyproject.toml"] + files, cwd=ROOT_DIR, check=True)
+    subprocess.run(["ruff", "check", "--fix"] + files, cwd=ROOT_DIR, check=True)
 
 
 def lint_cli(
