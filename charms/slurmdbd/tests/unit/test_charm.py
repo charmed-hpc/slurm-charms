@@ -33,8 +33,6 @@ class TestCharm(TestCase):
         self.setUpPyfakefs()
         self.harness.begin()
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=True)
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.start_munge", return_value=True)
     def test_install_success(self, *_) -> None:
         """Test `InstallEvent` hook success."""
         self.harness.set_leader(True)
