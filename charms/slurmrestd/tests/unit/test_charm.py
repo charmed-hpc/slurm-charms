@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2023-2024 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,46 +15,65 @@
 
 """Test default charm events such as upgrade charm, install, etc."""
 
-import unittest
-from unittest.mock import PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmrestdCharm
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
+from pyfakefs.fake_filesystem_unittest import TestCase
+
+from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
-class TestCharm(unittest.TestCase):
+class TestCharm(TestCase):
+
     def setUp(self) -> None:
         self.harness = Harness(SlurmrestdCharm)
         self.addCleanup(self.harness.cleanup)
+        self.setUpPyfakefs()
         self.harness.begin()
 
     @patch(
         "interface_slurmctld.Slurmctld.is_joined",
         new_callable=PropertyMock(return_value=True),
     )
-    @patch("slurmrestd_ops.SlurmrestdManager.version", return_value="1.1.1")
-    @patch("slurmrestd_ops.SlurmrestdManager.install")
-    @patch("slurmrestd_ops.CharmedHPCPackageLifecycleManager.install")
-    def test_install_success(self, *_):
-        self.harness.charm._stored.slurmctld_available = True
+    def test_install_success(self, *_) -> None:
+        """Test `InstallEvent` hook success."""
+        self.harness.charm._slurmrestd.install = Mock()
+        self.harness.charm._slurmrestd.version = Mock(return_value="24.05.2-1")
         self.harness.charm.on.install.emit()
+
         self.assertTrue(self.harness.charm._stored.slurm_installed)
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
-    def test_update_status_fail(self):
-        self.harness.charm.on.update_status.emit()
-        self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmrestd")
+    def test_install_fail(self, *_) -> None:
+        """Test `InstallEvent` hook failure."""
+        self.harness.charm._slurmrestd.install = Mock(
+            side_effect=SlurmOpsError("failed to install slurmd")
         )
+        self.harness.charm.on.install.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("failed to install slurmrestd. see logs for further details"),
+        )
+        self.assertFalse(self.harness.charm._stored.slurm_installed)
 
     @patch(
         "interface_slurmctld.Slurmctld.is_joined",
         new_callable=PropertyMock(return_value=True),
     )
-    @patch("slurmrestd_ops.SlurmrestdManager.check_munged", return_value=True)
-    def test_update_status_success(self, *_):
+    def test_update_status_success(self, *_) -> None:
+        """Test `UpdateStatusEvent` hook success."""
         self.harness.charm._stored.slurm_installed = True
-
         self.harness.charm.on.update_status.emit()
+
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
+
+    def test_update_status_fail(self):
+        """Test `UpdateStatusEvent` hook failure."""
+        self.harness.charm.on.update_status.emit()
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("failed to install slurmrestd. see logs for further details"),
+        )
