@@ -15,27 +15,23 @@
 
 """Test default charm events such as install, etc."""
 
-import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-import ops.testing
 from charm import SlurmctldCharm
 from ops.model import BlockedStatus
 from ops.testing import Harness
+from pyfakefs.fake_filesystem_unittest import TestCase
 
-ops.testing.SIMULATE_CAN_CONNECT = True
+from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
-class TestCharm(unittest.TestCase):
+class TestCharm(TestCase):
+
     def setUp(self):
         self.harness = Harness(SlurmctldCharm)
         self.addCleanup(self.harness.cleanup)
+        self.setUpPyfakefs()
         self.harness.begin()
-
-    @patch("slurmctld_ops.SlurmctldManager.hostname", return_val="localhost")
-    def test_hostname(self, hostname) -> None:
-        """Test that the hostname property works."""
-        self.assertEqual(self.harness.charm.hostname, hostname)
 
     def test_cluster_name(self) -> None:
         """Test that the cluster_name property works."""
@@ -55,57 +51,61 @@ class TestCharm(unittest.TestCase):
         setattr(self.harness.charm._stored, "slurm_installed", False)  # Patch StoredState
         self.assertEqual(self.harness.charm.slurm_installed, False)
 
-    @unittest.expectedFailure
-    @patch("slurmctld_ops.SlurmManager.install")
-    @patch("slurmctld_ops.SlurmManager.generate_jwt_rsa")
-    @patch("charm.SlurmctldCharm.get_jwt_rsa")
-    @patch("slurmctld_ops.SlurmManager.configure_jwt_rsa")
-    @patch("slurmctld_ops.SlurmManager.get_munge_key")
-    def test_install_success(self, *_) -> None:
-        """Test that the on_install method works.
+    @patch("charm.SlurmctldCharm._on_write_slurm_conf")
+    @patch("ops.framework.EventBase.defer")
+    def test_install_success(self, defer, *_) -> None:
+        """Test `InstallEvent` hook when slurmctld installation succeeds."""
+        self.harness.set_leader(True)
+        self.harness.charm._slurmctld.install = Mock()
+        self.harness.charm._slurmctld.version = Mock(return_value="24.05.2-1")
+        self.harness.charm._slurmctld.jwt = Mock()
+        self.harness.charm._slurmctld.jwt.get.return_value = "=X="
+        self.harness.charm._slurmctld.munge = Mock()
+        self.harness.charm._slurmctld.munge.key.get.return_value = "=X="
+        self.harness.charm._slurmctld.service = Mock()
+
+        self.harness.charm.on.install.emit()
+        defer.assert_not_called()
+
+    @patch("ops.framework.EventBase.defer")
+    def test_install_fail_ha_support(self, defer) -> None:
+        """Test `InstallEvent` hook when multiple slurmctld units are deployed.
 
         Notes:
-            This method is expected to fail due to the 'version' file missing.
+            The slurmctld charm currently does not support high-availability so this
+            unit test validates that we properly handle if multiple slurmctld units
+            are deployed.
         """
+        self.harness.set_leader(False)
         self.harness.charm.on.install.emit()
-        self.assertNotEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmctld")
+
+        defer.assert_called()
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("slurmctld high-availability not supported"),
         )
 
-    # @unittest.expectedFailure
-    @patch("slurmctld_ops.SlurmctldManager.install", return_value=False)
-    def test_install_fail(self, _) -> None:
-        """Test that the on_install method works when slurmctld fails to install.
-
-        Notes:
-            This method is expected to fail due to the 'version' file missing.
-        """
+    @patch("ops.framework.EventBase.defer")
+    def test_install_fail_slurmctld_package(self, defer) -> None:
+        """Test `InstallEvent` hook when slurmctld fails to install."""
+        self.harness.set_leader(True)
+        self.harness.charm._slurmctld.install = Mock(
+            side_effect=SlurmOpsError("failed to install slurmctld")
+        )
         self.harness.charm.on.install.emit()
+
+        defer.assert_called()
         self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmctld")
+            self.harness.charm.unit.status,
+            BlockedStatus("failed to install slurmctld. see logs for further details"),
         )
 
-    def test_check_status_slurm_not_installed(self) -> None:
-        """Test that the check_status method works when slurm is not installed."""
-        self.harness.charm._stored.slurm_installed = False
-        res = self.harness.charm._check_status()
+    def test_update_status_slurm_not_installed(self) -> None:
+        """Test `UpdateStatusEvent` hook when slurmctld is not installed."""
+        self.harness.charm.on.update_status.emit()
         self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmctld")
-        )
-        self.assertEqual(
-            res, False, msg="_check_status returned value True instead of expected value False."
-        )
-
-    @patch("slurmctld_ops.SlurmctldManager.check_munged", return_value=False)
-    def test_check_status_bad_munge(self, _) -> None:
-        """Test that the check_status method works when munge encounters an error."""
-        setattr(self.harness.charm._stored, "slurm_installed", True)  # Patch StoredState
-        res = self.harness.charm._check_status()
-        self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error configuring munge key")
-        )
-        self.assertEqual(
-            res, False, msg="_check_status returned value True instead of expected value False."
+            self.harness.charm.unit.status,
+            BlockedStatus("failed to install slurmctld. see logs for further details"),
         )
 
     def test_get_munge_key(self) -> None:
@@ -118,39 +118,22 @@ class TestCharm(unittest.TestCase):
         setattr(self.harness.charm._stored, "jwt_rsa", "=ABC=")  # Patch StoredState
         self.assertEqual(self.harness.charm.get_jwt_rsa(), "=ABC=")
 
-    #    @patch(
-    #        "slurmctld_ops.SlurmctldManager.charm_maintained_slurm_conf_parameters",
-    #        return_value={"SlurmctldParameters": "enable_configless"},
-    #    )
-    #    @patch("charm.SlurmctldCharm._get_user_supplied_parameters", return_value={})
-    #    @patch(
-    #        "interface_slurmctld_peer.SlurmctldPeer.get_slurmctld_info",
-    #        return_value={"ControlAddr": "192.168.7.1", "ControlMachine": "rats"},
-    #    )
-    #    @patch("interface_slurmd.Slurmd.get_new_nodes_and_nodes_and_partitions", return_value={})
-    #    @patch("charm.SlurmctldCharm._get_slurmdbd_parameters", return_value={})
-    #    def test_assemble_slurm_config(self, *_) -> None:
-    #        """Test that the assemble_slurm_conf method works."""
-    #        self.assertEqual(type(self.harness.charm._assemble_slurm_conf()), dict)
-
     @patch("charm.SlurmctldCharm._check_status", return_value=False)
     def test_on_slurmrestd_available_status_false(self, _) -> None:
         """Test that the on_slurmrestd_available method works when _check_status is False."""
         self.harness.charm._slurmrestd.on.slurmrestd_available.emit()
 
-    @patch("slurm_conf_editor.slurm_conf_as_string", return_value="")
-    @patch("charm.SlurmctldCharm._check_status", return_value=True)
-    @patch("charm.SlurmctldCharm._assemble_slurm_conf")
-    @patch("ops.framework.EventBase.defer")
+    @patch("charm.SlurmctldCharm._check_status", return_value=False)
     @patch("interface_slurmrestd.Slurmrestd.set_slurm_config_on_app_relation_data")
-    def test_on_slurmrestd_available_no_config(self, config, status, defer, *_) -> None:
+    @patch("ops.framework.EventBase.defer")
+    def test_on_slurmrestd_available_no_config(self, defer, *_) -> None:
         """Test that the on_slurmrestd_available method works if no slurm config is available."""
         self.harness.set_leader(True)
         self.harness.charm._slurmrestd.on.slurmrestd_available.emit()
         defer.assert_called()
 
     @patch("charm.SlurmctldCharm._check_status", return_value=True)
-    @patch("charm.SlurmctldCharm._assemble_slurm_conf")
+    @patch("slurmutils.editors.slurmconfig.load")
     @patch("interface_slurmrestd.Slurmrestd.set_slurm_config_on_app_relation_data")
     def test_on_slurmrestd_available_if_available(self, *_) -> None:
         """Test that the on_slurmrestd_available method works if slurm_config is available.
@@ -172,13 +155,14 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._slurmdbd.on.slurmdbd_unavailable.emit()
         self.assertEqual(self.harness.charm._stored.slurmdbd_host, "")
 
-    def test_get_user_supplied_parameters(self) -> None:
+    @patch("charm.is_container", return_value=True)
+    def test_get_user_supplied_parameters(self, *_) -> None:
         """Test that user supplied parameters are parsed correctly."""
         self.harness.add_relation("slurmd", "slurmd")
         self.harness.update_config(
             {"slurm-conf-parameters": "JobAcctGatherFrequency=task=30,network=40"}
         )
         self.assertEqual(
-            self.harness.charm._assemble_slurm_conf()["JobAcctGatherFrequency"],
+            self.harness.charm._assemble_slurm_conf().job_acct_gather_frequency,
             "task=30,network=40",
         )
