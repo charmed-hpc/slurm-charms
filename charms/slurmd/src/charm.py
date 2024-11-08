@@ -312,7 +312,7 @@ class SlurmdCharm(CharmBase):
             return False
 
         # TODO: https://github.com/charmed-hpc/hpc-libs/issues/18 -
-        #   Re-enable munge sanity check when supported by `slurm_ops` charm library.
+        #   Re-enable munge key validation check check when supported by `slurm_ops` charm library.
         # if not self._slurmd.check_munged():
         #     self.unit.status = BlockedStatus("Error configuring munge key")
         #     return False
