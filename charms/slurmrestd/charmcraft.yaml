@@ -19,11 +19,6 @@ links:
   source:
   - https://github.com/charmed-hpc/slurm-charms
 
-provides:
-  slurmctld:
-    interface: slurmrestd
-    limit: 1
-
 assumes:
   - juju
 
@@ -36,3 +31,22 @@ bases:
       - name: ubuntu
         channel: "22.04"
         architectures: [amd64]
+
+parts:
+  charm:
+    charm-requirements: ["requirements.txt"]
+    override-build: |
+      cp /usr/bin/rustc-1.80 /usr/bin/rustc
+      craftctl default
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - rustc-1.80
+      - cargo
+      - pkg-config
+      - git
+
+provides:
+  slurmctld:
+    interface: slurmrestd
+    limit: 1

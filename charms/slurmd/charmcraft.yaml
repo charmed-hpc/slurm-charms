@@ -34,7 +34,18 @@ bases:
         architectures: [amd64]
 
 parts:
-  charm: {}
+  charm:
+    charm-requirements: [ "requirements.txt" ]
+    override-build: |
+      cp /usr/bin/rustc-1.80 /usr/bin/rustc
+      craftctl default
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - rustc-1.80
+      - cargo
+      - pkg-config
+      - git
   nhc:
     plugin: nil
     build-packages:

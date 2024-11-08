@@ -1,5 +1,6 @@
 # Copyright 2020 Omnivector Solutions, LLC
 # See LICENSE file for licensing details.
+
 name: slurmctld
 summary: |
   Slurmctld, the central management daemon of Slurm.
@@ -43,6 +44,19 @@ bases:
         channel: "22.04"
         architectures: [amd64]
 
+parts:
+  charm:
+    charm-requirements: ["requirements.txt"]
+    override-build: |
+      cp /usr/bin/rustc-1.80 /usr/bin/rustc
+      craftctl default
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - rustc-1.80
+      - cargo
+      - pkg-config
+      - git
 
 config:
   options:

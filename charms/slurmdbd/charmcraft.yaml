@@ -25,14 +25,6 @@ links:
   source:
   - https://github.com/charmed-hpc/slurm-charms
 
-requires:
-  database:
-    interface: mysql_client
-
-provides:
-  slurmctld:
-    interface: slurmdbd
-
 bases:
   - build-on:
       - name: ubuntu
@@ -41,3 +33,25 @@ bases:
       - name: ubuntu
         channel: "22.04"
         architectures: [amd64]
+
+parts:
+  charm:
+    charm-requirements: ["requirements.txt"]
+    override-build: |
+      cp /usr/bin/rustc-1.80 /usr/bin/rustc
+      craftctl default
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - rustc-1.80
+      - cargo
+      - pkg-config
+      - git
+
+requires:
+  database:
+    interface: mysql_client
+
+provides:
+  slurmctld:
+    interface: slurmdbd
