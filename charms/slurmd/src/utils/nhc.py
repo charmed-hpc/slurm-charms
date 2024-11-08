@@ -19,7 +19,6 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from typing import Optional
 
 _logger = logging.getLogger(__name__)
 
@@ -82,19 +81,14 @@ def get_config() -> str:
     return f"{target} not found."
 
 
-def generate_config(nhc_config: Optional[str] = None) -> None:
+def generate_config(nhc_config: str) -> None:
     """Generate new nhc.conf configuration file.
 
     Args:
-        nhc_config: Optional NHC configuration to override the default template.
+        nhc_config: NHC configuration to override default.
     """
-    target = Path("/etc/nhc/nhc.conf")
-    if not nhc_config:
-        template = Path(__file__).absolute().parent / "templates" / "nhc.conf.tmpl"
-        nhc_config = template.read_text()
-
     try:
-        target.write_text(nhc_config)
+        Path("/etc/nhc/nhc.conf").write_text(nhc_config)
     except FileNotFoundError as e:
         _logger.error(f"error rendering nhc.conf: {e}")
         raise

@@ -148,7 +148,7 @@ class SlurmctldCharm(CharmBase):
 
     def _on_show_current_config_action(self, event: ActionEvent) -> None:
         """Show current slurm.conf."""
-        event.set_results({"slurm.conf": str(self._slurmctld.config.get())})
+        event.set_results({"slurm.conf": str(self._slurmctld.config.load())})
 
     def _on_slurmrestd_available(self, event: SlurmrestdAvailableEvent) -> None:
         """Check that we have slurm_config when slurmrestd available otherwise defer the event."""

@@ -5,7 +5,7 @@
 """Slurmd Operator Charm."""
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
@@ -95,7 +95,9 @@ class SlurmdCharm(CharmBase):
 
     def _on_config_changed(self, _: ConfigChangedEvent) -> None:
         """Handle charm configuration changes."""
-        if nhc_conf := self.model.config.get("nhc-conf"):
+        # Casting the type to str is required here because `get` returns a looser
+        # type than what `nhc.generate_config(...)` allows to be passed.
+        if nhc_conf := cast(str, self.model.config.get("nhc-conf", "")):
             if nhc_conf != self._stored.nhc_conf:
                 self._stored.nhc_conf = nhc_conf
                 nhc.generate_config(nhc_conf)
