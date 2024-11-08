@@ -15,83 +15,92 @@
 
 """Test default charm events such as upgrade charm, install, etc."""
 
-import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
-import ops.testing
 from charm import SlurmdbdCharm
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
+from pyfakefs.fake_filesystem_unittest import TestCase
 
-ops.testing.SIMULATE_CAN_CONNECT = True
+from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
-class TestCharm(unittest.TestCase):
+class TestCharm(TestCase):
+
     def setUp(self) -> None:
         self.harness = Harness(SlurmdbdCharm)
         self.addCleanup(self.harness.cleanup)
+        self.setUpPyfakefs()
         self.harness.begin()
 
     @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=True)
     @patch("slurmdbd_ops.SlurmdbdOpsManager.start_munge", return_value=True)
     def test_install_success(self, *_) -> None:
-        """Test that slurmdbd can successfully be installed.
-
-        Notes:
-            This method is expected to fail due to the 'version' file missing.
-        """
+        """Test `InstallEvent` hook success."""
         self.harness.set_leader(True)
+        self.harness.charm._slurmdbd.install = Mock()
+        self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
+        self.harness.charm._slurmdbd.munge.service.enable = Mock()
         self.harness.charm._stored.db_info = {"rats": "123"}
         self.harness.charm.on.install.emit()
+
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=False)
-    def test_install_fail(self, install) -> None:
-        """Test that slurmdbd install fail handler works."""
-        self.harness.set_leader(True)
+    @patch("ops.framework.EventBase.defer")
+    def test_install_fail_ha_support(self, defer) -> None:
+        """Test `InstallEvent` hook failure when there are multiple slurmdbd units.
+
+        Notes:
+            The slurmdbd charm currently does not support high-availability so this
+            unit test validates that we properly handle if multiple slurmdbd units
+            are deployed.
+        """
+        self.harness.set_leader(False)
         self.harness.charm.on.install.emit()
-        self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmdbd.")
-        )
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install")
-    def test_check_status_slurm_not_installed(self, install) -> None:
-        """Test that _check_status method works if slurm is not installed."""
-        self.harness.charm._stored.slurm_installed = False
-        res = self.harness.charm._check_status()
         self.assertEqual(
-            self.harness.charm.unit.status, BlockedStatus("Error installing slurmdbd.")
+            self.harness.charm.unit.status,
+            BlockedStatus(
+                "slurmdbd high-availability not supported. see logs for further details"
+            ),
         )
-        self.assertFalse(
-            res, msg="_check_status returned value True instead of expected value False."
-        )
+        defer.assert_called()
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.is_slurmdbd_active", return_value=True)
-    def test_check_slurmdbd(self, *_) -> None:
-        """Test that _check_slurmdbd method works."""
-        self.harness.charm._check_slurmdbd(max_attemps=1)
-        self.assertNotEqual(
-            self.harness.charm.unit.status, BlockedStatus("Cannot start slurmdbd.")
+    @patch("ops.framework.EventBase.defer")
+    def test_install_fail_slurmdbd_package(self, defer) -> None:
+        """Test `InstallEvent` hook when slurmdbd fails to install."""
+        self.harness.set_leader(True)
+        self.harness.charm._slurmdbd.install = Mock(
+            side_effect=SlurmOpsError("failed to install slurmd")
+        )
+        self.harness.charm.on.install.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("failed to install slurmdbd. see logs for further details"),
+        )
+        defer.assert_called()
+
+    def test_update_status_fail(self) -> None:
+        """Test `UpdateStatusEvent` hook failure."""
+        self.harness.set_leader(True)
+        self.harness.charm.on.update_status.emit()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("failed to install slurmdbd. see logs for further details"),
         )
 
     @patch("charm.sleep")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.is_slurmdbd_active", return_value=False)
-    def test_check_slurmdbd_slurm_not_active(self, *_) -> None:
-        """Test that proper block status is thrown if slurm is not active."""
-        self.harness.charm._stored.slurm_installed = True
-        self.harness.charm._stored.db_info = {
-            "StorageUser": "fake-user",
-            "StoragePass": "fake-password",
-            "StorageLoc": "slurm_acct_db",
-        }
+    def test_check_slurmdbd(self, *_) -> None:
+        """Test that `BlockedStatus` is set when slurmdbd service is not running."""
+        self.harness.charm._slurmdbd.service.active = Mock(return_value=False)
+        self.harness.charm._slurmdbd.service.restart = Mock()
         self.harness.charm._check_slurmdbd(max_attemps=1)
-        self.assertEqual(self.harness.charm.unit.status, BlockedStatus("Cannot start slurmdbd."))
 
-    def test__on_database_created_no_endpoints(self, *_) -> None:
+        self.assertEqual(self.harness.charm.unit.status, BlockedStatus("cannot start slurmdbd"))
+
+    def test_on_database_created_no_endpoints(self, *_) -> None:
         """Tests that the on_database_created method errors with no endpoints."""
         self.harness.set_leader(True)
         event = Mock()
@@ -114,9 +123,11 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
-    def test__on_database_created_socket_endpoints(
-        self, _set_environment_var, _write_config_and_restart_slurmdbd
+    @patch(
+        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
+    )
+    def test_on_database_created_socket_endpoints(
+        self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
         """Tests socket endpoints update the environment file."""
         event = Mock()
@@ -126,7 +137,7 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        _set_environment_var.assert_called_once_with(mysql_unix_port='"/path/to/some/socket"')
+        mysql_unix_port.assert_called_once_with('"/path/to/some/socket"')
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",
@@ -136,9 +147,11 @@ class TestCharm(unittest.TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
-    def test__on_database_created_socket_multiple_endpoints(
-        self, _set_environment_var, _write_config_and_restart_slurmdbd
+    @patch(
+        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
+    )
+    def test_on_database_created_socket_multiple_endpoints(
+        self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
         """Tests multiple socket endpoints only uses one endpoint."""
         event = Mock()
@@ -149,7 +162,7 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        _set_environment_var.assert_called_once_with(mysql_unix_port='"/some/other/path"')
+        mysql_unix_port.assert_called_once_with('"/some/other/path"')
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",
@@ -159,11 +172,14 @@ class TestCharm(unittest.TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
-    def test__on_database_created_tcp_endpoint(
-        self, _set_environment_var, _write_config_and_restart_slurmdbd
+    @patch(
+        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
+    )
+    def test_on_database_created_tcp_endpoint(
+        self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
         """Tests tcp endpoint for database."""
+        mysql_unix_port.__delete__ = Mock()
         event = Mock()
         event.endpoints = "10.2.5.20:1234"
         event.username = "fake-user"
@@ -171,7 +187,7 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        _set_environment_var.assert_called_once_with(mysql_unix_port=None)
+        mysql_unix_port.__delete__.assert_called_once()
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",
@@ -183,11 +199,14 @@ class TestCharm(unittest.TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
-    def test__on_database_created_multiple_tcp_endpoints(
-        self, _set_environment_var, _write_config_and_restart_slurmdbd
+    @patch(
+        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
+    )
+    def test_on_database_created_multiple_tcp_endpoints(
+        self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
         """Tests multiple tcp endpoints for the database."""
+        mysql_unix_port.__delete__ = Mock()
         event = Mock()
         # Note: odd spacing to test split logic as well
         event.endpoints = "10.2.5.20:1234 ,10.2.5.21:1234, 10.2.5.21:1234"
@@ -196,7 +215,7 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        _set_environment_var.assert_called_once_with(mysql_unix_port=None)
+        mysql_unix_port.__delete__.assert_called_once()
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",
@@ -207,16 +226,18 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.db_info, db_info)
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.install", return_value=True)
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch("slurmdbd_ops.SlurmdbdOpsManager.set_environment_var")
-    def test__on_database_created_ipv6_tcp_endpoints(
+    @patch(
+        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
+    )
+    def test_on_database_created_ipv6_tcp_endpoints(
         self,
-        _set_environment_var,
+        mysql_unix_port,
         _write_config_and_restart_slurmdbd,
         *_,
     ) -> None:
         """Tests multiple tcp endpoints for the database."""
+        mysql_unix_port.__delete__ = Mock()
         event = Mock()
         # Note: odd spacing to test split logic as well
         event.endpoints = (
@@ -229,7 +250,7 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        _set_environment_var.assert_called_once_with(mysql_unix_port=None)
+        mysql_unix_port.__delete__.assert_called_once()
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",
