@@ -512,7 +512,8 @@ def unit_test_cli(
     logger.info("Generating global results...")
     subprocess.run(["coverage", "combine"] + files, check=True)
     subprocess.run(["coverage", "report"], check=True)
-    logger.info(f"File generated at {ROOT_DIR}/.coverage")
+    subprocess.run(["coverage", "xml", "-o", "cover/coverage.xml"])
+    logger.info(f"XML report generated at {ROOT_DIR}/cover/coverage.xml")
 
 
 def build_cli(

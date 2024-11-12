@@ -88,8 +88,10 @@ config:
     cgroup-parameters:
       type: string
       default: |
-        CgroupAutomount=yes
         ConstrainCores=yes
+        ConstrainDevices=yes
+        ConstrainRAMSpace=yes
+        ConstrainSwapSpace=yes
       description: |
         User supplied configuration for `cgroup.conf`.
 
