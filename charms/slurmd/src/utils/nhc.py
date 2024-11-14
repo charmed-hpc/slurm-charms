@@ -40,7 +40,16 @@ def install() -> None:
 
             _logger.info("extracting nhc tarball")
             r = subprocess.check_output(
-                ["tar", "--extract", "--directory", tmpdir, "--file", "lbnl-nhc-1.4.3.tar.gz"],
+                [
+                    "tar",
+                    "--extract",
+                    "--directory",
+                    tmpdir,
+                    "--file",
+                    "lbnl-nhc-1.4.3.tar.gz",
+                    "--strip",
+                    "1",
+                ],
                 stderr=subprocess.STDOUT,
                 text=True,
             )
