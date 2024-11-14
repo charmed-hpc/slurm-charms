@@ -230,7 +230,8 @@ class Slurmd(Object):
                                     new_nodes.append(node_name)
 
                     # Ensure we have a unique list and add it to the partition.
-                    partition_parameters["Nodes"] = list(set(partition_nodes))
+                    if len(partition_nodes) > 0:
+                        partition_parameters["Nodes"] = list(set(partition_nodes))
 
                     # Check for default partition.
                     if self._charm.model.config.get("default-partition") == partition_name:

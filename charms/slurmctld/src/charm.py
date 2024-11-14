@@ -269,8 +269,7 @@ class SlurmctldCharm(CharmBase):
 
         def _assemble_slurmctld_parameters() -> str:
             # Preprocess merging slurmctld_parameters if they exist in the context
-            slurmctld_param_config = ["enable_configless"]
-            user_config = []
+            slurmctld_parameters = {"enable_configless": True}
 
             if (
                 user_supplied_slurmctld_parameters := user_supplied_parameters.get(
@@ -278,9 +277,11 @@ class SlurmctldCharm(CharmBase):
                 )
                 != ""
             ):
-                user_config.extend(user_supplied_slurmctld_parameters.split(","))
+                for opt in user_supplied_slurmctld_parameters.split(","):
+                    k, v = opt.split("=", maxsplit=1)
+                    slurmctld_parameters.update(k, v)
 
-            return ",".join(slurmctld_param_config + user_config)
+            return slurmctld_parameters
 
         accounting_params = {}
         if (slurmdbd_host := self._stored.slurmdbd_host) != "":
@@ -294,10 +295,10 @@ class SlurmctldCharm(CharmBase):
         slurm_conf = SlurmConfig(
             ClusterName=self.cluster_name,
             SlurmctldAddr=self._slurmd_ingress_address,
-            SlurmctldHost=self._slurmctld.hostname,
+            SlurmctldHost=[self._slurmctld.hostname],
             SlurmctldParameters=_assemble_slurmctld_parameters(),
             ProctrackType="proctrack/linuxproc" if is_container() else "proctrack/cgroup",
-            TaskPlugin="task/affinity" if is_container() else "task/cgroup,task/affinity",
+            TaskPlugin=["task/affinity"] if is_container() else ["task/cgroup", "task/affinity"],
             **accounting_params,
             **CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
             **slurmd_parameters,
