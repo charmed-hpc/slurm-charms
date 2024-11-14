@@ -135,7 +135,7 @@ class TestCharm(TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        mysql_unix_port.assert_called_once_with('"/path/to/some/socket"')
+        mysql_unix_port.assert_called_once_with("/path/to/some/socket")
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",
@@ -160,7 +160,7 @@ class TestCharm(TestCase):
 
         self.harness.charm._on_database_created(event)
 
-        mysql_unix_port.assert_called_once_with('"/some/other/path"')
+        mysql_unix_port.assert_called_once_with("/some/other/path")
         db_info = {
             "StorageUser": "fake-user",
             "StoragePass": "fake-password",

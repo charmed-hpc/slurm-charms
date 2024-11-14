@@ -166,8 +166,7 @@ class SlurmdbdCharm(CharmBase):
                 )
             # Make sure to strip the file:// off the front of the first endpoint
             # otherwise slurmdbd will not be able to connect to the database
-            socket = urlparse(socket_endpoints[0]).path
-            self._slurmdbd.mysql_unix_port = f'"{socket}"'
+            self._slurmdbd.mysql_unix_port = urlparse(socket_endpoints[0]).path
         elif tcp_endpoints:
             # This must be using TCP endpoint and the connection information will
             # be host_address:port. Only one remote mysql service will be configured
@@ -233,22 +232,22 @@ class SlurmdbdCharm(CharmBase):
                 self._stored.user_supplied_slurmdbd_conf_params = charm_config_slurmdbd_conf_params
 
         if binding := self.model.get_binding("slurmctld"):
-            slurmdbd_full_config = {
+            slurmdbd_config = SlurmdbdConfig(
                 **CHARM_MAINTAINED_PARAMETERS,
                 **self._stored.db_info,
-                **{"DbdHost": self._slurmdbd.hostname},
-                **{"DbdAddr": f"{binding.network.ingress_address}"},
+                DbdHost=self._slurmdbd.hostname,
+                DbdAddr=f"{binding.network.ingress_address}",
                 **self._get_user_supplied_parameters(),
-            }
+            )
 
             if self._slurmctld.is_joined:
-                slurmdbd_full_config["AuthAltTypes"] = "auth/jwt"
-                slurmdbd_full_config["AuthAltParameters"] = (
-                    '"jwt_key=/var/spool/slurmdbd/jwt_hs256.key"'
-                )
+                slurmdbd_config.auth_alt_types = ["auth/jwt"]
+                slurmdbd_config.auth_alt_parameters = {
+                    "jwt_key": "/var/lib/slurm/checkpoint/jwt_hs256.key"
+                }
 
             self._slurmdbd.service.disable()
-            self._slurmdbd.config.dump(SlurmdbdConfig.from_dict(slurmdbd_full_config))
+            self._slurmdbd.config.dump(slurmdbd_config)
 
             # At this point, we must guarantee that slurmdbd is correctly
             # initialized. Its startup might take a while, so we have to wait
