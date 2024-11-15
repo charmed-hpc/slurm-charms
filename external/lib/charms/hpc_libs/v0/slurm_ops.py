@@ -96,14 +96,14 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 # Charm library dependencies to fetch during `charmcraft pack`.
 PYDEPS = [
     "cryptography~=43.0.1",
     "pyyaml>=6.0.2",
     "python-dotenv~=1.0.1",
-    "slurmutils~=0.8.0",
+    "slurmutils~=0.8.3",
     "distro~=1.9.0",
 ]
 
@@ -177,7 +177,7 @@ def _mungectl(*args, stdin: Optional[str] = None) -> str:
 class _ServiceType(Enum):
     """Type of Slurm service to manage."""
 
-    MUNGED = "munged"
+    MUNGE = "munge"
     PROMETHEUS_EXPORTER = "prometheus-slurm-exporter"
     SLURMD = "slurmd"
     SLURMCTLD = "slurmctld"
@@ -189,8 +189,6 @@ class _ServiceType(Enum):
         """Configuration name on the slurm snap for this service type."""
         if self is _ServiceType.SLURMCTLD:
             return "slurm"
-        if self is _ServiceType.MUNGED:
-            return "munge"
 
         return self.value
 
@@ -480,10 +478,7 @@ class _AptManager(_OpsManager):
         """Install Slurm using the `slurm` snap."""
         self._init_ubuntu_hpc_ppa()
         self._install_service()
-        # Debian package postinst hook does not create a `StateSaveLocation` directory
-        # so we make one here that is only r/w by owner.
-        _logger.debug("creating slurm `StateSaveLocation` directory")
-        Path("/var/lib/slurm/slurm.state").mkdir(mode=0o600, exist_ok=True)
+        self._create_state_save_location()
         self._apply_overrides()
 
     def version(self) -> str:
@@ -640,12 +635,14 @@ class _AptManager(_OpsManager):
         Raises:
             SlurmOpsError: Raised if `apt` fails to install the required Slurm packages.
         """
-        packages = [self._service_name, "mungectl", "prometheus-slurm-exporter"]
+        packages = [self._service_name, "munge", "mungectl", "prometheus-slurm-exporter"]
         match self._service_name:
             case "slurmctld":
                 packages.extend(["libpmix-dev", "mailutils"])
             case "slurmd":
                 packages.extend(["libpmix-dev", "openmpi-bin"])
+            case "slurmrestd":
+                packages.extend(["slurm-wlm-basic-plugins"])
             case _:
                 _logger.debug(
                     "'%s' does not require any additional packages to be installed",
@@ -657,6 +654,22 @@ class _AptManager(_OpsManager):
             apt.add_package(packages)
         except (apt.PackageNotFoundError, apt.PackageError) as e:
             raise SlurmOpsError(f"failed to install {self._service_name}. reason: {e}")
+
+    def _create_state_save_location(self) -> None:
+        """Create `StateSaveLocation` for Slurm services.
+
+        Notes:
+            `StateSaveLocation` is used by slurmctld, slurmd, and slurmdbd
+            to checkpoint runtime information should a service crash, and it
+            serves as the location where the JWT token used to generate user
+            access tokens is stored as well.
+        """
+        _logger.debug("creating slurm `StateSaveLocation` directory")
+        target = self.var_lib_path / "checkpoint"
+        target.mkdir(mode=0o755, parents=True, exist_ok=True)
+        self.var_lib_path.chmod(0o755)
+        shutil.chown(self.var_lib_path, "slurm", "slurm")
+        shutil.chown(target, "slurm", "slurm")
 
     def _apply_overrides(self) -> None:
         """Override defaults supplied provided by Slurm Debian packages."""
@@ -714,33 +727,30 @@ class _AptManager(_OpsManager):
                 #   Make `slurmrestd` package preinst hook create the system user and group
                 #   so that we do not need to do it manually here.
                 _logger.debug("creating slurmrestd user and group")
-                try:
-                    subprocess.check_output(["groupadd", "--gid", 64031, "slurmrestd"])
-                except subprocess.CalledProcessError as e:
-                    if e.returncode == 9:
-                        _logger.debug("group 'slurmrestd' already exists")
-                    else:
-                        raise SlurmOpsError(f"failed to create group 'slurmrestd'. reason: {e}")
+                result = _call("groupadd", "--gid", "64031", "slurmrestd", check=False)
+                if result.returncode == 9:
+                    _logger.debug("group 'slurmrestd' already exists")
+                elif result.returncode != 0:
+                    SlurmOpsError(f"failed to create group 'slurmrestd'. stderr: {result.stderr}")
 
-                try:
-                    subprocess.check_output(
-                        [
-                            "adduser",
-                            "--system",
-                            "--group",
-                            "--uid",
-                            64031,
-                            "--no-create-home",
-                            "--home",
-                            "/nonexistent",
-                            "slurmrestd",
-                        ]
+                result = _call(
+                    "adduser",
+                    "--system",
+                    "--group",
+                    "--uid",
+                    "64031",
+                    "--no-create-home",
+                    "--home",
+                    "/nonexistent",
+                    "slurmrestd",
+                    check=False,
+                )
+                if result.returncode == 9:
+                    _logger.debug("user 'slurmrestd' already exists")
+                elif result.returncode != 0:
+                    raise SlurmOpsError(
+                        f"failed to create user 'slurmrestd'. stderr: {result.stderr}"
                     )
-                except subprocess.CalledProcessError as e:
-                    if e.returncode == 9:
-                        _logger.debug("user 'slurmrestd' already exists")
-                    else:
-                        raise SlurmOpsError(f"failed to create user 'slurmrestd'. reason: {e}")
 
                 # slurmrestd's preinst script does not create environment file.
                 _logger.debug("creating slurmrestd environment file")
@@ -791,7 +801,7 @@ class _JWTKeyManager:
     """Control the jwt signing key used by Slurm."""
 
     def __init__(self, ops_manager: _OpsManager, user: str, group: str) -> None:
-        self._keyfile = ops_manager.var_lib_path / "slurm.state/jwt_hs256.key"
+        self._keyfile = ops_manager.var_lib_path / "checkpoint/jwt_hs256.key"
         self._user = user
         self._group = group
 
@@ -850,7 +860,7 @@ class _MungeManager:
     """Manage `munged` service operations."""
 
     def __init__(self, ops_manager: _OpsManager) -> None:
-        self.service = ops_manager.service_manager_for(_ServiceType.MUNGED)
+        self.service = ops_manager.service_manager_for(_ServiceType.MUNGE)
         self.key = _MungeKeyManager()
 
 
