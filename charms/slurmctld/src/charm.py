@@ -267,7 +267,7 @@ class SlurmctldCharm(CharmBase):
 
         slurmd_parameters = self._slurmd.get_new_nodes_and_nodes_and_partitions()
 
-        def _assemble_slurmctld_parameters() -> str:
+        def _assemble_slurmctld_parameters() -> dict[str, Any]:
             # Preprocess merging slurmctld_parameters if they exist in the context
             slurmctld_parameters = {"enable_configless": True}
 
@@ -279,7 +279,7 @@ class SlurmctldCharm(CharmBase):
             ):
                 for opt in user_supplied_slurmctld_parameters.split(","):
                     k, v = opt.split("=", maxsplit=1)
-                    slurmctld_parameters.update(k, v)
+                    slurmctld_parameters.update({k: v})
 
             return slurmctld_parameters
 

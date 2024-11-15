@@ -4,6 +4,8 @@
 
 """Slurmdbd Operator Charm."""
 
+# pyright: reportAttributeAccessIssue=false
+
 import logging
 from time import sleep
 from typing import Any, Dict, Union
