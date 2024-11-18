@@ -213,7 +213,6 @@ class SlurmdCharm(CharmBase):
         except FileNotFoundError:
             event.set_results({"nhc.conf": "/etc/nhc/nhc.conf not found."})
 
-    # TODO: Just use the slurmutils models here.
     def _on_node_config_action_event(self, event: ActionEvent) -> None:
         """Get or set the user_supplied_node_conifg.
 

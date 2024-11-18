@@ -89,8 +89,8 @@ class SlurmctldCharm(CharmBase):
             if self.unit.is_leader():
                 self._slurmctld.install()
 
-                # TODO: <make github issue> -
-                #  Use Juju secrets instead of StoredState for exchanging keys between units.
+                # TODO: https://github.com/charmed-hpc/slurm-charms/issues/38 -
+                #  Use Juju Secrets instead of StoredState for exchanging keys between units.
                 self._slurmctld.jwt.generate()
                 self._stored.jwt_rsa = self._slurmctld.jwt.get()
                 self._slurmctld.munge.key.generate()
