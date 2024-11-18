@@ -1,4 +1,4 @@
-# Copyright 2020 Omnivector Solutions, LLC
+# Copyright 2020-2024 Omnivector Solutions, LLC
 # See LICENSE file for licensing details.
 
 name: slurmctld
@@ -30,6 +30,11 @@ requires:
     interface: slurmdbd
   slurmrestd:
     interface: slurmrestd
+
+provides:
+  cos-agent:
+    interface: cos_agent
+    limit: 1
 
 assumes:
   - juju
