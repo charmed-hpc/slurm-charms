@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2020 Omnivector Solutions, LLC
+# Copyright 2020-2024 Omnivector Solutions, LLC
 # See LICENSE file for licensing details.
 
 """SlurmctldCharm."""
@@ -33,6 +33,7 @@ from ops import (
 )
 from slurmutils.models import CgroupConfig, SlurmConfig
 
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.hpc_libs.v0.is_container import is_container
 from charms.hpc_libs.v0.slurm_ops import SlurmctldManager, SlurmOpsError
 
@@ -63,6 +64,13 @@ class SlurmctldCharm(CharmBase):
         self._slurmd = Slurmd(self, "slurmd")
         self._slurmdbd = Slurmdbd(self, "slurmdbd")
         self._slurmrestd = Slurmrestd(self, "slurmrestd")
+        self._grafana_agent = COSAgentProvider(
+            self,
+            metrics_endpoints=[{"path": "/metrics", "port": 9092}],
+            metrics_rules_dir="./src/cos/alert_rules/prometheus",
+            dashboard_dirs=["./src/cos/grafana_dashboards"],
+            recurse_rules_dirs=True,
+        )
 
         event_handler_bindings = {
             self.on.install: self._on_install,
@@ -97,6 +105,7 @@ class SlurmctldCharm(CharmBase):
                 self._stored.munge_key = self._slurmctld.munge.key.get()
                 self._slurmctld.munge.service.restart()
                 self._slurmctld.service.restart()
+                self._slurmctld.exporter.service.enable()
                 self.unit.set_workload_version(self._slurmctld.version())
 
                 self.slurm_installed = True
