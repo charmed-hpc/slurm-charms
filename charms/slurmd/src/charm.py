@@ -167,14 +167,14 @@ class SlurmdCharm(CharmBase):
                 return
 
         logger.debug(
-            "#### Storing slurmctld_available event relation data in charm StoredState." ""
+            "#### Storing slurmctld_available event relation data in charm StoredState."
         )
         self._stored.slurmctld_available = True
 
         # Restart munged and slurmd after we write the event data to their respective locations.
         try:
-            logger.debug("restarted munge successfully")
             self._slurmd.munge.service.restart()
+            logger.debug("restarted munge successfully")
         except SlurmOpsError as e:
             logger.error("failed to restart munge")
             logger.error(e.message)
