@@ -166,9 +166,7 @@ class SlurmdCharm(CharmBase):
                 logger.debug("'nhc_params' not in event data.")
                 return
 
-        logger.debug(
-            "#### Storing slurmctld_available event relation data in charm StoredState."
-        )
+        logger.debug("#### Storing slurmctld_available event relation data in charm StoredState.")
         self._stored.slurmctld_available = True
 
         # Restart munged and slurmd after we write the event data to their respective locations.
@@ -210,7 +208,10 @@ class SlurmdCharm(CharmBase):
 
     def _on_show_nhc_config(self, event: ActionEvent) -> None:
         """Show current nhc.conf."""
-        event.set_results({"nhc.conf": nhc.get_config()})
+        try:
+            event.set_results({"nhc.conf": nhc.get_config()})
+        except FileNotFoundError:
+            event.set_results({"nhc.conf": "/etc/nhc/nhc.conf not found."})
 
     # TODO: Just use the slurmutils models here.
     def _on_node_config_action_event(self, event: ActionEvent) -> None:

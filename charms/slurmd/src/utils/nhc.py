@@ -82,12 +82,17 @@ def install() -> None:
 
 
 def get_config() -> str:
-    """Get the current NHC configuration."""
-    target = Path("/etc/nhc/nhc.conf")
-    if target.exists():
-        return target.read_text()
+    """Get the current NHC configuration.
 
-    return f"{target} not found."
+    Raises:
+        FileNotFoundError: Raised if `/etc/nhc/nhc.conf` is not found on machine.
+    """
+    target = Path("/etc/nhc/nhc.conf")
+    try:
+        return target.read_text()
+    except FileNotFoundError:
+        _logger.warning("%s not found", target)
+        raise
 
 
 def generate_config(nhc_config: str) -> None:
