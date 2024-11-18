@@ -62,6 +62,7 @@ class TestCharm(TestCase):
         self.harness.charm._slurmctld.jwt.get.return_value = "=X="
         self.harness.charm._slurmctld.munge = Mock()
         self.harness.charm._slurmctld.munge.key.get.return_value = "=X="
+        self.harness.charm._slurmctld.exporter = Mock()
         self.harness.charm._slurmctld.service = Mock()
 
         self.harness.charm.on.install.emit()
