@@ -50,3 +50,4 @@ jobs:
           channel: "${{ steps.channel.outputs.name }}"
           charm-path: "./_build/${{ matrix.charm }}"
           tag-prefix: "${{ matrix.charm }}"
+          destructive-mode: false
