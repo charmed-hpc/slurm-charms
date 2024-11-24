@@ -34,12 +34,12 @@ class TestCharm(TestCase):
         self.harness.begin()
 
     def test_cluster_name(self) -> None:
-        """Test that the cluster_name property works."""
-        self.assertEqual(self.harness.charm.cluster_name, "osd-cluster")
+        """Test that the _cluster_name property works."""
+        self.assertEqual(self.harness.charm._cluster_name, "osd-cluster")
 
     def test_cluster_info(self) -> None:
         """Test the cluster_info property works."""
-        self.assertEqual(type(self.harness.charm.cluster_name), str)
+        self.assertEqual(type(self.harness.charm._cluster_name), str)
 
     def test_is_slurm_installed(self) -> None:
         """Test that the is_slurm_installed method works."""

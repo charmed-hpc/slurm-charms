@@ -67,7 +67,7 @@ config:
   options:
     cluster-name:
       type: string
-      default: osd-cluster
+      default: "osd-cluster"
       description: |
         Name to be recorded in database for jobs from this cluster.
 

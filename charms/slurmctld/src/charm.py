@@ -302,7 +302,7 @@ class SlurmctldCharm(CharmBase):
             }
 
         slurm_conf = SlurmConfig(
-            ClusterName=self.cluster_name,
+            ClusterName=self._cluster_name,
             SlurmctldAddr=self._slurmd_ingress_address,
             SlurmctldHost=[self._slurmctld.hostname],
             SlurmctldParameters=_assemble_slurmctld_parameters(),
@@ -377,7 +377,7 @@ class SlurmctldCharm(CharmBase):
         self._slurmctld.scontrol(update_cmd)
 
     @property
-    def cluster_name(self) -> str:
+    def _cluster_name(self) -> str:
         """Return the cluster name."""
         cluster_name = "charmedhpc"
         if cluster_name_from_config := self.config.get("cluster-name"):
