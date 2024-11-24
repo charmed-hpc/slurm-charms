@@ -7,6 +7,7 @@
 import logging
 from typing import Any, Dict, cast
 
+from constants import CHARM_MAINTAINED_NODE_PARAMETERS
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
     ActionEvent,
@@ -326,6 +327,7 @@ class SlurmdCharm(CharmBase):
         node = {
             "node_parameters": {
                 **machine.get_slurmd_info(),
+                **CHARM_MAINTAINED_NODE_PARAMETERS,
                 **self._user_supplied_node_parameters,
             },
             "new_node": self._new_node,
