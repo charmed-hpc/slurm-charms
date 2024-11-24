@@ -89,7 +89,6 @@ class Slurmd(Object):
             {
                 "munge_key": self._charm.get_munge_key(),
                 "slurmctld_host": self._charm.hostname,
-                "cluster_name": self._charm.cluster_name,
                 "nhc_params": health_check_params,
             }
         )

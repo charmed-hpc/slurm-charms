@@ -3,6 +3,8 @@
 
 """This module provides constants for the slurmctld-operator charm."""
 
+PEER_RELATION = "slurmctld-peer"
+
 CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "AuthAltParameters": {"jwt_key": "/var/lib/slurm/checkpoint/jwt_hs256.key"},
     "AuthAltTypes": ["auth/jwt"],

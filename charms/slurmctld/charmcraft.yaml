@@ -36,6 +36,10 @@ provides:
     interface: cos_agent
     limit: 1
 
+peers:
+  slurmctld-peer:
+    interface: slurmctld-peer
+
 assumes:
   - juju
 
@@ -67,7 +71,7 @@ config:
   options:
     cluster-name:
       type: string
-      default: osd-cluster
+      default: "osd-cluster"
       description: |
         Name to be recorded in database for jobs from this cluster.
 
