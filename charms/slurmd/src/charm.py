@@ -326,6 +326,7 @@ class SlurmdCharm(CharmBase):
         node = {
             "node_parameters": {
                 **machine.get_slurmd_info(),
+                "MemSpecLimit": "1024",
                 **self._user_supplied_node_parameters,
             },
             "new_node": self._new_node,
