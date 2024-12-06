@@ -168,3 +168,12 @@ class TestCharm(TestCase):
             self.harness.charm._assemble_slurm_conf().job_acct_gather_frequency,
             "task=30,network=40",
         )
+
+    def test_resume_nodes_valid_input(self) -> None:
+        """Test that the _resume_nodes method provides a valid scontrol command."""
+        self.harness.charm._slurmctld.scontrol = Mock()
+        self.harness.charm._resume_nodes(["juju-123456-1", "tester-node", "node-three"])
+        args, _ = self.harness.charm._slurmctld.scontrol.call_args
+        self.assertEqual(
+            args, ("update", "nodename=juju-123456-1,tester-node,node-three", "state=resume")
+        )
