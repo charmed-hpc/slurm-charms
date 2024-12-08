@@ -23,28 +23,14 @@ assumes:
   - juju
 
 type: charm
-bases:
-  - build-on:
-      - name: ubuntu
-        channel: "22.04"
-    run-on:
-      - name: ubuntu
-        channel: "22.04"
-        architectures: [amd64]
+base: ubuntu@24.04
+platforms:
+  amd64:
 
 parts:
   charm:
-    charm-requirements: ["requirements.txt"]
-    override-build: |
-      cp /usr/bin/rustc-1.80 /usr/bin/rustc
-      craftctl default
-    build-packages:
-      - libffi-dev
-      - libssl-dev
-      - rustc-1.80
-      - cargo
-      - pkg-config
-      - git
+    charm-binary-python-packages:
+      - cryptography ~= 44.0.0
 
 provides:
   slurmctld:

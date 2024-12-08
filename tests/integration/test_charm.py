@@ -79,13 +79,16 @@ async def test_build_and_deploy_against_edge(
             num_units=1,
             base=charm_base,
         ),
-        ops_test.model.deploy(
-            ROUTER,
-            application_name=f"{SLURMDBD}-{ROUTER}",
-            channel="dpe/edge",
-            num_units=0,
-            base=charm_base,
-        ),
+        # TODO:
+        #   Re-enable `mysql-router` in the integration tests once `dpe/edge`
+        #   channel supports the `ubuntu@24.04` base.
+        # ops_test.model.deploy(
+        #     ROUTER,
+        #     application_name=f"{SLURMDBD}-{ROUTER}",
+        #     channel="dpe/edge",
+        #     num_units=0,
+        #     base=charm_base,
+        # ),
         ops_test.model.deploy(
             DATABASE,
             application_name=DATABASE,
@@ -98,8 +101,8 @@ async def test_build_and_deploy_against_edge(
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMD}", f"{SLURMD}:{SLURMCTLD}")
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMDBD}", f"{SLURMDBD}:{SLURMCTLD}")
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMRESTD}", f"{SLURMRESTD}:{SLURMCTLD}")
-    await ops_test.model.integrate(f"{SLURMDBD}-{ROUTER}:backend-database", f"{DATABASE}:database")
-    await ops_test.model.integrate(f"{SLURMDBD}:database", f"{SLURMDBD}-{ROUTER}:database")
+    # await ops_test.model.integrate(f"{SLURMDBD}-{ROUTER}:backend-database", f"{DATABASE}:database")
+    await ops_test.model.integrate(f"{SLURMDBD}:database", f"{DATABASE}:database")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(apps=SLURM_APPS, status="active", timeout=1000)

@@ -39,18 +39,19 @@ class ApplicationCharm(CharmBase):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._slurm_manager = SlurmctldManager(snap=True)
+        self._slurmctld = SlurmctldManager(snap=True)
         self.framework.observe(self.on.install, self._on_install)
 
     def _on_install(self, _) -> None:
         self._slurmctld.install()
         self.unit.set_workload_version(self._slurmctld.version())
-        with self._slurmctld.config() as config:
+        with self._slurmctld.config.edit() as config:
             config.cluster_name = "cluster"
 ```
 """
 
 __all__ = [
+    "SackdManager",
     "SlurmOpsError",
     "SlurmctldManager",
     "SlurmdManager",
@@ -76,8 +77,8 @@ import dotenv
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from slurmutils.editors import cgroupconfig, slurmconfig, slurmdbdconfig
-from slurmutils.models import CgroupConfig, SlurmConfig, SlurmdbdConfig
+from slurmutils.editors import acctgatherconfig, cgroupconfig, slurmconfig, slurmdbdconfig
+from slurmutils.models import AcctGatherConfig, CgroupConfig, SlurmConfig, SlurmdbdConfig
 
 try:
     import charms.operator_libs_linux.v0.apt as apt
@@ -96,14 +97,14 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 10
 
 # Charm library dependencies to fetch during `charmcraft pack`.
 PYDEPS = [
-    "cryptography~=43.0.1",
+    "cryptography~=44.0.0",
     "pyyaml>=6.0.2",
     "python-dotenv~=1.0.1",
-    "slurmutils~=0.8.3",
+    "slurmutils~=0.9.0",
     "distro~=1.9.0",
 ]
 
@@ -124,11 +125,11 @@ def _call(
 ) -> subprocess.CompletedProcess:
     """Call a command with logging.
 
-    If the `check` argument is set to `False`, the command call will not raise an error if the command
-    fails.
+    If the `check` argument is set to `False`, the command call
+    will not raise an error if the command fails.
 
     Raises:
-        SlurmOpsError: Raised if the command fails.
+        SlurmOpsError: Raised if the executed command fails.
     """
     cmd = [cmd, *args]
     _logger.debug(f"executing command {cmd}")
@@ -179,6 +180,7 @@ class _ServiceType(Enum):
 
     MUNGE = "munge"
     PROMETHEUS_EXPORTER = "prometheus-slurm-exporter"
+    SACKD = "sackd"
     SLURMD = "slurmd"
     SLURMCTLD = "slurmctld"
     SLURMDBD = "slurmdbd"
@@ -259,6 +261,28 @@ class _SlurmConfigManager(_ConfigManager):
         """Edit the current `slurm.conf` configuration file."""
         with slurmconfig.edit(
             self._config_path, mode=0o644, user=self._user, group=self._group
+        ) as config:
+            yield config
+
+
+class _AcctGatherConfigManager(_ConfigManager):
+    """Manage the `acct_gather.conf` configuration file."""
+
+    def load(self) -> AcctGatherConfig:
+        """Load the current `acct_gather.conf` configuration file."""
+        return acctgatherconfig.load(self._config_path)
+
+    def dump(self, config: AcctGatherConfig) -> None:
+        """Dump new configuration into `acct_gather.conf` configuration file."""
+        acctgatherconfig.dump(
+            config, self._config_path, mode=0o600, user=self._user, group=self._group
+        )
+
+    @contextmanager
+    def edit(self) -> AcctGatherConfig:
+        """Edit the current `acct_gather.conf` configuration file."""
+        with acctgatherconfig.edit(
+            self._config_path, mode=0o600, user=self._user, group=self._group
         ) as config:
             yield config
 
@@ -390,7 +414,7 @@ class _SnapServiceManager(_ServiceManager):
 
 
 class _OpsManager(ABC):
-    """Manager to control the installation, creation and configuration of Slurm-related services."""
+    """Manager to control the lifecycle of Slurm-related services."""
 
     @abstractmethod
     def install(self) -> None:
@@ -420,17 +444,17 @@ class _OpsManager(ABC):
 
 
 class _SnapManager(_OpsManager):
-    """Slurm ops manager that uses Snap as its package manager."""
+    """Operations manager for the Slurm snap backend."""
 
     def install(self) -> None:
         """Install Slurm using the `slurm` snap."""
         # TODO: https://github.com/charmed-hpc/hpc-libs/issues/35 -
-        #  Pin Slurm snap to stable channel.
+        #   Pin Slurm snap to stable channel.
         _snap("install", "slurm", "--channel", "latest/candidate", "--classic")
         # TODO: https://github.com/charmed-hpc/slurm-snap/issues/49 -
-        #  Request automatic alias for the Slurm snap so we don't need to do it here.
-        #  We will possibly need to account for a third-party Slurm snap installation
-        #  where aliasing is not automatically performed.
+        #   Request automatic alias for the Slurm snap so we don't need to do it here.
+        #   We will possibly need to account for a third-party Slurm snap installation
+        #   where aliasing is not automatically performed.
         _snap("alias", "slurm.mungectl", "mungectl")
 
     def version(self) -> str:
@@ -462,7 +486,7 @@ class _SnapManager(_OpsManager):
 
 
 class _AptManager(_OpsManager):
-    """Slurm ops manager that uses apt as its package manager.
+    """Operations manager for the Slurm Debian package backend.
 
     Notes:
         This manager provides some environment variables that are automatically passed to the
@@ -475,7 +499,7 @@ class _AptManager(_OpsManager):
         self._env_file = Path(f"/etc/default/{self._service_name}")
 
     def install(self) -> None:
-        """Install Slurm using the `slurm` snap."""
+        """Install Slurm using the `slurm-wlm` Debian package set."""
         self._init_ubuntu_hpc_ppa()
         self._install_service()
         self._create_state_save_location()
@@ -514,49 +538,6 @@ class _AptManager(_OpsManager):
             SlurmOpsError: Raised if `apt` fails to update with Ubuntu HPC repositories enabled.
         """
         _logger.debug("initializing apt to use ubuntu hpc debian package repositories")
-        slurm_wlm = apt.DebianRepository(
-            enabled=True,
-            repotype="deb",
-            uri="https://ppa.launchpadcontent.net/ubuntu-hpc/slurm-wlm-23.02/ubuntu",
-            release=distro.codename(),
-            groups=["main"],
-        )
-        slurm_wlm.import_key(
-            textwrap.dedent(
-                """
-                -----BEGIN PGP PUBLIC KEY BLOCK-----
-                Comment: Hostname:
-                Version: Hockeypuck 2.2
-
-                xsFNBGTuZb8BEACtJ1CnZe6/hv84DceHv+a54y3Pqq0gqED0xhTKnbj/E2ByJpmT
-                NlDNkpeITwPAAN1e3824Me76Qn31RkogTMoPJ2o2XfG253RXd67MPxYhfKTJcnM3
-                CEkmeI4u2Lynh3O6RQ08nAFS2AGTeFVFH2GPNWrfOsGZW03Jas85TZ0k7LXVHiBs
-                W6qonbsFJhshvwC3SryG4XYT+z/+35x5fus4rPtMrrEOD65hij7EtQNaE8owuAju
-                Kcd0m2b+crMXNcllWFWmYMV0VjksQvYD7jwGrWeKs+EeHgU8ZuqaIP4pYHvoQjag
-                umqnH9Qsaq5NAXiuAIAGDIIV4RdAfQIR4opGaVgIFJdvoSwYe3oh2JlrLPBlyxyY
-                dayDifd3X8jxq6/oAuyH1h5K/QLs46jLSR8fUbG98SCHlRmvozTuWGk+e07ALtGe
-                sGv78ToHKwoM2buXaTTHMwYwu7Rx8LZ4bZPHdersN1VW/m9yn1n5hMzwbFKy2s6/
-                D4Q2ZBsqlN+5aW2q0IUmO+m0GhcdaDv8U7RVto1cWWPr50HhiCi7Yvei1qZiD9jq
-                57oYZVqTUNCTPxi6NeTOdEc+YqNynWNArx4PHh38LT0bqKtlZCGHNfoAJLPVYhbB
-                b2AHj9edYtHU9AAFSIy+HstET6P0UDxy02IeyE2yxoUBqdlXyv6FL44E+wARAQAB
-                zRxMYXVuY2hwYWQgUFBBIGZvciBVYnVudHUgSFBDwsGOBBMBCgA4FiEErocSHcPk
-                oLD4H/Aj9tDF1ca+s3sFAmTuZb8CGwMFCwkIBwIGFQoJCAsCBBYCAwECHgECF4AA
-                CgkQ9tDF1ca+s3sz3w//RNawsgydrutcbKf0yphDhzWS53wgfrs2KF1KgB0u/H+u
-                6Kn2C6jrVM0vuY4NKpbEPCduOj21pTCepL6PoCLv++tICOLVok5wY7Zn3WQFq0js
-                Iy1wO5t3kA1cTD/05v/qQVBGZ2j4DsJo33iMcQS5AjHvSr0nu7XSvDDEE3cQE55D
-                87vL7lgGjuTOikPh5FpCoS1gpemBfwm2Lbm4P8vGOA4/witRjGgfC1fv1idUnZLM
-                TbGrDlhVie8pX2kgB6yTYbJ3P3kpC1ZPpXSRWO/cQ8xoYpLBTXOOtqwZZUnxyzHh
-                gM+hv42vPTOnCo+apD97/VArsp59pDqEVoAtMTk72fdBqR+BB77g2hBkKESgQIEq
-                EiE1/TOISioMkE0AuUdaJ2ebyQXugSHHuBaqbEC47v8t5DVN5Qr9OriuzCuSDNFn
-                6SBHpahN9ZNi9w0A/Yh1+lFfpkVw2t04Q2LNuupqOpW+h3/62AeUqjUIAIrmfeML
-                IDRE2VdquYdIXKuhNvfpJYGdyvx/wAbiAeBWg0uPSepwTfTG59VPQmj0FtalkMnN
-                ya2212K5q68O5eXOfCnGeMvqIXxqzpdukxSZnLkgk40uFJnJVESd/CxHquqHPUDE
-                fy6i2AnB3kUI27D4HY2YSlXLSRbjiSxTfVwNCzDsIh7Czefsm6ITK2+cVWs0hNQ=
-                =cs1s
-                -----END PGP PUBLIC KEY BLOCK-----
-                """
-            )
-        )
         experimental = apt.DebianRepository(
             enabled=True,
             repotype="deb",
@@ -601,7 +582,6 @@ class _AptManager(_OpsManager):
             )
         )
         repositories = apt.RepositoryMapping()
-        repositories.add(slurm_wlm)
         repositories.add(experimental)
 
         try:
@@ -635,10 +615,12 @@ class _AptManager(_OpsManager):
         Raises:
             SlurmOpsError: Raised if `apt` fails to install the required Slurm packages.
         """
-        packages = [self._service_name, "munge", "mungectl", "prometheus-slurm-exporter"]
+        packages = [self._service_name, "munge", "mungectl"]
         match self._service_name:
+            case "sackd":
+                packages.extend(["slurm-client"])
             case "slurmctld":
-                packages.extend(["libpmix-dev", "mailutils"])
+                packages.extend(["libpmix-dev", "mailutils", "prometheus-slurm-exporter"])
             case "slurmd":
                 packages.extend(["libpmix-dev", "openmpi-bin"])
             case "slurmrestd":
@@ -674,6 +656,27 @@ class _AptManager(_OpsManager):
     def _apply_overrides(self) -> None:
         """Override defaults supplied provided by Slurm Debian packages."""
         match self._service_name:
+            case "sackd":
+                _logger.debug("overriding default sackd service configuration")
+                config_override = Path(
+                    "/etc/systemd/system/sackd.service.d/10-sackd-config-server.conf"
+                )
+                config_override.parent.mkdir(parents=True, exist_ok=True)
+                config_override.write_text(
+                    textwrap.dedent(
+                        """
+                        [Service]
+                        ExecStart=
+                        ExecStart=/usr/sbin/sackd --systemd --conf-server $SACKD_CONFIG_SERVER
+                        """
+                    )
+                )
+
+                # TODO: https://github.com/charmed-hpc/hpc-libs/issues/54 -
+                #   Make `sackd` create its service environment file so that we
+                #   aren't required to manually create it here.
+                _logger.debug("creating sackd environment file")
+                self._env_file.touch(mode=0o644, exist_ok=True)
             case "slurmctld":
                 _logger.debug("overriding default slurmctld service configuration")
                 self._set_ulimit()
@@ -792,11 +795,11 @@ class _AptManager(_OpsManager):
 
 
 # TODO: https://github.com/charmed-hpc/hpc-libs/issues/36 -
-#  Use `jwtctl` to provide backend for generating, setting, and getting
-#  jwt signing key used by `slurmctld` and `slurmdbd`. This way we also
-#  won't need to pass the keyfile path to the `__init__` constructor.
-#  .
-#  Also, enable `jwtctl` to set the user and group for the keyfile.
+#   Use `jwtctl` to provide backend for generating, setting, and getting
+#   jwt signing key used by `slurmctld` and `slurmdbd`. This way we also
+#   won't need to pass the keyfile path to the `__init__` constructor.
+#   .
+#   Also, enable `jwtctl` to set the user and group for the keyfile.
 class _JWTKeyManager:
     """Control the jwt signing key used by Slurm."""
 
@@ -828,7 +831,7 @@ class _JWTKeyManager:
 
 
 # TODO: https://github.com/charmed-hpc/mungectl/issues/5 -
-#  Have `mungectl` set user and group permissions on the munge.key file.
+#   Have `mungectl` set user and group permissions on the munge.key file.
 class _MungeKeyManager:
     """Control the munge key via `mungectl ...` commands."""
 
@@ -903,18 +906,47 @@ class _SlurmManagerBase:
         """Control Slurm via `scontrol` commands.
 
         Raises:
-            SlurmOpsError: Raised if scontrol command fails.
+            SlurmOpsError: Raised if `scontrol` command fails.
         """
         return _call("scontrol", *args).stdout
 
 
+class SackdManager(_SlurmManagerBase):
+    """Manager for the `sackd` service."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(service=_ServiceType.SACKD, *args, **kwargs)
+        self._env_manager = self._ops_manager.env_manager_for(_ServiceType.SACKD)
+
+    @property
+    def config_server(self) -> str | None:
+        """Get the configuration server address of this `sackd` node."""
+        return self._env_manager.get("SACKD_CONFIG_SERVER")
+
+    @config_server.setter
+    def config_server(self, addr: str) -> None:
+        """Set the configuration server address of this `sackd` node.
+
+        Sets the `--conf-server` option for `sackd`.
+        """
+        self._env_manager.set({"SACKD_CONFIG_SERVER": addr})
+
+    @config_server.deleter
+    def config_server(self) -> None:
+        """Unset the configuration server address of this `sackd` node."""
+        self._env_manager.unset("SACKD_CONFIG_SERVER")
+
+
 class SlurmctldManager(_SlurmManagerBase):
-    """Manager for the Slurmctld service."""
+    """Manager for the `slurmctld` service."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(service=_ServiceType.SLURMCTLD, *args, **kwargs)
         self.config = _SlurmConfigManager(
             self._ops_manager.etc_path / "slurm.conf", self.user, self.group
+        )
+        self.acct_gather = _AcctGatherConfigManager(
+            self._ops_manager.etc_path / "acct_gather.conf", self.user, self.group
         )
         self.cgroup = _CgroupConfigManager(
             self._ops_manager.etc_path / "cgroup.conf", self.user, self.group
@@ -922,13 +954,7 @@ class SlurmctldManager(_SlurmManagerBase):
 
 
 class SlurmdManager(_SlurmManagerBase):
-    """Manager for the Slurmd service.
-
-    This service will additionally provide some environment variables that need to be
-    passed through to the service in case the default service is overriden (e.g. a systemctl file override).
-
-        - SLURMD_CONFIG_SERVER. Sets the `--conf-server` option for `slurmd`.
-    """
+    """Manager for the `slurmd` service."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(service=_ServiceType.SLURMD, *args, **kwargs)
@@ -945,23 +971,26 @@ class SlurmdManager(_SlurmManagerBase):
         return "root"
 
     @property
-    def config_server(self) -> str:
-        """Get the config server address of this Slurmd node."""
+    def config_server(self) -> str | None:
+        """Get the configuration server address of this `slurmd` node."""
         return self._env_manager.get("SLURMD_CONFIG_SERVER")
 
     @config_server.setter
     def config_server(self, addr: str) -> None:
-        """Set the config server address of this Slurmd node."""
+        """Set the configuration server address of this `slurmd` node.
+
+        Sets the `--conf-server` option for `slurmd`.
+        """
         self._env_manager.set({"SLURMD_CONFIG_SERVER": addr})
 
     @config_server.deleter
     def config_server(self) -> None:
-        """Unset the config server address of this Slurmd node."""
+        """Unset the configuration server address of this `slurmd` node."""
         self._env_manager.unset("SLURMD_CONFIG_SERVER")
 
 
 class SlurmdbdManager(_SlurmManagerBase):
-    """Manager for the Slurmdbd service."""
+    """Manager for the `slurmdbd` service."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(service=_ServiceType.SLURMDBD, *args, **kwargs)
@@ -971,13 +1000,13 @@ class SlurmdbdManager(_SlurmManagerBase):
         )
 
     @property
-    def mysql_unix_port(self) -> str:
-        """Get the URI of the unix socket slurmdbd uses to communicate with MySQL."""
+    def mysql_unix_port(self) -> str | None:
+        """Get the URI of the unix socket `slurmdbd` uses to communicate with MySQL."""
         return self._env_manager.get("MYSQL_UNIX_PORT")
 
     @mysql_unix_port.setter
     def mysql_unix_port(self, socket_path: Union[str, os.PathLike]) -> None:
-        """Set the unix socket URI that slurmdbd will use to communicate with MySQL."""
+        """Set the unix socket URI that `slurmdbd` will use to communicate with MySQL."""
         self._env_manager.set({"MYSQL_UNIX_PORT": socket_path})
 
     @mysql_unix_port.deleter
@@ -987,7 +1016,7 @@ class SlurmdbdManager(_SlurmManagerBase):
 
 
 class SlurmrestdManager(_SlurmManagerBase):
-    """Manager for the Slurmrestd service."""
+    """Manager for the `slurmrestd` service."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(service=_ServiceType.SLURMRESTD, *args, **kwargs)
@@ -997,10 +1026,10 @@ class SlurmrestdManager(_SlurmManagerBase):
 
     @property
     def user(self) -> str:
-        """Get the user that the slurmrestd service will run as."""
+        """Get the user that the `slurmrestd` service will run as."""
         return "slurmrestd"
 
     @property
     def group(self):
-        """Get the group that the slurmrestd service will run as."""
+        """Get the group that the `slurmrestd` service will run as."""
         return "slurmrestd"
