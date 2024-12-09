@@ -28,13 +28,14 @@ SLURMCTLD_DIR = Path(slurmctld) if (slurmctld := os.getenv("SLURMCTLD_DIR")) els
 SLURMD_DIR = Path(slurmd) if (slurmd := os.getenv("SLURMD_DIR")) else None
 SLURMDBD_DIR = Path(slurmdbd) if (slurmdbd := os.getenv("SLURMDBD_DIR")) else None
 SLURMRESTD_DIR = Path(slurmrestd) if (slurmrestd := os.getenv("SLURMRESTD_DIR")) else None
+SACKD_DIR = Path(sackd) if (sackd := os.getenv("SACKD_DIR")) else None
 
 
 def pytest_addoption(parser) -> None:
     parser.addoption(
         "--charm-base",
         action="store",
-        default="ubuntu@22.04",
+        default="ubuntu@24.04",
         help="Charm base version to use for integration tests",
     )
 
@@ -111,3 +112,20 @@ async def slurmrestd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
         return "slurmrestd"
 
     return await ops_test.build_charm(SLURMRESTD_DIR, verbosity="verbose")
+
+
+@pytest.fixture(scope="module")
+async def sackd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
+    """Pack sackd_charm charm to use for integration tests.
+
+    If the `SACKD_DIR` environment variable is not set, this will pull the charm from
+    Charmhub instead.
+
+    Returns:
+        `Path` if "sackd" is built locally. `str` otherwise..
+    """
+    if not SACKD_DIR:
+        logger.info("Pulling sackd from Charmhub")
+        return "sackd"
+
+    return await ops_test.build_charm(SACKD_DIR, verbosity="verbose")

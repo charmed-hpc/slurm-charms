@@ -15,7 +15,7 @@
 
 """Test default charm events such as install, etc."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmctldCharm
 from ops.model import BlockedStatus
@@ -155,6 +155,30 @@ class TestCharm(TestCase):
         """Test that the on_slurmdbd_unavailable method works."""
         self.harness.charm._slurmdbd.on.slurmdbd_unavailable.emit()
         self.assertEqual(self.harness.charm._stored.slurmdbd_host, "")
+
+    @patch(
+        "charms.hpc_libs.v0.slurm_ops.SlurmctldManager.hostname",
+        new_callable=PropertyMock(return_value="test_hostname"),
+    )
+    def test_sackd_on_relation_created(self, *_) -> None:
+        """Test that sackd relation is created successfully."""
+        self.harness.set_leader(True)
+        # Patch StoredState
+        setattr(self.harness.charm._stored, "slurm_installed", True)
+        setattr(self.harness.charm._stored, "munge_key", "=ABC=")
+
+        relation_id = self.harness.add_relation("login-node", "sackd")
+        self.assertEqual(
+            self.harness.get_relation_data(relation_id, "slurmctld")["cluster_info"],
+            '{"auth_key": "=ABC=", "slurmctld_host": "test_hostname"}',
+        )
+
+    @patch("ops.framework.EventBase.defer")
+    def test_sackd_fail_on_relation_created(self, defer) -> None:
+        """Test sackd relation when slurm is not installed."""
+        setattr(self.harness.charm._stored, "slurm_installed", False)  # Patch StoredState
+        self.harness.add_relation("login-node", "sackd")
+        defer.asset_called()
 
     @patch("charm.is_container", return_value=True)
     def test_get_user_supplied_parameters(self, *_) -> None:

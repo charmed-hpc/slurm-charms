@@ -1,0 +1,50 @@
+name: sackd
+type: charm
+
+summary: |
+  Sackd, the login node daemon of Slurm.
+
+description: |
+  This charm provides sackd to facilitate deployment of a login node for a
+  Slurm cluster.
+
+  sackd is the login node daemon of Slurm. It enables authentication to the
+  cluster and retrieval of configuration files when running in configless
+  mode.
+
+links:
+  contact: https://matrix.to/#/#hpc:ubuntu.com
+
+  issues:
+  - https://github.com/charmed-hpc/slurm-charms/issues
+
+  source:
+  - https://github.com/charmed-hpc/slurm-charms
+
+assumes:
+  - juju
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+    build-on: amd64
+    build-for: amd64
+
+parts:
+  charm:
+    charm-requirements: [ "requirements.txt" ]
+    override-build: |
+      cp /usr/bin/rustc-1.80 /usr/bin/rustc
+      craftctl default
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - rustc-1.80
+      - cargo
+      - pkg-config
+      - git
+
+provides:
+  slurmctld:
+    interface: sackd
+    limit: 1

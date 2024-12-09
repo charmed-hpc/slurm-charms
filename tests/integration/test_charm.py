@@ -28,9 +28,10 @@ SLURMCTLD = "slurmctld"
 SLURMD = "slurmd"
 SLURMDBD = "slurmdbd"
 SLURMRESTD = "slurmrestd"
+SACKD = "sackd"
 DATABASE = "mysql"
 ROUTER = "mysql-router"
-SLURM_APPS = [SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD]
+SLURM_APPS = [SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD, SACKD]
 
 
 @pytest.mark.abort_on_fail
@@ -43,12 +44,13 @@ async def test_build_and_deploy_against_edge(
     slurmd_charm,
     slurmdbd_charm,
     slurmrestd_charm,
+    sackd_charm,
 ) -> None:
-    """Test that the slurmctld charm can stabilize against slurmd, slurmdbd, slurmrestd, and MySQL."""
+    """Test that the slurmctld charm can stabilize against slurmd, slurmdbd, slurmrestd, sackd, and MySQL."""
     logger.info(f"Deploying {', '.join(SLURM_APPS)}, and {DATABASE}")
     # Pack charms and download NHC resource for the slurmd operator.
-    slurmctld, slurmd, slurmdbd, slurmrestd = await asyncio.gather(
-        slurmctld_charm, slurmd_charm, slurmdbd_charm, slurmrestd_charm
+    slurmctld, slurmd, slurmdbd, slurmrestd, sackd = await asyncio.gather(
+        slurmctld_charm, slurmd_charm, slurmdbd_charm, slurmrestd_charm, sackd_charm
     )
     # Deploy the test Charmed SLURM cloud.
     await asyncio.gather(
@@ -79,6 +81,13 @@ async def test_build_and_deploy_against_edge(
             num_units=1,
             base=charm_base,
         ),
+        ops_test.model.deploy(
+            str(sackd),
+            application_name=SACKD,
+            channel="edge" if isinstance(sackd, str) else None,
+            num_units=1,
+            base=charm_base,
+        ),
         # TODO:
         #   Re-enable `mysql-router` in the integration tests once `dpe/edge`
         #   channel supports the `ubuntu@24.04` base.
@@ -101,6 +110,7 @@ async def test_build_and_deploy_against_edge(
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMD}", f"{SLURMD}:{SLURMCTLD}")
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMDBD}", f"{SLURMDBD}:{SLURMCTLD}")
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMRESTD}", f"{SLURMRESTD}:{SLURMCTLD}")
+    await ops_test.model.integrate(f"{SLURMCTLD}:login-node", f"{SACKD}:{SLURMCTLD}")
     # await ops_test.model.integrate(f"{SLURMDBD}-{ROUTER}:backend-database", f"{DATABASE}:database")
     await ops_test.model.integrate(f"{SLURMDBD}:database", f"{DATABASE}:database")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
