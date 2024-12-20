@@ -77,8 +77,20 @@ import dotenv
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from slurmutils.editors import acctgatherconfig, cgroupconfig, slurmconfig, slurmdbdconfig
-from slurmutils.models import AcctGatherConfig, CgroupConfig, SlurmConfig, SlurmdbdConfig
+from slurmutils.editors import (
+    acctgatherconfig,
+    cgroupconfig,
+    gresconfig,
+    slurmconfig,
+    slurmdbdconfig,
+)
+from slurmutils.models import (
+    AcctGatherConfig,
+    CgroupConfig,
+    GRESConfig,
+    SlurmConfig,
+    SlurmdbdConfig,
+)
 
 try:
     import charms.operator_libs_linux.v0.apt as apt
@@ -97,14 +109,14 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 # Charm library dependencies to fetch during `charmcraft pack`.
 PYDEPS = [
     "cryptography~=44.0.0",
     "pyyaml>=6.0.2",
     "python-dotenv~=1.0.1",
-    "slurmutils~=0.9.0",
+    "slurmutils~=0.11.0",
     "distro~=1.9.0",
 ]
 
@@ -245,26 +257,6 @@ class _ConfigManager(ABC):
         """Edit the current configuration file."""
 
 
-class _SlurmConfigManager(_ConfigManager):
-    """Control the `slurm.conf` configuration file."""
-
-    def load(self) -> SlurmConfig:
-        """Load the current `slurm.conf` configuration file."""
-        return slurmconfig.load(self._config_path)
-
-    def dump(self, config: SlurmConfig) -> None:
-        """Dump new configuration into `slurm.conf` configuration file."""
-        slurmconfig.dump(config, self._config_path, mode=0o644, user=self._user, group=self._group)
-
-    @contextmanager
-    def edit(self) -> SlurmConfig:
-        """Edit the current `slurm.conf` configuration file."""
-        with slurmconfig.edit(
-            self._config_path, mode=0o644, user=self._user, group=self._group
-        ) as config:
-            yield config
-
-
 class _AcctGatherConfigManager(_ConfigManager):
     """Manage the `acct_gather.conf` configuration file."""
 
@@ -304,6 +296,46 @@ class _CgroupConfigManager(_ConfigManager):
     def edit(self) -> CgroupConfig:
         """Edit the current `cgroup.conf` configuration file."""
         with cgroupconfig.edit(
+            self._config_path, mode=0o644, user=self._user, group=self._group
+        ) as config:
+            yield config
+
+
+class _GRESConfigManager(_ConfigManager):
+    """Manage the `gres.conf` configuration file."""
+
+    def load(self) -> GRESConfig:
+        """Load the current `gres.conf` configuration files."""
+        return gresconfig.load(self._config_path)
+
+    def dump(self, config: GRESConfig) -> None:
+        """Dump new configuration into `gres.conf` configuration file."""
+        gresconfig.dump(config, self._config_path, mode=0o644, user=self._user, group=self._group)
+
+    @contextmanager
+    def edit(self) -> GRESConfig:
+        """Edit the current `gres.conf` configuration file."""
+        with gresconfig.edit(
+            self._config_path, mode=0o644, user=self._user, group=self._group
+        ) as config:
+            yield config
+
+
+class _SlurmConfigManager(_ConfigManager):
+    """Control the `slurm.conf` configuration file."""
+
+    def load(self) -> SlurmConfig:
+        """Load the current `slurm.conf` configuration file."""
+        return slurmconfig.load(self._config_path)
+
+    def dump(self, config: SlurmConfig) -> None:
+        """Dump new configuration into `slurm.conf` configuration file."""
+        slurmconfig.dump(config, self._config_path, mode=0o644, user=self._user, group=self._group)
+
+    @contextmanager
+    def edit(self) -> SlurmConfig:
+        """Edit the current `slurm.conf` configuration file."""
+        with slurmconfig.edit(
             self._config_path, mode=0o644, user=self._user, group=self._group
         ) as config:
             yield config
@@ -950,6 +982,9 @@ class SlurmctldManager(_SlurmManagerBase):
         )
         self.cgroup = _CgroupConfigManager(
             self._ops_manager.etc_path / "cgroup.conf", self.user, self.group
+        )
+        self.gres = _GRESConfigManager(
+            self._ops_manager.etc_path / "gres.conf", self.user, self.group
         )
 
 

@@ -32,6 +32,7 @@ parts:
   charm:
     charm-binary-python-packages:
       - cryptography ~= 44.0.0
+      - jsonschema ~= 4.23.0
   nhc:
     plugin: nil
     build-packages:

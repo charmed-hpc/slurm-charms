@@ -1,2 +1,2 @@
 ops==2.17.1
-slurmutils~=0.9.0
+slurmutils~=0.11.0

@@ -50,6 +50,7 @@ class TestCharm(TestCase):
         )
         defer.assert_not_called()
 
+    @patch("utils.gpu.autoinstall")
     @patch("utils.nhc.install")
     @patch("utils.service.override_service")
     @patch("charms.operator_libs_linux.v0.juju_systemd_notices.SystemdNotices.subscribe")

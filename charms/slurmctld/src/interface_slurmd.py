@@ -31,6 +31,23 @@ class PartitionUnavailableEvent(EventBase):
 class SlurmdAvailableEvent(EventBase):
     """Emitted when the slurmd unit joins the relation."""
 
+    def __init__(self, handle, node_name, gres_info=None):
+        super().__init__(handle)
+        self.node_name = node_name
+        self.gres_info = gres_info
+
+    def snapshot(self):
+        """Snapshot the event data."""
+        return {
+            "node_name": self.node_name,
+            "gres_info": self.gres_info,
+        }
+
+    def restore(self, snapshot):
+        """Restore the snapshot of the event data."""
+        self.node_name = snapshot.get("node_name")
+        self.gres_info = snapshot.get("gres_info")
+
 
 class SlurmdDepartedEvent(EventBase):
     """Emitted when one slurmd departs."""
@@ -124,7 +141,10 @@ class Slurmd(Object):
                     if node_config := node.get("node_parameters"):
                         if node_name := node_config.get("NodeName"):
                             self._charm.new_nodes = list(set(self._charm.new_nodes + [node_name]))
-                            self.on.slurmd_available.emit()
+                            self.on.slurmd_available.emit(
+                                node_name=node_name, gres_info=node.get("gres")
+                            )
+                            logger.debug(f"_on_relation_changed node_config = {node_config}")
             else:
                 logger.debug(f"`node` data does not exist for unit: {unit}.")
         else:
@@ -245,3 +265,25 @@ class Slurmd(Object):
             else []
         )
         return {"DownNodes": new_node_down_nodes, "Nodes": nodes, "Partitions": partitions}
+
+    def get_gres(self) -> Dict[str, Any]:
+        """Return GRES configuration for all currently related compute nodes."""
+        # Loop over all relation units, gathering GRES info.
+        gres_info = {}
+        if relations := self.framework.model.relations.get(self._relation_name):
+            for relation in relations:
+                for unit in relation.units:
+
+                    if node := self._get_node_from_relation(relation, unit):
+                        # Ignore nodes without GRES devices
+                        if (gres := node.get("gres")) and (
+                            node_config := node.get("node_parameters")
+                        ):
+
+                            node_name = node_config["NodeName"]
+                            # slurmutils expects NodeName in values.
+                            for device in gres:
+                                device["NodeName"] = node_name
+                            gres_info[node_name] = gres
+
+        return gres_info

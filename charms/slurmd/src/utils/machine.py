@@ -16,12 +16,12 @@
 
 import logging
 import subprocess
-from typing import Dict
+from typing import Any, Dict
 
 _logger = logging.getLogger(__name__)
 
 
-def get_slurmd_info() -> Dict[str, str]:
+def get_slurmd_info() -> Dict[str, Any]:
     """Get machine info as reported by `slurmd -C`."""
     try:
         r = subprocess.check_output(["slurmd", "-C"], text=True).strip()
@@ -29,4 +29,12 @@ def get_slurmd_info() -> Dict[str, str]:
         _logger.error(e)
         raise
 
-    return dict([opt.split("=") for opt in r.split()[:-1]])
+    info = {}
+    for opt in r.split()[:-1]:
+        key, value = opt.split("=")
+        # Split comma-separated lists, e.g. Gres=gpu:model_a:1,gpu:model_b:1
+        if "," in value:
+            info[key] = value.split(",")
+        else:
+            info[key] = value
+    return info

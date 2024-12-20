@@ -37,7 +37,7 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmutils.models import CgroupConfig, SlurmConfig
+from slurmutils.models import CgroupConfig, GRESConfig, GRESNode, SlurmConfig
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.hpc_libs.v0.is_container import is_container
@@ -87,8 +87,8 @@ class SlurmctldCharm(CharmBase):
             self._slurmdbd.on.slurmdbd_unavailable: self._on_slurmdbd_unavailable,
             self._slurmd.on.partition_available: self._on_write_slurm_conf,
             self._slurmd.on.partition_unavailable: self._on_write_slurm_conf,
-            self._slurmd.on.slurmd_available: self._on_write_slurm_conf,
-            self._slurmd.on.slurmd_departed: self._on_write_slurm_conf,
+            self._slurmd.on.slurmd_available: self._on_slurmd_available,
+            self._slurmd.on.slurmd_departed: self._on_slurmd_departed,
             self._slurmrestd.on.slurmrestd_available: self._on_slurmrestd_available,
             self.on.show_current_config_action: self._on_show_current_config_action,
             self.on.drain_action: self._on_drain_nodes_action,
@@ -213,6 +213,58 @@ class SlurmctldCharm(CharmBase):
             event.set_results({"status": "resuming", "nodes": nodes})
         except subprocess.CalledProcessError as e:
             event.fail(message=f"Error resuming {nodes}: {e.output}")
+
+    def _on_slurmd_available(self, event: SlurmdAvailableEvent) -> None:
+        self._add_to_gres_conf(event)
+        self._on_write_slurm_conf(event)
+
+    def _on_slurmd_departed(self, event: SlurmdDepartedEvent) -> None:
+        # Lack of map between departing unit and NodeName complicates removal of node from gres.conf.
+        # Instead, rewrite full gres.conf with data from remaining units.
+        self._write_gres_conf(event)
+        self._on_write_slurm_conf(event)
+
+    def _add_to_gres_conf(self, event: SlurmdAvailableEvent) -> None:
+        """Write new nodes to gres.conf configuration file for Generic Resource scheduling."""
+        # This function does not perform an "scontrol reconfigure". It is expected
+        # _on_write_slurm_conf() is called immediately following to do this.
+
+        # Only the leader should write the config.
+        if not self.model.unit.is_leader():
+            return
+
+        if not self._check_status():
+            event.defer()
+            return
+
+        if gres_info := event.gres_info:
+            # Build list of GRESNodes expected by slurmutils
+            gres_nodes = []
+            for resource in gres_info:
+                node = GRESNode(NodeName=str(event.node_name), **resource)
+                gres_nodes.append(node)
+
+            # Update gres.conf
+            with self._slurmctld.gres.edit() as config:
+                config.nodes[event.node_name] = gres_nodes
+
+    def _write_gres_conf(self, event: SlurmdDepartedEvent) -> None:
+        """Write out current gres.conf configuration file for Generic Resource scheduling."""
+        # This function does not perform an "scontrol reconfigure". It is expected
+        # _on_write_slurm_conf() is called immediately following to do this.
+
+        # Only the leader should write the config.
+        if not self.model.unit.is_leader():
+            return
+
+        if not self._check_status():
+            event.defer()
+            return
+
+        # Get current GRES state for all available nodes and write to gres.conf.
+        gres_all_nodes = self._slurmd.get_gres()
+        gres_conf = GRESConfig(Nodes=gres_all_nodes)
+        self._slurmctld.gres.dump(gres_conf)
 
     def _on_write_slurm_conf(
         self,

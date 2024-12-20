@@ -4,7 +4,9 @@
 
 """Slurmd Operator Charm."""
 
+import itertools
 import logging
+from pathlib import Path
 from typing import Any, Dict, cast
 
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
@@ -21,7 +23,7 @@ from ops import (
     main,
 )
 from slurmutils.models.option import NodeOptionSet, PartitionOptionSet
-from utils import machine, nhc, service
+from utils import gpu, machine, nhc, service
 
 from charms.hpc_libs.v0.slurm_ops import SlurmdManager, SlurmOpsError
 from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore[import-untyped]
@@ -79,6 +81,7 @@ class SlurmdCharm(CharmBase):
         try:
             self._slurmd.install()
             nhc.install()
+            gpu.autoinstall()
             self.unit.set_workload_version(self._slurmd.version())
             # TODO: https://github.com/orgs/charmed-hpc/discussions/10 -
             #  Evaluate if we should continue doing the service override here
@@ -92,6 +95,7 @@ class SlurmdCharm(CharmBase):
             event.defer()
 
         self._check_status()
+        self._reboot_if_required()
 
     def _on_config_changed(self, _: ConfigChangedEvent) -> None:
         """Handle charm configuration changes."""
@@ -214,7 +218,7 @@ class SlurmdCharm(CharmBase):
             event.set_results({"nhc.conf": "/etc/nhc/nhc.conf not found."})
 
     def _on_node_config_action_event(self, event: ActionEvent) -> None:
-        """Get or set the user_supplied_node_conifg.
+        """Get or set the user_supplied_node_config.
 
         Return the node config if the `node-config` parameter is not specified, otherwise
         parse, validate, and store the input of the `node-config` parameter in stored state.
@@ -321,15 +325,86 @@ class SlurmdCharm(CharmBase):
 
         return True
 
+    def _reboot_if_required(self) -> None:
+        """Perform a reboot of the unit if required, e.g. following a driver installation."""
+        if Path("/var/run/reboot-required").exists():
+            logger.info("unit rebooting")
+            self.unit.reboot()
+
+    @staticmethod
+    def _ranges_and_strides(nums) -> str:
+        """Return ranges and strides for given iterable.
+
+        Requires input elements to be unique and sorted ascending.
+
+        Returns:
+            A square-bracketed string with comma-separated ranges of consecutive values.
+
+            example_input  = [0,1,2,3,4,5,6,8,9,10,12,14,15,16,18]
+            example_output = '[0-6,8-10,12,14-16,18]'
+        """
+        out = "["
+
+        # The input is enumerate()-ed to produce a list of tuples of the elements and their indices.
+        # groupby() uses the lambda key function to group these tuples by the difference between the element and index.
+        # Consecutive values have equal difference between element and index, so are grouped together.
+        # Hence, the elements of the first and last members of each group give the range of consecutive values.
+        # If the group has only a single member, there are no consecutive values either side of it (a "stride").
+        for _, group in itertools.groupby(enumerate(nums), lambda elems: elems[1] - elems[0]):
+            group = list(group)
+
+            if len(group) == 1:
+                # Single member, this is a stride.
+                out += f"{group[0][1]},"
+            else:
+                # Range of consecutive values is first-last in group.
+                out += f"{group[0][1]}-{group[-1][1]},"
+
+        out = out.rstrip(",") + "]"
+        return out
+
     def get_node(self) -> Dict[Any, Any]:
         """Get the node from stored state."""
+        slurmd_info = machine.get_slurmd_info()
+
+        # Get GPU info and build GRES configuration.
+        gres_info = []
+        if gpus := gpu.get_gpus():
+            for model, devices in gpus.items():
+                # Build gres.conf line for this GPU model.
+                if len(devices) == 1:
+                    device_suffix = next(iter(devices))
+                else:
+                    # For multi-gpu setups, "File" uses ranges and strides syntax,
+                    # e.g. File=/dev/nvidia[0-3], File=/dev/nvidia[0,2-3]
+                    device_suffix = self._ranges_and_strides(sorted(devices))
+                gres_line = {
+                    # NodeName included in node_parameters.
+                    "Name": "gpu",
+                    "Type": model,
+                    "File": f"/dev/nvidia{device_suffix}",
+                }
+                # Append to list of GRES lines for all models
+                gres_info.append(gres_line)
+
+                # Add to node parameters to ensure included in slurm.conf.
+                slurm_conf_gres = f"gpu:{model}:{len(devices)}"
+                try:
+                    # Add to existing Gres line.
+                    slurmd_info["Gres"].append(slurm_conf_gres)
+                except KeyError:
+                    # Create a new Gres entry if none present
+                    slurmd_info["Gres"] = [slurm_conf_gres]
+
         node = {
             "node_parameters": {
-                **machine.get_slurmd_info(),
+                **slurmd_info,
                 "MemSpecLimit": "1024",
                 **self._user_supplied_node_parameters,
             },
             "new_node": self._new_node,
+            # Do not include GRES configuration if no GPUs detected.
+            **({"gres": gres_info} if len(gres_info) > 0 else {}),
         }
         logger.debug(f"Node Configuration: {node}")
         return node
