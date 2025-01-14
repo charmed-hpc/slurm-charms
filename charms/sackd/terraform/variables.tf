@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,35 +13,49 @@
 # limitations under the License.
 
 variable "app_name" {
-  description = "Name of the sackd application within the Juju model."
+  description = "Application name"
   type        = string
+  default     = "sackd"
+}
+
+variable "base" {
+  description = "Charm base"
+  type        = string
+  default     = "ubuntu@24.04"
 }
 
 variable "channel" {
-  description = "Channel to deploy the sackd charm from."
+  description = "Charm channel"
   type        = string
   default     = "latest/edge"
 }
 
 variable "config" {
-  description = "Initial configuration for deployed sackd charm."
+  description = "Charm configuration"
   type        = map(string)
   default     = {}
 }
 
+variable "constraints" {
+  description = "Deployment constraints"
+  type        = string
+  default     = "arch=amd64"
+}
+
 variable "model_name" {
-  description = "Name of model to deploy sackd charm to."
+  description = "Model name"
   type        = string
 }
 
 variable "revision" {
-  description = "Revision of the sackd charm to deploy."
+  description = "Charm revision"
   type        = number
+  nullable    = true
   default     = null
 }
 
 variable "units" {
-  description = "Number of sackd units to deploy."
+  description = "Number of units"
   type        = number
   default     = 1
 }
