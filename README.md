@@ -1,24 +1,27 @@
 # Slurm charms
 
-[Juju](https://juju.is) charms for automating the Day 0 to Day 2 operations of the [Slurm workload manager](https://slurm.schedmd.com/overview.html) ⚖️🐧
-
 [![CI](https://github.com/charmed-hpc/slurm-charms/actions/workflows/ci.yaml/badge.svg)](https://github.com/charmed-hpc/slurm-charms/actions/workflows/ci.yaml/badge.svg)
 [![Release](https://github.com/charmed-hpc/slurm-charms/actions/workflows/release.yaml/badge.svg)](https://github.com/charmed-hpc/slurm-charms/actions/workflows/release.yaml/badge.svg)
+![GitHub License](https://img.shields.io/github/license/charmed-hpc/slurm-charms)
 [![Matrix](https://img.shields.io/matrix/ubuntu-hpc%3Amatrix.org?logo=matrix&label=ubuntu-hpc)](https://matrix.to/#/#hpc:ubuntu.com)
+
+[Juju](https://juju.is) charms for automating the Day 0 to Day 2 operations of the [Slurm workload manager](https://slurm.schedmd.com/overview.html) ⚖️🐧
 
 The `slurm-charms` repository is a collection of charmed operators that enables you to easily deploy, configure, and manage the Slurm workload manager.
 Here's the current charms in the collection:
 
-- [`slurmctld`](./charms/slurmctld/): the central management daemon for Slurm.
-- [`slurmd`](./charms/slurmd): the compute node daemon for Slurm.
-- [`slurmdbd`](./charms/slurmdbd): the database daemon for Slurm.
-- [`slurmrestd`](./charms/slurmrestd/): the REST API interface to Slurm.
+* [`sackd`](./charms/sackd/): the authentication and credential kiosk daemon for Slurm.
+* [`slurmctld`](./charms/slurmctld/): the central management daemon for Slurm.
+* [`slurmd`](./charms/slurmd): the compute node daemon for Slurm.
+* [`slurmdbd`](./charms/slurmdbd): the database daemon for Slurm.
+* [`slurmrestd`](./charms/slurmrestd/): the REST API interface to Slurm.
 
 ## ✨ Getting started
 
 To deploy the Slurm charms from [Charmhub](https://charmhub.io), you must be using Juju 3.x or greater.
 
 ```shell
+juju deploy sackd --channel edge
 juju deploy slurmctld --channel edge
 juju deploy slurmd --channel edge
 juju deploy slurmdbd --channel edge
@@ -26,6 +29,7 @@ juju deploy slurmrestd --channel edge
 juju deploy mysql --channel 8.0/stable
 juju deploy mysql-router slurmdbd-mysql-router --channel dpe/edge
 
+juju integrate sackd:login-node slurmctld:login-node
 juju integrate slurmctld:slurmd slurmd:slurmctld
 juju integrate slurmctld:slurmdbd slurmdbd:slurmctld
 juju integrate slurmctld:slurmrestd slurmrestd:slurmctld
