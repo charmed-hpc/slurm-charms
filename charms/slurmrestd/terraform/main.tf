@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,10 +17,13 @@ resource "juju_application" "slurmrestd" {
   model = var.model_name
 
   charm {
-    name    = "slurmrestd"
-    channel = var.channel
+    name     = "slurmrestd"
+    base     = var.base
+    channel  = var.channel
+    revision = var.revision
   }
 
-  config = var.config
-  units  = var.units
+  config      = var.config
+  constraints = var.constraints
+  units       = var.units
 }
