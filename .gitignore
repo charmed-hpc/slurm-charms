@@ -12,3 +12,6 @@ version
 _build
 .charmhub.secret
 cover
+.terraform
+.terraform.lock.hcl
+*.tfstate*
