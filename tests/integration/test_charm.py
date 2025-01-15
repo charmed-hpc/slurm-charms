@@ -17,6 +17,8 @@
 
 import asyncio
 import logging
+import pathlib
+from collections.abc import Awaitable
 
 import pytest
 import tenacity
@@ -34,57 +36,64 @@ ROUTER = "mysql-router"
 SLURM_APPS = [SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD, SACKD]
 
 
+async def build_and_deploy_charm(
+    ops_test: OpsTest, charm: Awaitable[str | pathlib.Path], *deploy_args, **deploy_kwargs
+):
+    """Build and deploy the charm identified by `charm`."""
+    charm = await charm
+    deploy_kwargs["channel"] = "edge" if isinstance(charm, str) else None
+    await ops_test.model.deploy(str(charm), *deploy_args, **deploy_kwargs)
+
+
 @pytest.mark.abort_on_fail
 @pytest.mark.skip_if_deployed
 @pytest.mark.order(1)
 async def test_build_and_deploy_against_edge(
     ops_test: OpsTest,
     charm_base: str,
-    slurmctld_charm,
-    slurmd_charm,
-    slurmdbd_charm,
-    slurmrestd_charm,
-    sackd_charm,
+    slurmctld_charm: Awaitable[str | pathlib.Path],
+    slurmd_charm: Awaitable[str | pathlib.Path],
+    slurmdbd_charm: Awaitable[str | pathlib.Path],
+    slurmrestd_charm: Awaitable[str | pathlib.Path],
+    sackd_charm: Awaitable[str | pathlib.Path],
 ) -> None:
     """Test that the slurmctld charm can stabilize against slurmd, slurmdbd, slurmrestd, sackd, and MySQL."""
     logger.info(f"Deploying {', '.join(SLURM_APPS)}, and {DATABASE}")
-    # Pack charms and download NHC resource for the slurmd operator.
-    slurmctld, slurmd, slurmdbd, slurmrestd, sackd = await asyncio.gather(
-        slurmctld_charm, slurmd_charm, slurmdbd_charm, slurmrestd_charm, sackd_charm
-    )
+
     # Deploy the test Charmed SLURM cloud.
     await asyncio.gather(
-        ops_test.model.deploy(
-            str(slurmctld),
+        build_and_deploy_charm(
+            ops_test,
+            slurmctld_charm,
             application_name=SLURMCTLD,
             num_units=1,
             base=charm_base,
         ),
-        ops_test.model.deploy(
-            str(slurmd),
+        build_and_deploy_charm(
+            ops_test,
+            slurmd_charm,
             application_name=SLURMD,
-            channel="edge" if isinstance(slurmd, str) else None,
             num_units=1,
             base=charm_base,
         ),
-        ops_test.model.deploy(
-            str(slurmdbd),
+        build_and_deploy_charm(
+            ops_test,
+            slurmdbd_charm,
             application_name=SLURMDBD,
-            channel="edge" if isinstance(slurmdbd, str) else None,
             num_units=1,
             base=charm_base,
         ),
-        ops_test.model.deploy(
-            str(slurmrestd),
+        build_and_deploy_charm(
+            ops_test,
+            slurmrestd_charm,
             application_name=SLURMRESTD,
-            channel="edge" if isinstance(slurmrestd, str) else None,
             num_units=1,
             base=charm_base,
         ),
-        ops_test.model.deploy(
-            str(sackd),
+        build_and_deploy_charm(
+            ops_test,
+            sackd_charm,
             application_name=SACKD,
-            channel="edge" if isinstance(sackd, str) else None,
             num_units=1,
             base=charm_base,
         ),
