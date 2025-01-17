@@ -16,6 +16,7 @@ from ops import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
+    MaintenanceStatus,
     StoredState,
     UpdateStatusEvent,
     WaitingStatus,
@@ -82,12 +83,17 @@ class SlurmdCharm(CharmBase):
         # running kernel pending replacement by a newer version on reboot.
         self._reboot_if_required(now=True)
 
-        self.unit.status = WaitingStatus("installing slurmd")
+        self.unit.status = MaintenanceStatus("installing slurmd")
 
         try:
             self._slurmd.install()
+
+            self.unit.status = MaintenanceStatus("installing nhc")
             nhc.install()
+
+            self.unit.status = MaintenanceStatus("auto-detecting GPUs")
             gpu.autoinstall()
+
             self.unit.set_workload_version(self._slurmd.version())
             # TODO: https://github.com/orgs/charmed-hpc/discussions/10 -
             #  Evaluate if we should continue doing the service override here
