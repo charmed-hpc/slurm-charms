@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,13 @@ jobs:
         uses: canonical/setup-lxd@v0.1.2
         with:
           channel: 5.21/stable
+      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
+      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
+      #   when accessing the charmcraft build cache in parallel builds.
+      - name: Install charmcraft 3.2.3
+        run: |
+          sudo snap install charmcraft --classic --revision=5858
+          sudo snap refresh charmcraft --hold
       - name: Upload charm to Charmhub
         uses: canonical/charming-actions/upload-charm@2.5.0-rc
         with:

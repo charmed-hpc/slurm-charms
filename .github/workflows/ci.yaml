@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -87,6 +87,13 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
-          juju-channel: 3.4/stable
+          juju-channel: 3.6/stable
+      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
+      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
+      #   when accessing the charmcraft build cache in parallel builds.
+      - name: Revert to charmcraft 3.2.3
+        run: |
+          sudo snap refresh charmcraft --revision=5858
+          sudo snap refresh charmcraft --hold
       - name: Run tests
         run: tox run -e integration -- --charm-base=${{ matrix.bases }}
