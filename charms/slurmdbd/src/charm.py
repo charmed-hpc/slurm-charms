@@ -205,6 +205,7 @@ class SlurmdbdCharm(CharmBase):
     def _on_slurmctld_unavailable(self, _: SlurmctldUnavailableEvent) -> None:
         """Reset state and charm status when slurmctld broken."""
         self._stored.slurmctld_available = False
+        self._slurmdbd.service.disable()
         self._check_status()
 
     def _write_config_and_restart_slurmdbd(
@@ -250,6 +251,7 @@ class SlurmdbdCharm(CharmBase):
 
             self._slurmdbd.service.disable()
             self._slurmdbd.config.dump(slurmdbd_config)
+            self._slurmdbd.service.enable()
 
             # At this point, we must guarantee that slurmdbd is correctly
             # initialized. Its startup might take a while, so we have to wait
