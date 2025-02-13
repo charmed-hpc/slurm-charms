@@ -8,6 +8,10 @@ dbus-fast>=1.90.2
 pyfakefs==5.7.1
 nvidia-ml-py==12.560.30
 
+# Slurmctld/Influxdb
+influxdb==5.3.2
+netifaces-plus==0.12.4
+
 # `cos` dependencies
 cosl
 pydantic

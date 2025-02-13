@@ -10,7 +10,7 @@ CHARM_MAINTAINED_PARAMETERS = {
     "AuthInfo": {"socket": "/var/run/munge/munge.socket.2"},
     "SlurmUser": "slurm",
     "PluginDir": ["/usr/lib/x86_64-linux-gnu/slurm-wlm"],
-    "PidFile": "/var/run/slurmdbd.pid",
+    "PidFile": "/var/run/slurmdbd/slurmdbd.pid",
     "LogFile": "/var/log/slurm/slurmdbd.log",
     "StorageType": "accounting_storage/mysql",
 }

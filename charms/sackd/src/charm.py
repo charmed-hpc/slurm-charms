@@ -57,8 +57,11 @@ class SackdCharm(CharmBase):
 
         try:
             self._sackd.install()
-            # Ensure sackd does not start before relation established
-            self._sackd.service.enable()
+            # Note: sackd is enabled and started by default following
+            #       installation via apt.
+            #
+            # Ensure sackd does not start before relation established.
+            self._sackd.service.stop()
             self.unit.set_workload_version(self._sackd.version())
             self._stored.sackd_installed = True
         except SlurmOpsError as e:
@@ -99,13 +102,15 @@ class SackdCharm(CharmBase):
 
         # Restart sackd after we write event data to respective locations.
         self._sackd.munge.service.restart()  # TODO change this once auth/slurm in place
-        if self._sackd.service.active():
-            self._sackd.service.restart()
-        else:
-            self._sackd.service.start()
+        try:
+            if self._sackd.service.active():
+                self._sackd.service.restart()
+            else:
+                self._sackd.service.start()
+        except SlurmOpsError as e:
+            logger.debug(e)
 
-        if self._check_status():
-            self.unit.status = ActiveStatus()
+        self._check_status()
 
     def _on_slurmctld_unavailable(self, _) -> None:
         """Stop sackd and set slurmctld_available = False when we lose slurmctld."""
@@ -116,7 +121,7 @@ class SackdCharm(CharmBase):
         self._sackd.service.disable()
         self._check_status()
 
-    def _check_status(self) -> bool:
+    def _check_status(self) -> None:
         """Check if we have all needed components.
 
         - sackd installed
@@ -127,17 +132,21 @@ class SackdCharm(CharmBase):
             self.unit.status = BlockedStatus(
                 "failed to install sackd. see logs for further details"
             )
-            return False
+            return
 
         if self._slurmctld.is_joined is not True:
             self.unit.status = BlockedStatus("Need relations: slurmctld")
-            return False
+            return
 
         if self._stored.slurmctld_available is not True:
             self.unit.status = WaitingStatus("Waiting on: slurmctld")
-            return False
+            return
 
-        return True
+        if not self._sackd.service.active():
+            self.unit.status = WaitingStatus("Waiting for sackd service to start....")
+            return
+
+        self.unit.status = ActiveStatus()
 
 
 if __name__ == "__main__":  # pragma: nocover

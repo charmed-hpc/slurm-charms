@@ -37,7 +37,7 @@ class TestCharm(TestCase):
         """Test install success behavior."""
         with self.ctx(self.ctx.on.install(), State()) as manager:
             manager.charm._sackd.install = Mock()
-            manager.charm._sackd.service.enable = Mock()
+            manager.charm._sackd.service.stop = Mock()
             manager.charm._sackd.version = Mock(return_value="24.05.2-1")
             manager.run()
             self.assertTrue(manager.charm._stored.sackd_installed)
@@ -67,11 +67,11 @@ class TestCharm(TestCase):
         with self.ctx(self.ctx.on.update_status(), State()) as manager:
             manager.charm._stored.sackd_installed = True
             manager.charm._stored.slurmctld_available = True
+            manager.charm._sackd.service.active = Mock(return_value=True)
             manager.charm.unit.status = ActiveStatus()
             manager.run()
             # ActiveStatus is the expected value when _check_status does not
             # modify the current state of the unit and should return True.
-            self.assertTrue(manager.charm._check_status())
             self.assertEqual(manager.charm.unit.status, ActiveStatus())
 
     def test_update_status_install_fail(self) -> None:

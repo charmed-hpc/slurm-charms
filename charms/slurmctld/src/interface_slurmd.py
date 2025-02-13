@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from ops import (
     EventBase,
@@ -286,3 +286,16 @@ class Slurmd(Object):
                             gres_info[node_name] = gres
 
         return gres_info
+
+    def get_active_nodes(self) -> List:
+        """Get active nodes."""
+        nodes = []
+        if relations := self.framework.model.relations.get(self._relation_name):
+            for relation in relations:
+                for unit in relation.units:
+                    if node := self._get_node_from_relation(relation, unit):
+                        # Check that the data we expect to exist, exists.
+                        if node_config := node.get("node_parameters"):
+                            # Get the NodeName and append to the partition nodes
+                            nodes.append(node_config["NodeName"])
+        return nodes

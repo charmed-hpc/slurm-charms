@@ -239,6 +239,10 @@ class _ConfigManager(ABC):
         self._user = user
         self._group = group
 
+    @property
+    def path(self) -> Path:
+        """Return the config file path."""
+
     @abstractmethod
     def load(self) -> BaseModel:
         """Load the current configuration from the configuration file."""
@@ -260,6 +264,11 @@ class _ConfigManager(ABC):
 
 class _AcctGatherConfigManager(_ConfigManager):
     """Manage the `acct_gather.conf` configuration file."""
+
+    @property
+    def path(self) -> Path:
+        """Return the config file path."""
+        return Path(self._config_path)
 
     def load(self) -> AcctGatherConfig:
         """Load the current `acct_gather.conf` configuration file."""
@@ -773,6 +782,23 @@ class _AptManager(_OpsManager):
                     )
                 )
 
+                sackd_restart_override = Path(
+                    "/etc/systemd/system/sackd.service.d/20-sackd-restart.conf"
+                )
+                sackd_restart_override.parent.mkdir(exist_ok=True, parents=True)
+                sackd_restart_override.write_text(
+                    textwrap.dedent(
+                        """
+                        [Unit]
+                        StartLimitIntervalSec=120
+                        StartLimitBurst=10
+                        [Service]
+                        Restart=on-failure
+                        RestartSec=10
+                        """
+                    )
+                )
+
                 # TODO: https://github.com/charmed-hpc/hpc-libs/issues/54 -
                 #   Make `sackd` create its service environment file so that we
                 #   aren't required to manually create it here.
@@ -800,7 +826,7 @@ class _AptManager(_OpsManager):
                 self._set_ulimit()
 
                 nofile_override = Path(
-                    "/etc/systemd/system/slurmctld.service.d/10-slurmd-nofile.conf"
+                    "/etc/systemd/system/slurmd.service.d/10-slurmd-nofile.conf"
                 )
                 nofile_override.parent.mkdir(exist_ok=True, parents=True)
                 nofile_override.write_text(
@@ -823,6 +849,23 @@ class _AptManager(_OpsManager):
                         [Service]
                         ExecStart=
                         ExecStart=/usr/bin/sh -c "/usr/sbin/slurmd -D -s $${SLURMD_CONFIG_SERVER:+--conf-server $$SLURMD_CONFIG_SERVER} $$SLURMD_OPTIONS"
+                        """
+                    )
+                )
+
+                restart_override = Path(
+                    "/etc/systemd/system/slurmd.service.d/30-slurmd-restart.conf"
+                )
+                restart_override.parent.mkdir(exist_ok=True, parents=True)
+                restart_override.write_text(
+                    textwrap.dedent(
+                        """
+                        [Unit]
+                        StartLimitIntervalSec=120
+                        StartLimitBurst=10
+                        [Service]
+                        Restart=on-failure
+                        RestartSec=10
                         """
                     )
                 )
@@ -889,6 +932,24 @@ class _AptManager(_OpsManager):
                         """
                     )
                 )
+
+            case "slurmdbd":
+                _logger.debug("Creating slurmdbd service override.")
+                slurmdbd_service_override = Path(
+                    "/etc/systemd/system/slurmdbd.service.d/10-slurmdbd-exec-pre-pid.conf"
+                )
+                slurmdbd_service_override.parent.mkdir(exist_ok=True, parents=True)
+                slurmdbd_service_override.write_text(
+                    textwrap.dedent(
+                        """
+                        [Service]
+                        PermissionsStartOnly=True
+                        RuntimeDirectory=slurmdbd
+                        RuntimeDirectoryMode=0755   
+                        PIDFile=/var/run/slurmdbd/slurmdbd.pid
+                        """
+                    )
+                )
             case _:
                 _logger.debug("'%s' does not require any overrides", self._service_name)
 
@@ -912,6 +973,11 @@ class _JWTKeyManager:
     def get(self) -> str:
         """Get the current jwt key."""
         return self._keyfile.read_text()
+
+    @property
+    def path(self) -> Path:
+        """Get the current jwt key Path."""
+        return self._keyfile
 
     def set(self, key: str) -> None:
         """Set a new jwt key."""

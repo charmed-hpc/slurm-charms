@@ -204,7 +204,6 @@ class SlurmdbdCharm(CharmBase):
 
     def _on_slurmctld_unavailable(self, _: SlurmctldUnavailableEvent) -> None:
         """Reset state and charm status when slurmctld broken."""
-        self._stored.slurmctld_available = False
         self._check_status()
 
     def _write_config_and_restart_slurmdbd(
@@ -242,11 +241,11 @@ class SlurmdbdCharm(CharmBase):
                 **self._get_user_supplied_parameters(),
             )
 
-            if self._slurmctld.is_joined:
+            # Check that slurmctld is joined and that we have the
+            # jwt_key.
+            if self._slurmctld.is_joined and self._slurmdbd.jwt.path.exists():
                 slurmdbd_config.auth_alt_types = ["auth/jwt"]
-                slurmdbd_config.auth_alt_parameters = {
-                    "jwt_key": "/var/lib/slurm/checkpoint/jwt_hs256.key"
-                }
+                slurmdbd_config.auth_alt_parameters = {"jwt_key": self._slurmdbd.jwt.get()}
 
             self._slurmdbd.service.stop()
             self._slurmdbd.config.dump(slurmdbd_config)
@@ -318,6 +317,12 @@ class SlurmdbdCharm(CharmBase):
 
         if self._stored.db_info == {}:
             self.unit.status = WaitingStatus("Waiting on: MySQL")
+            return False
+
+        # Account for the case where slurmctld relation has joined
+        # but slurmctld hasn't sent the key data yet.
+        if self._slurmctld.is_joined and not self._slurmdbd.jwt.path.exists():
+            self.unit.status = WaitingStatus("Waiting on: data from slurmctld...")
             return False
 
         self.unit.status = ActiveStatus()

@@ -30,6 +30,7 @@ SLURMDBD = "slurmdbd"
 SLURMRESTD = "slurmrestd"
 SACKD = "sackd"
 DATABASE = "mysql"
+INFLUXDB = "influxdb"
 ROUTER = "mysql-router"
 SLURM_APPS = [SLURMCTLD, SLURMD, SLURMDBD, SLURMRESTD, SACKD]
 
@@ -105,6 +106,13 @@ async def test_build_and_deploy_against_edge(
             num_units=1,
             base="ubuntu@22.04",
         ),
+        ops_test.model.deploy(
+            INFLUXDB,
+            application_name=INFLUXDB,
+            channel="latest/stable",
+            num_units=1,
+            base="ubuntu@20.04",
+        ),
     )
     # Set integrations for charmed applications.
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMD}", f"{SLURMD}:{SLURMCTLD}")
@@ -113,10 +121,13 @@ async def test_build_and_deploy_against_edge(
     await ops_test.model.integrate(f"{SLURMCTLD}:login-node", f"{SACKD}:{SLURMCTLD}")
     # await ops_test.model.integrate(f"{SLURMDBD}-{ROUTER}:backend-database", f"{DATABASE}:database")
     await ops_test.model.integrate(f"{SLURMDBD}:database", f"{DATABASE}:database")
+    await ops_test.model.integrate(f"{SLURMCTLD}:influxdb", f"{INFLUXDB}:query")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=SLURM_APPS, status="active", timeout=1000)
-        for app in SLURM_APPS:
+        await ops_test.model.wait_for_idle(
+            apps=SLURM_APPS + [INFLUXDB], status="active", timeout=1000
+        )
+        for app in SLURM_APPS + [INFLUXDB]:
             assert ops_test.model.applications[app].units[0].workload_status == "active"
 
 
@@ -261,3 +272,23 @@ async def test_job_submission_works(ops_test: OpsTest) -> None:
     sackd_unit = ops_test.model.applications[SACKD].units[0]
     res_from_slurm_job = await sackd_unit.ssh("srun -pslurmd hostname -s")
     assert res_from_ssh == res_from_slurm_job
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.order(10)
+@tenacity.retry(
+    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
+    stop=tenacity.stop_after_attempt(3),
+    reraise=True,
+)
+async def test_task_accounting_works(ops_test: OpsTest) -> None:
+    """Test that influxdb is recording task level info."""
+    logger.info("Test that influxdb is recording task level info.")
+    sackd_unit = ops_test.model.applications[SACKD].units[0]
+    _ = await sackd_unit.scp_to(
+        "tests/integration/assets/sbatch_sleep_job.sh", "/home/ubuntu/sbatch_sleep_job.sh"
+    )
+    _ = await sackd_unit.ssh("sbatch /home/ubuntu/sbatch_sleep_job.sh")
+    res = await sackd_unit.ssh("sstat 2 --format=NTasks --noheader | awk '{print $1}'")
+    # Validate that sstat shows 1 task running
+    assert int(res) == 1

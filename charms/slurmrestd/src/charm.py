@@ -76,7 +76,6 @@ class SlurmrestdCharm(CharmBase):
         if (event.munge_key is not None) and (event.slurm_conf is not None):
             self._slurmrestd.munge.key.set(event.munge_key)
             self._slurmrestd.config.dump(SlurmConfig.from_str(event.slurm_conf))
-            self._slurmrestd.munge.service.restart()
 
             self._stored.slurmctld_relation_data_available = True
 

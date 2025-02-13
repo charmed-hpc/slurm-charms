@@ -5,6 +5,8 @@
 
 PEER_RELATION = "slurmctld-peer"
 
+CLUSTER_NAME_PREFIX = "charmed-hpc"
+
 CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS = {
     "ConstrainCores": "yes",
     "ConstrainDevices": "yes",

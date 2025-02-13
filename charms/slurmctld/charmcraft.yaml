@@ -32,6 +32,8 @@ requires:
     interface: slurmrestd
   login-node:
     interface: sackd
+  influxdb:
+    interface: influxdb-api
 
 provides:
   cos-agent:
@@ -61,7 +63,7 @@ config:
   options:
     cluster-name:
       type: string
-      default: "osd-cluster"
+      default: ""
       description: |
         Name to be recorded in database for jobs from this cluster.
 

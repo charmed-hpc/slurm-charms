@@ -18,6 +18,7 @@
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmctldCharm
+from interface_slurmctld_peer import SlurmctldPeerError
 from ops.model import BlockedStatus
 from ops.testing import Harness
 from pyfakefs.fake_filesystem_unittest import TestCase
@@ -33,13 +34,77 @@ class TestCharm(TestCase):
         self.setUpPyfakefs()
         self.harness.begin()
 
-    def test_cluster_name(self) -> None:
-        """Test that the _cluster_name property works."""
-        self.assertEqual(self.harness.charm._cluster_name, "osd-cluster")
+    def test_slurmctld_peer_exception_when_setting_cluster_name_fails_due_to_no_relation(
+        self,
+    ) -> None:
+        """Test that the the slurmctld-peer exception is raised when setting cluster_name fails due to non-existent relation.
 
-    def test_cluster_info(self) -> None:
-        """Test the cluster_info property works."""
-        self.assertEqual(type(self.harness.charm._cluster_name), str)
+        The slurmctld-peer relation isn't available until after the install hook event completes.
+        This test checks that the appropriate error is raised, when the cluster_name is set, but no peer-relation is available.
+        """
+        self.harness.set_leader(True)
+        with self.assertRaises(SlurmctldPeerError):
+            self.harness.charm._slurmctld_peer.cluster_name = "thisshouldfail"
+
+    @patch("charm.SlurmctldCharm._on_install")
+    @patch("ops.framework.EventBase.defer")
+    def test_start_hook_defers_if_setting_cluster_name_fails(self, defer, *_) -> None:
+        """Test that the start event defers if setting cluster_name fails when no relation exists.
+
+        This test checks that event.defer() is called, and charm unit status is Blocked
+        when the cluster_name is set, but no peer-relation is available.
+
+        The slurmctld-peer relation isn't available until after the install hook event completes,
+        so in theory, the peer-relation *should* always be available by the start hook event executes
+        and thus, this case *should* never happen. This code tests that the appropriate action is taken
+        in the unusual case that the peer-relation isn't made by the time the start hook executes.
+        """
+        self.harness.set_leader(True)
+
+        # Do not add the peer-relation
+        # self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
+
+        self.harness.update_config({"cluster-name": "osd-cluster"})
+        self.harness.charm.on.start.emit()
+
+        defer.assert_called()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus("`slurmctld-peer` relation not available yet, cannot set cluster_name."),
+        )
+
+    @patch("charm.SlurmctldCharm._on_install")
+    @patch("charm.SlurmctldCharm._on_start")
+    def test_slurmctld_peer_exception_raised_when_setting_cluster_name_as_non_leader(
+        self, *_
+    ) -> None:
+        """Test that the exception is raised when attempting to set the cluster_name as a non-leader."""
+        self.harness.set_leader(False)
+        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
+        self.harness.update_config({"cluster-name": "osd-cluster"})
+        with self.assertRaises(SlurmctldPeerError):
+            self.harness.charm._slurmctld_peer.cluster_name = "thisshouldfail"
+
+    @patch("charm.SlurmctldCharm._on_write_slurm_conf")
+    @patch("charm.SlurmctldCharm._on_install")
+    def test_cluster_name(self, *_) -> None:
+        """Test that the _cluster_name property works."""
+        self.harness.set_leader(True)
+        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
+        self.harness.update_config({"cluster-name": "osd-cluster"})
+        self.harness.charm.on.start.emit()
+        self.assertEqual(self.harness.charm.cluster_name, "osd-cluster")
+
+    @patch("charm.SlurmctldCharm._on_write_slurm_conf")
+    @patch("charm.SlurmctldCharm._on_install")
+    def test_cluster_name_type(self, *_) -> None:
+        """Test the cluster_name is indeed a string."""
+        self.harness.set_leader(True)
+        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
+        self.harness.update_config({"cluster-name": "osd-cluster"})
+        self.harness.charm.on.start.emit()
+        self.assertEqual(type(self.harness.charm.cluster_name), str)
 
     def test_is_slurm_installed(self) -> None:
         """Test that the is_slurm_installed method works."""
@@ -94,6 +159,7 @@ class TestCharm(TestCase):
             side_effect=SlurmOpsError("failed to install slurmctld")
         )
         self.harness.charm.on.install.emit()
+        self.harness.charm.on.update_status.emit()
 
         defer.assert_called()
         self.assertEqual(
