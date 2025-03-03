@@ -194,6 +194,13 @@ def clean_charm(
     """
     logger.debug(f"Removing {charm.build_path}")
     if not dry_run:
+        try:
+            subprocess.run(["charmcraft", "clean"], cwd=charm.build_path, check=True)
+        except FileNotFoundError as e:
+            logger.info("ignoring charm %s which is not staged", charm.path.name)
+        except subprocess.CalledProcessError as e:
+            logger.warning("`charmcraft clean` failed for charm %s. cause: %s", charm.path.name, e)
+            logger.warning("some LXD instances may remain on the system")
         shutil.rmtree(charm.build_path, ignore_errors=True)
         charm.charm_path.unlink(missing_ok=True)
 

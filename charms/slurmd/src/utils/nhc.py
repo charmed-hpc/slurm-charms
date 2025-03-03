@@ -22,25 +22,39 @@ from pathlib import Path
 
 from constants import NHC_CONFIG
 
+import charms.operator_libs_linux.v0.apt as apt
+
 _logger = logging.getLogger(__name__)
 
 
-class Error(Exception):
-    """Exception raised when a nhc operation failed."""
+class NHCOpsError(Exception):
+    """Exception raised when a NHC operation failed."""
+
+    @property
+    def message(self) -> str:
+        """Return message passed as argument to exception."""
+        return self.args[0]
 
 
 def install() -> None:
-    """Install nhc on compute node.
+    """Install NHC on compute node.
 
     Raises:
-        subprocess.CalledProcessError: Raised if error is encountered during nhc install.
+        subprocess.CalledProcessError: Raised if error is encountered during NHC install.
     """
-    _logger.info("installing node health check (nhc)")
+    _logger.info("installing required packages to install Node Health Check (NHC)")
+
+    try:
+        apt.add_package("make")
+    except (apt.PackageNotFoundError, apt.PackageError) as e:
+        raise NHCOpsError(f"failed to install package `make`. reason: {e}")
+
+    _logger.info("installing NHC")
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             env = {"LC_ALL": "C", "LANG": "C.UTF-8"}
 
-            _logger.info("extracting nhc tarball")
+            _logger.info("extracting NHC tarball")
             r = subprocess.check_output(
                 [
                     "tar",
@@ -57,7 +71,7 @@ def install() -> None:
             )
             _logger.debug(r)
 
-            _logger.info("building nhc with autotools")
+            _logger.info("building NHC with autotools")
             r = subprocess.check_output(
                 ["./autogen.sh", "--prefix=/usr", "--sysconfdir=/etc", "--libexecdir=/usr/lib"],
                 cwd=tmpdir,
@@ -67,22 +81,22 @@ def install() -> None:
             )
             _logger.debug(r)
 
-            _logger.info("testing nhc build")
+            _logger.info("testing NHC build")
             r = subprocess.check_output(
                 ["make", "test"], cwd=tmpdir, env=env, stderr=subprocess.STDOUT, text=True
             )
             _logger.debug(r)
 
-            _logger.info("installing nhc")
+            _logger.info("installing NHC")
             r = subprocess.check_output(
                 ["make", "install"], cwd=tmpdir, env=env, stderr=subprocess.STDOUT, text=True
             )
             _logger.debug(r)
         except subprocess.CalledProcessError as e:
-            _logger.error("failed to install nhc. reason: %s", e)
+            _logger.error("failed to install NHC. reason: %s", e)
             raise
 
-    # Write the nhc.conf following nhc installation.
+    # Write the nhc.conf following NHC installation.
     generate_config()
 
 
