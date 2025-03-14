@@ -128,8 +128,12 @@ class SlurmctldCharm(CharmBase):
                 self._slurmctld.munge.service.restart()
                 self._slurmctld.service.enable()
 
+                self._slurmctld.exporter.args = [
+                    "-slurm.collect-diags",
+                    "-slurm.collect-limits",
+                ]
                 self._slurmctld.exporter.service.enable()
-                self._slurmctld.exporter.service.start()
+                self._slurmctld.exporter.service.restart()
 
                 self.unit.set_workload_version(self._slurmctld.version())
 

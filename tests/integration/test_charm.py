@@ -171,6 +171,13 @@ async def test_services_are_active(ops_test: OpsTest) -> None:
         res = (await unit.ssh(f"systemctl is-active {app}")).strip("\n")
         assert res == "active"
 
+    logger.info(
+        f"Checking that the prometheus-slurm-exporter service is active inside the {SLURMCTLD} unit."
+    )
+    slurmctld = ops_test.model.applications[SLURMCTLD].units[0]
+    res = (await slurmctld.ssh("systemctl is-active prometheus-slurm-exporter")).strip("\n")
+    assert res == "active"
+
 
 @pytest.mark.abort_on_fail
 @pytest.mark.order(4)

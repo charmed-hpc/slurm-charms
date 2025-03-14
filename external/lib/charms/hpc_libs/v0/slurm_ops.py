@@ -61,12 +61,13 @@ __all__ = [
 
 import logging
 import os
+import shlex
 import shutil
 import socket
 import subprocess
 import textwrap
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -110,7 +111,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 17
+LIBPATCH = 18
 
 # Charm library dependencies to fetch during `charmcraft pack`.
 PYDEPS = [
@@ -1015,7 +1016,26 @@ class _PrometheusExporterManager:
     """Manage `prometheus-slurm-exporter` service operations."""
 
     def __init__(self, ops_manager: _OpsManager) -> None:
-        self.service = ops_manager.service_manager_for(_ServiceType.PROMETHEUS_EXPORTER)
+        self.service: _ServiceManager = ops_manager.service_manager_for(
+            _ServiceType.PROMETHEUS_EXPORTER
+        )
+        self._env_manager: _EnvManager = ops_manager.env_manager_for(
+            _ServiceType.PROMETHEUS_EXPORTER
+        )
+
+    @property
+    def args(self) -> list[str]:
+        """Arguments passed to the `prometheus-slurm-exporter` executable."""
+        props: str = self._env_manager.get("ARGS") or ""
+        return shlex.split(props)
+
+    @args.setter
+    def args(self, args: Iterable[str]) -> None:
+        self._env_manager.set({"ARGS": shlex.join(args)})
+
+    @args.deleter
+    def args(self) -> None:
+        self._env_manager.unset("ARGS")
 
 
 class _SlurmManagerBase:
