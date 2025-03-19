@@ -163,19 +163,19 @@ the Slurm charms:
 
     ```bash
     # Apply formatting standards to code.
-    tox run -e fmt
+    just repo fmt
 
     # Check code against coding style standards.
-    tox run -e lint
+    just repo lint
 
     # Run type checking.
-    tox run -e type
+    just repo typecheck
 
     # Run unit tests.
-    tox run -e unit
+    just repo unit
 
     # Run integration tests.
-    tox run -e integration
+    just repo integration
     ```
 
 5. Commit your changes in logical chunks to your topic branch.

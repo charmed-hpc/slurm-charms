@@ -47,14 +47,14 @@ If you want to learn more about all the things you can do with the Slurm charms,
 
 ## 🛠️ Development
 
-The project uses [tox](tox.wiki) as its command runner, which provides some useful commands that
-will definitely help while hacking on the charms:
+The project uses [just](https://github.com/casey/just) and [uv](https://github.com/astral-sh/uv) for
+development, which provides some useful commands that will definitely help while hacking on the charms:
 
 ```shell
-tox run -e fmt # Apply formatting standards to code.
-tox run -e lint # Check code against coding style standards.
-tox run -e type # Type checking.
-tox run -e unit # Run unit tests.
+just repo fmt # Apply formatting standards to code.
+just repo lint # Check code against coding style standards.
+just repo typecheck # Type checking.
+just repo unit # Run unit tests.
 ```
 
 We also have some integration tests in place, but be aware that it requires a fairly good amount
@@ -62,7 +62,7 @@ of computer resources to run them. We usually test with at least 4 cores and 16 
 free to experiment!
 
 ```shell
-tox run -e integration
+just repo integration
 ```
 
 If you're interested in contributing, take a look at our [contributing guidelines](./CONTRIBUTING.md).
