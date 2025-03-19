@@ -1,0 +1,8 @@
+[project]
+name = "sackd"
+version = "0.0"
+requires-python = "==3.12.*"
+dependencies = ["ops"]
+
+[tool.repository]
+libraries = ["hpc-libs.slurm_ops", "operator-libs-linux.apt"]

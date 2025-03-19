@@ -1,4 +1,0 @@
-ops~=2.19
-slurmutils<1.0.0,>=0.12.0
-nvidia-ml-py==12.560.30
-git+https://github.com/canonical/ubuntu-drivers-common@554b91edfd3699625dbed90f679abb31a897b76e#egg=ubuntu-drivers-common

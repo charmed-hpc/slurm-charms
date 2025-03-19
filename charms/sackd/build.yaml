@@ -1,3 +1,0 @@
-external-libraries:
-  - charms.hpc_libs.v0.slurm_ops
-  - charms.operator_libs_linux.v0.apt

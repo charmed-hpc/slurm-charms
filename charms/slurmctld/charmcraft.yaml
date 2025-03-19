@@ -18,10 +18,10 @@ links:
   contact: https://matrix.to/#/#hpc:ubuntu.com
 
   issues:
-  - https://github.com/charmed-hpc/slurm-charms/issues
+    - https://github.com/charmed-hpc/slurm-charms/issues
 
   source:
-  - https://github.com/charmed-hpc/slurm-charms
+    - https://github.com/charmed-hpc/slurm-charms
 
 requires:
   slurmd:

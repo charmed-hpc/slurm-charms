@@ -11,6 +11,72 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+[project]
+name = "slurm-charms"
+version = "0.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "ops ~= 2.19",
+    "slurmutils<1.0.0,>=0.11.0",
+    "influxdb==5.3.2",
+    "netifaces-plus==0.12.4",
+    "nvidia-ml-py==12.560.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Tests
+    "ops[testing]~=2.19",
+    "cryptography~=43.0.1",
+    "distro==1.9.0",
+    "python-dotenv~=1.0.1",
+    "pycryptodome==3.20.0",
+    "dbus-fast>=1.90.2",
+    "pyfakefs==5.7.1",
+    "coverage[toml]",
+
+    # Integration
+    "juju ~= 3.3",
+    "pytest ~= 7.2",
+    "pytest-operator ~= 0.34",
+    "pytest-order ~= 1.1",
+    "tenacity ~= 8.2",
+
+    # Linting
+    "ruff",
+    "codespell",
+    "pyright",
+
+    # `cos` dependencies
+    "cosl",
+    "pydantic",
+
+    # TiCS scan dependencies
+    "flake8",
+    "pylint",
+    "pytest",
+    "pyyaml",
+]
+
+[tool.uv.workspace]
+members = ["charms/*"]
+
+[tool.uv.sources]
+ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
+
+[tool.uv]
+dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
+
+[tool.repository]
+external-libraries = [
+    { lib = "hpc-libs.slurm_ops", version = "0.18" },
+    { lib = "hpc-libs.is_container", version = "0.1" },
+    { lib = "operator-libs-linux.apt", version = "0.16" },
+    { lib = "operator-libs-linux.systemd", version = "1.4" },
+    { lib = "operator-libs-linux.juju_systemd_notices", version = "0.2" },
+    { lib = "data-platform-libs.data_interfaces", version = "0.41" },
+    { lib = "grafana-agent.cos_agent", version = "0.20" },
+]
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -18,6 +84,9 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.coverage.paths]
+source = ["charms", "*/_build"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -50,8 +119,14 @@ lint.extend-ignore = [
     "D413",
 ]
 lint.ignore = ["E501", "D107"]
+lint.per-file-ignores = { "**/tests/*" = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+] }
 extend-exclude = ["__pycache__", "*.egg_info"]
-lint.per-file-ignores = {"**/tests/*" = ["D100","D101","D102","D103","D104"]}
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
