@@ -44,21 +44,22 @@ jobs:
       - name: Select Charmhub channel
         uses: canonical/charming-actions/channel@2.5.0-rc
         id: channel
-      - name: Install tox
-        run: pipx install tox
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.38.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 0.5.8
+      - name: Install Charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Stage charm
-        run: tox run -e stage -- ${{ matrix.charm }} --clean
+        run: just repo stage ${{ matrix.charm }} --clean
       - name: Setup LXD
         uses: canonical/setup-lxd@v0.1.2
         with:
           channel: 5.21/stable
-      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
-      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
-      #   when accessing the charmcraft build cache in parallel builds.
-      - name: Install charmcraft 3.2.3
-        run: |
-          sudo snap install charmcraft --classic --revision=5858
-          sudo snap refresh charmcraft --hold
       - name: Upload charm to Charmhub
         uses: canonical/charming-actions/upload-charm@2.5.0-rc
         with:

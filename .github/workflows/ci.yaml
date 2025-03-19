@@ -38,10 +38,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install dependencies
-        run: pipx install tox
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.38.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 0.5.8
+      - name: Install Charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Run linters
-        run: tox run -e lint
+        run: just repo lint
 
   unit-test:
     name: Unit tests
@@ -49,10 +57,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install dependencies
-        run: pipx install tox
-      - name: Run tests
-        run: tox run -e unit
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.38.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 0.5.8
+      - name: Install Charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
+      - name: Run unit tests
+        run: just repo unit
 
   type-check:
     name: Static type checking
@@ -60,10 +76,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install dependencies
-        run: pipx install tox
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.38.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 0.5.8
+      - name: Install Charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Run tests
-        run: tox run -e type
+        run: just repo typecheck
 
   integration-test:
     strategy:
@@ -87,19 +111,18 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install dependencies
-        run: pipx install tox
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.38.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 0.5.8
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
           juju-channel: 3.6/stable
-      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
-      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
-      #   when accessing the charmcraft build cache in parallel builds.
-      - name: Revert to charmcraft 3.2.3
-        run: |
-          sudo snap refresh charmcraft --revision=5858
-          sudo snap refresh charmcraft --hold
       - name: Run tests
-        run: tox run -e integration -- --charm-base=${{ matrix.bases }}
+        run: just repo integration -- --charm-base=${{ matrix.bases }}
