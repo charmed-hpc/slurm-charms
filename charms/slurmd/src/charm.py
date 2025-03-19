@@ -393,7 +393,9 @@ class SlurmdCharm(CharmBase):
 
     def get_partition(self) -> Dict[Any, Any]:
         """Return the partition."""
-        partition = {self.app.name: {**{"State": "UP"}, **self._stored.user_supplied_partition_parameters}}  # type: ignore[dict-item]
+        partition = {
+            self.app.name: {**{"State": "UP"}, **self._stored.user_supplied_partition_parameters}
+        }  # type: ignore[dict-item]
         logger.debug(f"partition={partition}")
         return partition
 

@@ -130,7 +130,6 @@ class Slurmd(Object):
         if unit := event.unit:
             unit_data = event.relation.data[unit]
             if node_json := unit_data.get("node"):
-
                 try:
                     node = json.loads(node_json)
                 except json.JSONDecodeError as e:
@@ -214,7 +213,6 @@ class Slurmd(Object):
 
         if relations := self.framework.model.relations.get(self._relation_name):
             for relation in relations:
-
                 partition_as_dict = self._get_partition_from_relation(relation)
                 # Account for the case where multiple slurmd applications relate at the same time.
                 # This eliminates the possibility of iterating over relations for joined slurmd
@@ -226,15 +224,11 @@ class Slurmd(Object):
                 # Iterate over partition_as_dict.items() as a convenience to get the partition_name
                 # and partition_parameters without having to find the key name and then index.
                 for partition_name, partition_parameters in partition_as_dict.items():
-
                     partition_nodes = []
                     for unit in relation.units:
-
                         if node := self._get_node_from_relation(relation, unit):
-
                             # Check that the data we expect to exist, exists.
                             if node_config := node.get("node_parameters"):
-
                                 # Get the NodeName and append to the partition nodes
                                 node_name = node_config["NodeName"]
                                 partition_nodes.append(node_name)
@@ -272,13 +266,11 @@ class Slurmd(Object):
         if relations := self.framework.model.relations.get(self._relation_name):
             for relation in relations:
                 for unit in relation.units:
-
                     if node := self._get_node_from_relation(relation, unit):
                         # Ignore nodes without GRES devices
                         if (gres := node.get("gres")) and (
                             node_config := node.get("node_parameters")
                         ):
-
                             node_name = node_config["NodeName"]
                             # Add NodeName to each GRES device to match the format required by slurmutils.
                             for device in gres:

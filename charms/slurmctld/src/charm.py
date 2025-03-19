@@ -481,7 +481,7 @@ class SlurmctldCharm(CharmBase):
             if self._slurmrestd.is_joined is not False and self._stored.slurmdbd_host != "":
                 self._slurmrestd.set_slurm_config_on_app_relation_data(str(slurm_config))
         else:
-            logger.debug("## Should write slurm.conf, but we don't have it. " "Deferring.")
+            logger.debug("## Should write slurm.conf, but we don't have it. Deferring.")
             event.defer()
 
     def _assemble_profiling_params(self) -> Dict[Any, Any]:

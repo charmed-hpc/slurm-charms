@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """SlurmctldPeer."""
+
 import logging
 from typing import Optional
 

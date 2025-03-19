@@ -53,7 +53,7 @@ def override_service() -> None:
 
             [Service]
             Type=forking
-            Environment="PYTHONPATH={Path.cwd() / 'lib'}"
+            Environment="PYTHONPATH={Path.cwd() / "lib"}"
             ExecStart=
             ExecStart=/usr/bin/python3 {__file__}
             LimitMEMLOCK=infinity

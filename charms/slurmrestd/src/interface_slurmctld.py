@@ -75,7 +75,6 @@ class Slurmctld(Object):
         """Get the munge key and slurm_conf from slurmctld on relation changed."""
         if app := event.app:
             if event_app_data := event.relation.data.get(app):
-
                 munge_key = event_app_data.get("munge_key")
                 slurm_conf = event_app_data.get("slurm_conf")
 

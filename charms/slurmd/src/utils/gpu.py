@@ -60,7 +60,6 @@ class GPUDriverDetector:
         # Gather list of driver and kernel modules to install.
         install_packages = []
         for driver_package in packages:
-
             # Ignore drivers that are not recommended
             if packages[driver_package].get("recommended"):
                 # Retrieve metapackage for this driver,

@@ -27,7 +27,6 @@ from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
 class TestCharm(TestCase):
-
     def setUp(self):
         self.harness = Harness(SlurmctldCharm)
         self.addCleanup(self.harness.cleanup)

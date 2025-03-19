@@ -114,7 +114,6 @@ class InfluxDB(Object):
                 if unit := event.unit:
                     logger.debug(f"Influxdb unit: {unit}")
                     if (unit_data := event.relation.data.get(unit)) is not None:
-
                         admin_info = {"host": "", "port": "", "user": "", "password": ""}
                         if host := unit_data.get("ingress-address"):
                             admin_info["host"] = host
@@ -126,7 +125,6 @@ class InfluxDB(Object):
                             admin_info["password"] = password
 
                         if all(admin_info.values()):
-
                             app_data["influxdb_admin_info"] = json.dumps(admin_info)
 
                             # Influxdb client
@@ -212,7 +210,6 @@ class InfluxDB(Object):
                 influxdb_admin_info = app_data.get("influxdb_admin_info", "")
 
                 if influxdb_admin_info != "":
-
                     admin_info = json.loads(influxdb_admin_info)
                     try:
                         client = influxdb.InfluxDBClient(
