@@ -1,4 +1,5 @@
 venv/
+.venv
 build/
 *.charm
 .tox/
@@ -15,3 +16,4 @@ cover
 .terraform
 .terraform.lock.hcl
 *.tfstate*
+external

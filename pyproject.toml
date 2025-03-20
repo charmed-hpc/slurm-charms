@@ -94,7 +94,7 @@ log_cli_level = "INFO"
 
 # Spell checking tools configuration
 [tool.codespell]
-skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.vscode,.coverage"
+skip = "_build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.pytest_cache,.vscode,.coverage,.venv,cover"
 
 # Formatting tools configuration
 [tool.black]
