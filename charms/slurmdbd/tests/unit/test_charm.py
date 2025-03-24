@@ -18,11 +18,10 @@
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmdbdCharm
+from hpc_libs.slurm_ops import SlurmOpsError
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
 from pyfakefs.fake_filesystem_unittest import TestCase
-
-from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
 class TestCharm(TestCase):
@@ -32,7 +31,7 @@ class TestCharm(TestCase):
         self.setUpPyfakefs()
         self.harness.begin()
 
-    @patch("charms.hpc_libs.v0.slurm_ops._SystemctlServiceManager.enable")
+    @patch("hpc_libs.slurm_ops._SystemctlServiceManager.enable")
     def test_install_success(self, *_) -> None:
         """Test `InstallEvent` hook success."""
         self.harness.set_leader(True)
@@ -121,9 +120,7 @@ class TestCharm(TestCase):
         )
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch(
-        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
-    )
+    @patch("hpc_libs.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock)
     def test_on_database_created_socket_endpoints(
         self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -145,9 +142,7 @@ class TestCharm(TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch(
-        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
-    )
+    @patch("hpc_libs.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock)
     def test_on_database_created_socket_multiple_endpoints(
         self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -170,9 +165,7 @@ class TestCharm(TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch(
-        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
-    )
+    @patch("hpc_libs.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock)
     def test_on_database_created_tcp_endpoint(
         self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -197,9 +190,7 @@ class TestCharm(TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch(
-        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
-    )
+    @patch("hpc_libs.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock)
     def test_on_database_created_multiple_tcp_endpoints(
         self, mysql_unix_port, _write_config_and_restart_slurmdbd
     ) -> None:
@@ -225,9 +216,7 @@ class TestCharm(TestCase):
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
 
     @patch("charm.SlurmdbdCharm._write_config_and_restart_slurmdbd")
-    @patch(
-        "charms.hpc_libs.v0.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock
-    )
+    @patch("hpc_libs.slurm_ops.SlurmdbdManager.mysql_unix_port", new_callable=PropertyMock)
     def test_on_database_created_ipv6_tcp_endpoints(
         self,
         mysql_unix_port,

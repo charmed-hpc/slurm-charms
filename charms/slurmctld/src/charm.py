@@ -17,6 +17,8 @@ from constants import (
     PEER_RELATION,
 )
 from exceptions import IngressAddressUnavailableError
+from hpc_libs.is_container import is_container
+from hpc_libs.slurm_ops import SlurmctldManager, SlurmOpsError
 from interface_influxdb import InfluxDB, InfluxDBAvailableEvent, InfluxDBUnavailableEvent
 from interface_sackd import Sackd
 from interface_slurmctld_peer import SlurmctldPeer, SlurmctldPeerError
@@ -46,8 +48,6 @@ from ops import (
 from slurmutils.models import AcctGatherConfig, CgroupConfig, GRESConfig, GRESNode, SlurmConfig
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from charms.hpc_libs.v0.is_container import is_container
-from charms.hpc_libs.v0.slurm_ops import SlurmctldManager, SlurmOpsError
 
 logger = logging.getLogger()
 

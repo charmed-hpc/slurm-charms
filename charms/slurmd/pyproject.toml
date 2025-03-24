@@ -2,11 +2,16 @@
 name = "slurmd"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = ["ops", "slurmutils", "nvidia-ml-py", "ubuntu-drivers-common"]
+dependencies = [
+    "ops",
+    "slurmutils",
+    "nvidia-ml-py",
+    "ubuntu-drivers-common",
+    "hpc-libs",
+]
 
 [tool.repository]
 libraries = [
-    "hpc-libs.slurm_ops",
     "operator-libs-linux.apt",
     "operator-libs-linux.juju_systemd_notices",
     "operator-libs-linux.systemd",

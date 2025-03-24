@@ -18,11 +18,10 @@
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmrestdCharm
+from hpc_libs.slurm_ops import SlurmOpsError
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 from pyfakefs.fake_filesystem_unittest import TestCase
-
-from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
 class TestCharm(TestCase):
@@ -36,8 +35,8 @@ class TestCharm(TestCase):
         "interface_slurmctld.Slurmctld.is_joined",
         new_callable=PropertyMock(return_value=True),
     )
-    @patch("charms.hpc_libs.v0.slurm_ops._SystemctlServiceManager.active", return_value=True)
-    @patch("charms.hpc_libs.v0.slurm_ops._SystemctlServiceManager.enable")
+    @patch("hpc_libs.slurm_ops._SystemctlServiceManager.active", return_value=True)
+    @patch("hpc_libs.slurm_ops._SystemctlServiceManager.enable")
     def test_install_success(self, *_) -> None:
         """Test `InstallEvent` hook success."""
         self.harness.charm._stored.slurmctld_relation_data_available = True
@@ -65,7 +64,7 @@ class TestCharm(TestCase):
         "interface_slurmctld.Slurmctld.is_joined",
         new_callable=PropertyMock(return_value=True),
     )
-    @patch("charms.hpc_libs.v0.slurm_ops._SystemctlServiceManager.active", return_value=True)
+    @patch("hpc_libs.slurm_ops._SystemctlServiceManager.active", return_value=True)
     def test_update_status_success(self, *_) -> None:
         """Test `UpdateStatusEvent` hook success."""
         self.harness.charm._stored.slurmctld_relation_data_available = True

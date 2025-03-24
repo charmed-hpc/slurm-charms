@@ -6,6 +6,7 @@
 
 import logging
 
+from hpc_libs.slurm_ops import SackdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
     ActiveStatus,
@@ -17,8 +18,6 @@ from ops import (
     WaitingStatus,
     main,
 )
-
-from charms.hpc_libs.v0.slurm_ops import SackdManager, SlurmOpsError
 
 logger = logging.getLogger(__name__)
 

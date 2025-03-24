@@ -21,13 +21,14 @@ dependencies = [
     "influxdb==5.3.2",
     "netifaces-plus==0.12.4",
     "nvidia-ml-py==12.560.30",
+    "hpc-libs",
 ]
 
 [project.optional-dependencies]
 dev = [
     # Tests
     "ops[testing]~=2.19",
-    "cryptography~=43.0.1",
+    "cryptography~=44.0.1",
     "distro==1.9.0",
     "python-dotenv~=1.0.1",
     "pycryptodome==3.20.0",
@@ -38,8 +39,8 @@ dev = [
     # Integration
     "juju ~= 3.3",
     "pytest ~= 7.2",
-    "pytest-operator ~= 0.34",
-    "pytest-order ~= 1.1",
+    "pytest-operator ~= 0.41",
+    "pytest-order ~= 1.3",
     "tenacity ~= 8.2",
 
     # Linting
@@ -63,14 +64,13 @@ members = ["charms/*"]
 
 [tool.uv.sources]
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
+hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "1c1fd91bcc7de71fd9da7bc077f88757c81d14ba" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
 
 [tool.repository]
 external-libraries = [
-    { lib = "hpc-libs.slurm_ops", version = "0.18" },
-    { lib = "hpc-libs.is_container", version = "0.1" },
     { lib = "operator-libs-linux.apt", version = "0.16" },
     { lib = "operator-libs-linux.systemd", version = "1.4" },
     { lib = "operator-libs-linux.juju_systemd_notices", version = "0.2" },

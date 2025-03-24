@@ -12,6 +12,7 @@ from typing import Any, Dict, Union
 from urllib.parse import urlparse
 
 from constants import CHARM_MAINTAINED_PARAMETERS, SLURM_ACCT_DB
+from hpc_libs.slurm_ops import SlurmdbdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
     ActiveStatus,
@@ -27,7 +28,6 @@ from ops import (
 from slurmutils.models import SlurmdbdConfig
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
-from charms.hpc_libs.v0.slurm_ops import SlurmdbdManager, SlurmOpsError
 
 logger = logging.getLogger(__name__)
 

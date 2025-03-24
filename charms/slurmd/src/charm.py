@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, cast
 
+from hpc_libs.slurm_ops import SlurmdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
     ActionEvent,
@@ -26,7 +27,6 @@ from slurmutils import calculate_rs
 from slurmutils.models.option import NodeOptionSet, PartitionOptionSet
 from utils import gpu, machine, nhc, rdma, service
 
-from charms.hpc_libs.v0.slurm_ops import SlurmdManager, SlurmOpsError
 from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore[import-untyped]
     ServiceStartedEvent,
     ServiceStoppedEvent,

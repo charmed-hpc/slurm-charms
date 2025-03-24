@@ -18,12 +18,11 @@
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmctldCharm
+from hpc_libs.slurm_ops import SlurmOpsError
 from interface_slurmctld_peer import SlurmctldPeerError
 from ops.model import BlockedStatus
 from ops.testing import Harness
 from pyfakefs.fake_filesystem_unittest import TestCase
-
-from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
 class TestCharm(TestCase):
@@ -226,7 +225,7 @@ class TestCharm(TestCase):
         self.assertEqual(self.harness.charm._stored.slurmdbd_host, "")
 
     @patch(
-        "charms.hpc_libs.v0.slurm_ops.SlurmctldManager.hostname",
+        "hpc_libs.slurm_ops.SlurmctldManager.hostname",
         new_callable=PropertyMock(return_value="test_hostname"),
     )
     def test_sackd_on_relation_created(self, *_) -> None:

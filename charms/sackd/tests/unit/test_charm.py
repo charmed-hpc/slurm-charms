@@ -19,10 +19,9 @@ from unittest import TestCase
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SackdCharm
+from hpc_libs.slurm_ops import SlurmOpsError
 from ops.model import ActiveStatus, BlockedStatus
 from scenario import Context, State
-
-from charms.hpc_libs.v0.slurm_ops import SlurmOpsError
 
 
 class TestCharm(TestCase):

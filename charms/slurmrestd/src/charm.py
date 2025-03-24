@@ -6,6 +6,7 @@
 
 import logging
 
+from hpc_libs.slurm_ops import SlurmOpsError, SlurmrestdManager
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
     ActiveStatus,
@@ -18,8 +19,6 @@ from ops import (
     main,
 )
 from slurmutils.models import SlurmConfig
-
-from charms.hpc_libs.v0.slurm_ops import SlurmOpsError, SlurmrestdManager
 
 logger = logging.getLogger()
 
