@@ -21,6 +21,7 @@ dependencies = [
     "influxdb==5.3.2",
     "netifaces-plus==0.12.4",
     "nvidia-ml-py==12.560.30",
+    "rpds-py ~= 0.23.1",
     "hpc-libs",
 ]
 
@@ -49,7 +50,8 @@ dev = [
     "pyright",
 
     # `cos` dependencies
-    "cosl",
+    "cosl>=0.0.50",
+    "pydantic-core ~= 2.33.0",
     "pydantic",
 
     # TiCS scan dependencies

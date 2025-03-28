@@ -38,7 +38,7 @@ parts:
       - pkgconf
     charm-binary-python-packages:
       - cryptography ~= 44.0.0
-      - jsonschema ~= 4.23.0
+      - rpds-py ~= 0.23.1
   nhc:
     plugin: nil
     build-packages:
