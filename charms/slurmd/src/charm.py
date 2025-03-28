@@ -378,10 +378,12 @@ class SlurmdCharm(CharmBase):
                     f"gpu:{model}:{len(devices)}"
                 ]
 
+        real_memory = int(cast(str, slurmd_info["RealMemory"]))
+
         node = {
             "node_parameters": {
                 **slurmd_info,
-                "MemSpecLimit": "1024",
+                "MemSpecLimit": str(min(1024, real_memory // 2)),
                 **self._user_supplied_node_parameters,
             },
             "new_node": self._new_node,
