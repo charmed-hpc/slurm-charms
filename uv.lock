@@ -1313,6 +1313,7 @@ name = "slurm-charms"
 version = "0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "cosl" },
     { name = "hpc-libs" },
     { name = "influxdb" },
     { name = "netifaces-plus" },
@@ -1325,7 +1326,6 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "codespell" },
-    { name = "cosl" },
     { name = "coverage" },
     { name = "cryptography" },
     { name = "dbus-fast" },
@@ -1334,8 +1334,6 @@ dev = [
     { name = "juju" },
     { name = "ops", extra = ["testing"] },
     { name = "pycryptodome" },
-    { name = "pydantic" },
-    { name = "pydantic-core" },
     { name = "pyfakefs" },
     { name = "pylint" },
     { name = "pyright" },
@@ -1351,7 +1349,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "codespell", marker = "extra == 'dev'" },
-    { name = "cosl", marker = "extra == 'dev'", specifier = ">=0.0.50" },
+    { name = "cosl", specifier = ">=0.0.50" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "cryptography", marker = "extra == 'dev'", specifier = "~=44.0.1" },
     { name = "dbus-fast", marker = "extra == 'dev'", specifier = ">=1.90.2" },
@@ -1365,8 +1363,6 @@ requires-dist = [
     { name = "ops", specifier = "~=2.19" },
     { name = "ops", extras = ["testing"], marker = "extra == 'dev'", specifier = "~=2.19" },
     { name = "pycryptodome", marker = "extra == 'dev'", specifier = "==3.20.0" },
-    { name = "pydantic", marker = "extra == 'dev'" },
-    { name = "pydantic-core", marker = "extra == 'dev'", specifier = "~=2.33.0" },
     { name = "pyfakefs", marker = "extra == 'dev'", specifier = "==5.7.1" },
     { name = "pylint", marker = "extra == 'dev'" },
     { name = "pyright", marker = "extra == 'dev'" },
@@ -1388,6 +1384,7 @@ name = "slurmctld"
 version = "0.0"
 source = { virtual = "charms/slurmctld" }
 dependencies = [
+    { name = "cosl" },
     { name = "hpc-libs" },
     { name = "influxdb" },
     { name = "netifaces-plus" },
@@ -1397,6 +1394,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cosl" },
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=1c1fd91bcc7de71fd9da7bc077f88757c81d14ba" },
     { name = "influxdb" },
     { name = "netifaces-plus" },

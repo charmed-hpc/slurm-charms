@@ -18,7 +18,7 @@ import itertools
 from pathlib import Path
 from threading import Thread
 from dataclasses import dataclass
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import yaml
@@ -28,6 +28,7 @@ BUILD_PATH = ROOT_DIR / "_build"
 CHARMS_PATH = ROOT_DIR / "charms"
 PYPROJECT_FILE = "pyproject.toml"
 CHARMCRAFT_FILE = "charmcraft.yaml"
+LOCK_FILE = "uv.lock"
 LIBS_CHARM_PATH = BUILD_PATH / "libs"
 
 
@@ -150,6 +151,7 @@ class Repository:
 
     def __init__(self) -> "Repository":
         """Load the monorepo information."""
+        UV.run_command(["lock", "--quiet"])
         try:
             with (ROOT_DIR / PYPROJECT_FILE).open(mode="rb") as f:
                 project = tomllib.load(f)
@@ -163,6 +165,24 @@ class Repository:
             ]
         except KeyError:
             external_libraries = []
+
+        try:
+            binary_packages = project["tool"]["repository"]["binary-packages"]
+            with (ROOT_DIR / LOCK_FILE).open(mode="rb") as f:
+                uv_lock = tomllib.load(f)
+
+            resolved_binary_packages = {
+                bin_pkg: package["version"]
+                for bin_pkg in binary_packages
+                for package in uv_lock["package"]
+                if package["name"] == bin_pkg
+            }
+        except KeyError:
+            external_libraries = []
+        except StopIteration:
+            raise RepositoryError(f"Could not find package {pkg} in the lock file.")
+        except OSError:
+            raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`.")
 
         internal_libraries = []
         for charm in CHARMS_PATH.iterdir():
@@ -184,7 +204,9 @@ class Repository:
                     )
                 )
         charms = [
-            load_charm(charm, external_libraries, internal_libraries)
+            load_charm(
+                charm, external_libraries, internal_libraries, resolved_binary_packages, uv_lock
+            )
             for charm in CHARMS_PATH.iterdir()
         ]
 
@@ -194,7 +216,11 @@ class Repository:
 
 
 def load_charm(
-    charm: Path, external_libraries: [CharmLibrary], internal_libraries: [CharmLibrary]
+    charm: Path,
+    external_libraries: [CharmLibrary],
+    internal_libraries: [CharmLibrary],
+    binary_packages: Mapping[str, str],
+    uv_lock: Mapping[str, Any],
 ) -> Charm:
     try:
         with (charm / PYPROJECT_FILE).open(mode="rb") as f:
@@ -207,6 +233,25 @@ def load_charm(
             metadata = dict(yaml.safe_load(f))
     except OSError:
         raise RepositoryError(f"Failed to read file `{charm / CHARMCRAFT_FILE}`.")
+
+    # Since the `lock` file only lists direct dependencies for a specific package,
+    # we need to recursively collect all the dependencies in order to see which
+    # dependencies need to be specified as binary packages.
+    deps = set()
+    pending = [charm.name]
+    while pending:
+        package = pending.pop()
+        deps.add(package)
+        for pkg_dep in next(
+            (pkg.get("dependencies", []) for pkg in uv_lock["package"] if pkg["name"] == package)
+        ):
+            if pkg_dep["name"] not in deps:
+                deps.add(pkg_dep["name"])
+                pending.append(pkg_dep["name"])
+
+    metadata["parts"]["charm"]["charm-binary-python-packages"] = [
+        f"{package}=={version}" for package, version in binary_packages.items() if package in deps
+    ]
 
     libraries = []
     try:
@@ -262,8 +307,15 @@ def stage_charm(
     if not dry_run:
         remove_dir_if_exists(charm.build_path)
         shutil.copytree(charm.path, charm.build_path, dirs_exist_ok=True)
-        if charm.metadata.get("charm-libs"):
-            CHARMCRAFT.run_command(["fetch-libs"], cwd=charm.build_path)
+
+        # Overrides the charmcraft.yaml instead of editing it. This avoids having
+        # to load two times the same charm metadata to inject the correct value for
+        # charm-binary-python-packages
+        try:
+            with open(charm.build_path / CHARMCRAFT_FILE, "wt") as f:
+                yaml.safe_dump(charm.metadata, f, sort_keys=False)
+        except OSError:
+            raise RepositoryError(f"Failed to write file `{charm.build_path / CHARMCRAFT_FILE}`.")
 
     for lib in charm.libraries:
         src = LIBS_CHARM_PATH / "lib" / "charms" / lib.path
@@ -293,8 +345,6 @@ def stage_charms(
     charms: [Charm], repository: Repository, clean: bool = False, dry_run: bool = False
 ):
     """Stage the list of provided charms."""
-    UV.run_command(["lock", "--quiet"])
-
     LIBS_CHARM = {
         "name": "libs",
         "type": "charm",

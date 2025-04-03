@@ -22,6 +22,7 @@ dependencies = [
     "netifaces-plus==0.12.4",
     "nvidia-ml-py==12.560.30",
     "rpds-py ~= 0.23.1",
+    "cosl >= 0.0.50",
     "hpc-libs",
 ]
 
@@ -49,11 +50,6 @@ dev = [
     "codespell",
     "pyright",
 
-    # `cos` dependencies
-    "cosl>=0.0.50",
-    "pydantic-core ~= 2.33.0",
-    "pydantic",
-
     # TiCS scan dependencies
     "flake8",
     "pylint",
@@ -78,6 +74,11 @@ external-libraries = [
     { lib = "operator-libs-linux.juju_systemd_notices", version = "0.2" },
     { lib = "data-platform-libs.data_interfaces", version = "0.41" },
     { lib = "grafana-agent.cos_agent", version = "0.20" },
+]
+binary-packages = [
+    "pydantic-core",
+    "rpds-py",
+    "cryptography"
 ]
 
 # Testing tools configuration
