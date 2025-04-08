@@ -17,8 +17,8 @@ CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS = {
 CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "AuthAltParameters": {"jwt_key": "/var/lib/slurm/checkpoint/jwt_hs256.key"},
     "AuthAltTypes": ["auth/jwt"],
-    "AuthInfo": {"socket": "/var/run/munge/munge.socket.2"},
-    "AuthType": "auth/munge",
+    "AuthType": "auth/slurm",
+    "CredType": "auth/slurm",
     "GresTypes": "gpu",
     "HealthCheckInterval": "600",
     "HealthCheckNodeState": ["ANY", "CYCLE"],

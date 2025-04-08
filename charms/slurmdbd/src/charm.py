@@ -87,7 +87,7 @@ class SlurmdbdCharm(CharmBase):
         self._check_status()
 
     def _on_slurmctld_available(self, event: SlurmctldAvailableEvent) -> None:
-        """Retrieve and configure the jwt_rsa and munge_key when slurmctld_available."""
+        """Retrieve and configure the jwt_rsa and auth_key when slurmctld_available."""
         if self._stored.slurm_installed is not True:
             event.defer()
             return
@@ -95,14 +95,11 @@ class SlurmdbdCharm(CharmBase):
         if (jwt := event.jwt_rsa) is not None:
             self._slurmdbd.jwt.set(jwt)
 
-        if (munge_key := event.munge_key) is not None:
-            self._slurmdbd.munge.key.set(munge_key)
-            self._slurmdbd.munge.service.restart()
+        if (auth_key := event.auth_key) is not None:
+            self._slurmdbd.key.set(auth_key)
 
         # Don't try to write the config before the database has been created.
-        # Otherwise, this will trigger a defer on this event, which we don't really need
-        # or the munge service will restart too many times, triggering a restart limit on
-        # systemctl.
+        # Otherwise, this will trigger a defer on this event, which we don't really need.
         if self._stored.db_info:
             self._write_config_and_restart_slurmdbd(event)
 

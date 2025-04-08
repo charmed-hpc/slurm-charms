@@ -4,7 +4,7 @@ summary: |
   Slurmd, the compute node daemon of Slurm.
 
 description: |
-  This charm provides slurmd, munged, and the bindings to other utilities
+  This charm provides slurmd and the bindings to other utilities
   that make lifecycle operations a breeze.
 
   slurmd is the compute node daemon of SLURM. It monitors all tasks running

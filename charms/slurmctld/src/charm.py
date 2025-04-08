@@ -64,7 +64,7 @@ class SlurmctldCharm(CharmBase):
         self._stored.set_default(
             default_partition=str(),
             jwt_key=str(),
-            munge_key=str(),
+            auth_key=str(),
             new_nodes=[],
             nhc_params=str(),
             slurm_installed=False,
@@ -122,10 +122,9 @@ class SlurmctldCharm(CharmBase):
                 self._slurmctld.jwt.generate()
                 self._stored.jwt_rsa = self._slurmctld.jwt.get()
 
-                self._slurmctld.munge.key.generate()
-                self._stored.munge_key = self._slurmctld.munge.key.get()
+                self._slurmctld.key.generate()
+                self._stored.auth_key = self._slurmctld.key.get()
 
-                self._slurmctld.munge.service.restart()
                 self._slurmctld.service.enable()
 
                 self._slurmctld.exporter.args = [
@@ -524,7 +523,6 @@ class SlurmctldCharm(CharmBase):
             accounting_params = {
                 "AccountingStorageHost": slurmdbd_host,
                 "AccountingStorageType": "accounting_storage/slurmdbd",
-                "AccountingStoragePass": "/var/run/munge/munge.socket.2",
                 "AccountingStoragePort": "6819",
             }
             # Need slurmdbd configured to use profiling
@@ -587,7 +585,6 @@ class SlurmctldCharm(CharmBase):
 
         This charm needs these conditions to be satisfied in order to be ready:
         - Slurmctld component installed
-        - Munge running
         """
         if self.slurm_installed is not True:
             self.unit.status = BlockedStatus(
@@ -599,18 +596,12 @@ class SlurmctldCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for cluster_name....")
             return False
 
-        # TODO: https://github.com/charmed-hpc/hpc-libs/issues/18 -
-        #   Re-enable munge key validation check when supported by `slurm_ops` charm library.
-        # if not self._slurmctld.check_munged():
-        #     self.unit.status = BlockedStatus("Error configuring munge key")
-        #     return False
-
         self.unit.status = ActiveStatus("")
         return True
 
-    def get_munge_key(self) -> Optional[str]:
-        """Get the stored munge key."""
-        return str(self._stored.munge_key)
+    def get_auth_key(self) -> Optional[str]:
+        """Get the stored auth key."""
+        return str(self._stored.auth_key)
 
     def get_jwt_rsa(self) -> Optional[str]:
         """Get the stored jwt_rsa key."""

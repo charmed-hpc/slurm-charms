@@ -147,22 +147,6 @@ async def test_build_and_deploy_against_edge(
     stop=tenacity.stop_after_attempt(3),
     reraise=True,
 )
-async def test_munge_is_active(ops_test: OpsTest) -> None:
-    """Test that munge is active inside all the SLURM units."""
-    for app in SLURM_APPS:
-        logger.info(f"Checking that munge is active inside {app}.")
-        unit = ops_test.model.applications[app].units[0]
-        res = (await unit.ssh("systemctl is-active munge")).strip("\n")
-        assert res == "active"
-
-
-@pytest.mark.abort_on_fail
-@pytest.mark.order(3)
-@tenacity.retry(
-    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
-    stop=tenacity.stop_after_attempt(3),
-    reraise=True,
-)
 async def test_services_are_active(ops_test: OpsTest) -> None:
     """Test that the SLURM services are active inside the SLURM units."""
     for app in SLURM_APPS:
@@ -180,7 +164,7 @@ async def test_services_are_active(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(4)
+@pytest.mark.order(3)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),
@@ -195,7 +179,7 @@ async def test_slurmctld_port_listen(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(5)
+@pytest.mark.order(4)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),
@@ -210,7 +194,7 @@ async def test_slurmdbd_port_listen(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(6)
+@pytest.mark.order(5)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),
@@ -231,7 +215,7 @@ async def test_new_node_state_and_reason(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(7)
+@pytest.mark.order(6)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),
@@ -251,7 +235,7 @@ async def test_node_configured_action(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(8)
+@pytest.mark.order(7)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),
@@ -270,7 +254,7 @@ async def test_health_check_program(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(9)
+@pytest.mark.order(8)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),
@@ -291,7 +275,7 @@ async def test_job_submission_works(ops_test: OpsTest) -> None:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.order(10)
+@pytest.mark.order(9)
 @tenacity.retry(
     wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
     stop=tenacity.stop_after_attempt(3),

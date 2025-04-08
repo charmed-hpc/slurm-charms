@@ -46,7 +46,7 @@ class SlurmdCharm(CharmBase):
         super().__init__(*args, **kwargs)
 
         self._stored.set_default(
-            munge_key=str(),
+            auth_key=str(),
             new_node=True,
             nhc_conf=str(),
             nhc_params=str(),
@@ -174,12 +174,12 @@ class SlurmdCharm(CharmBase):
                 logger.debug("'slurmctld_host' not in event data.")
                 return
 
-        if (munge_key := event.munge_key) != self._stored.munge_key:
-            if munge_key is not None:
-                self._stored.munge_key = munge_key
-                self._slurmd.munge.key.set(munge_key)
+        if (auth_key := event.auth_key) != self._stored.auth_key:
+            if auth_key is not None:
+                self._stored.auth_key = auth_key
+                self._slurmd.key.set(auth_key)
             else:
-                logger.debug("'munge_key' not in event data.")
+                logger.debug("'auth_key' not in event data.")
                 return
 
         if (nhc_params := event.nhc_params) != self._stored.nhc_params:
@@ -194,14 +194,7 @@ class SlurmdCharm(CharmBase):
         logger.debug("#### Storing slurmctld_available event relation data in charm StoredState.")
         self._stored.slurmctld_available = True
 
-        # Restart munged and slurmd after we write the event data to their respective locations.
-        try:
-            self._slurmd.munge.service.restart()
-            logger.debug("restarted munge successfully")
-        except SlurmOpsError as e:
-            logger.error("failed to restart munge")
-            logger.error(e.message)
-
+        # Restart slurmd after we write the event data to their respective locations.
         if self._slurmd.service.active():
             self._slurmd.service.restart()
         else:
@@ -214,7 +207,7 @@ class SlurmdCharm(CharmBase):
         logger.debug("## Slurmctld unavailable")
         self._stored.slurmctld_available = False
         self._stored.nhc_params = ""
-        self._stored.munge_key = ""
+        self._stored.auth_key = ""
         self._stored.slurmctld_host = ""
         self._slurmd.service.stop()
         self._check_status()
@@ -326,7 +319,6 @@ class SlurmdCharm(CharmBase):
 
         - slurmd installed
         - slurmctld available and working
-        - munge key configured and working
         """
         if self._stored.slurm_installed is not True:
             self.unit.status = BlockedStatus("Install failed. See `juju debug-log` for details")
@@ -339,12 +331,6 @@ class SlurmdCharm(CharmBase):
         if self._stored.slurmctld_available is not True:
             self.unit.status = WaitingStatus("Waiting on: slurmctld")
             return False
-
-        # TODO: https://github.com/charmed-hpc/hpc-libs/issues/18 -
-        #   Re-enable munge key validation check check when supported by `slurm_ops` charm library.
-        # if not self._slurmd.check_munged():
-        #     self.unit.status = BlockedStatus("Error configuring munge key")
-        #     return False
 
         return True
 

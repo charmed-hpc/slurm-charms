@@ -72,10 +72,9 @@ class SlurmrestdCharm(CharmBase):
             event.defer()
             return
 
-        if (event.munge_key is not None) and (event.slurm_conf is not None):
+        if (event.auth_key is not None) and (event.slurm_conf is not None):
             self._slurmrestd.config.dump(SlurmConfig.from_str(event.slurm_conf))
-            self._slurmrestd.munge.key.set(event.munge_key)
-            self._slurmrestd.munge.service.restart()
+            self._slurmrestd.key.set(event.auth_key)
 
             self._stored.slurmctld_relation_data_available = True
 
@@ -89,7 +88,6 @@ class SlurmrestdCharm(CharmBase):
     def _on_slurmctld_unavailable(self, event: SlurmctldUnavailableEvent) -> None:
         """Stop the slurmrestd daemon if slurmctld is unavailable."""
         self._slurmrestd.service.disable()
-        self._slurmrestd.munge.service.disable()
         self._stored.slurmctld_relation_data_available = False
         self._check_status()
 

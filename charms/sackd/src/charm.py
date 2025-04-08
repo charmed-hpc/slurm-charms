@@ -91,7 +91,7 @@ class SackdCharm(CharmBase):
         if (auth_key := event.auth_key) != self._stored.auth_key:
             if auth_key is not None:
                 self._stored.auth_key = auth_key
-                self._sackd.munge.key.set(auth_key)  # TODO change this once auth/slurm in place
+                self._sackd.key.set(auth_key)
             else:
                 logger.debug("'auth_key' not in event data.")
                 return
@@ -100,7 +100,6 @@ class SackdCharm(CharmBase):
         self._stored.slurmctld_available = True
 
         # Restart sackd after we write event data to respective locations.
-        self._sackd.munge.service.restart()  # TODO change this once auth/slurm in place
         try:
             if self._sackd.service.active():
                 self._sackd.service.restart()

@@ -17,22 +17,22 @@ logger = logging.getLogger()
 class SlurmctldAvailableEvent(EventBase):
     """SlurmctldAvailableEvent."""
 
-    def __init__(self, handle, munge_key, slurm_conf):
+    def __init__(self, handle, auth_key, slurm_conf):
         super().__init__(handle)
 
-        self.munge_key = munge_key
+        self.auth_key = auth_key
         self.slurm_conf = slurm_conf
 
     def snapshot(self):
         """Snapshot the event data."""
         return {
-            "munge_key": self.munge_key,
+            "auth_key": self.auth_key,
             "slurm_conf": self.slurm_conf,
         }
 
     def restore(self, snapshot):
         """Restore the snapshot of the event data."""
-        self.munge_key = snapshot.get("munge_key")
+        self.auth_key = snapshot.get("auth_key")
         self.slurm_conf = snapshot.get("slurm_conf")
 
 
@@ -72,19 +72,19 @@ class Slurmctld(Object):
         return True if self.framework.model.relations.get(self._relation_name) else False
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
-        """Get the munge key and slurm_conf from slurmctld on relation changed."""
+        """Get the auth key and slurm_conf from slurmctld on relation changed."""
         if app := event.app:
             if event_app_data := event.relation.data.get(app):
-                munge_key = event_app_data.get("munge_key")
+                auth_key = event_app_data.get("auth_key")
                 slurm_conf = event_app_data.get("slurm_conf")
 
-                logger.debug(f"munge_key={munge_key}")
+                logger.debug(f"auth_key={auth_key}")
                 logger.debug(f"slurm_conf={slurm_conf}")
 
-                if munge_key and slurm_conf:
-                    self.on.slurmctld_available.emit(munge_key, slurm_conf)
+                if auth_key and slurm_conf:
+                    self.on.slurmctld_available.emit(auth_key, slurm_conf)
                 else:
-                    logger.debug("'munge_key' or 'slurm_conf' not in relation data.")
+                    logger.debug("'auth_key' or 'slurm_conf' not in relation data.")
             else:
                 logger.debug("application data not available in event databag.")
         else:

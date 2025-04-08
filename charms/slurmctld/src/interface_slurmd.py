@@ -104,7 +104,7 @@ class Slurmd(Object):
         )
         event.relation.data[self.model.app]["cluster_info"] = json.dumps(
             {
-                "munge_key": self._charm.get_munge_key(),
+                "auth_key": self._charm.get_auth_key(),
                 "slurmctld_host": self._charm.hostname,
                 "nhc_params": health_check_params,
             }
@@ -156,7 +156,7 @@ class Slurmd(Object):
         self.on.slurmd_departed.emit()
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
-        """Clear the munge key and emit the event if the relation is broken."""
+        """Clear the auth key and emit the event if the relation is broken."""
         if self.framework.model.unit.is_leader():
             event.relation.data[self.model.app]["cluster_info"] = ""
             self.on.partition_unavailable.emit()

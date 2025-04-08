@@ -37,7 +37,6 @@ class TestCharm(TestCase):
         self.harness.set_leader(True)
         self.harness.charm._slurmdbd.install = Mock()
         self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
-        self.harness.charm._slurmdbd.munge.service.enable = Mock()
         self.harness.charm._stored.db_info = {"rats": "123"}
         self.harness.charm.on.install.emit()
 

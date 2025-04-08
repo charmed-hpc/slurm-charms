@@ -54,16 +54,16 @@ class Slurmrestd(Object):
         return True if self.model.relations.get(self._relation_name) else False
 
     def _on_relation_created(self, event: RelationCreatedEvent) -> None:
-        # Check that slurm has been installed so that we know the munge key is
+        # Check that slurm has been installed so that we know the auth key is
         # available. Defer if slurm has not been installed yet.
         if not self._charm.slurm_installed:
             event.defer()
             return
 
-        # Get the munge_key from the slurm_ops_manager and set it to the app
+        # Get the auth_key from the slurm_ops_manager and set it to the app
         # data on the relation to be retrieved on the other side by slurmdbd.
         app_relation_data = event.relation.data[self.model.app]
-        app_relation_data["munge_key"] = self._charm.get_munge_key()
+        app_relation_data["auth_key"] = self._charm.get_auth_key()
         self.on.slurmrestd_available.emit()
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:

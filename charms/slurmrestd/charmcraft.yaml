@@ -5,7 +5,7 @@ name: slurmrestd
 summary: |
   Interface to Slurm via REST API.
 description: |
-  This charm provides slurmrestd, munged, and the bindings to other utilities
+  This charm provides slurmrestd and the bindings to other utilities
   that make lifecycle operations a breeze.
 
   slurmrestd is a REST API interface for SLURM.

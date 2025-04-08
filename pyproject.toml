@@ -62,7 +62,7 @@ members = ["charms/*"]
 
 [tool.uv.sources]
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
-hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "1c1fd91bcc7de71fd9da7bc077f88757c81d14ba" }
+hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]

@@ -10,7 +10,7 @@ summary: |
   Slurm DBD accounting daemon.
 
 description: |
-  This charm provides slurmdbd, munged, and the bindings to other utilities
+  This charm provides slurmdbd and the bindings to other utilities
   that make lifecycle operations a breeze.
 
   slurmdbd provides a secure enterprise-wide interface to a database for

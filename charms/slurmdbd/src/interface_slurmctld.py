@@ -20,22 +20,22 @@ logger = logging.getLogger()
 class SlurmctldAvailableEvent(EventBase):
     """Emitted when slurmctld is unavailable."""
 
-    def __init__(self, handle, munge_key, jwt_rsa):
+    def __init__(self, handle, auth_key, jwt_rsa):
         super().__init__(handle)
 
-        self.munge_key = munge_key
+        self.auth_key = auth_key
         self.jwt_rsa = jwt_rsa
 
     def snapshot(self):
         """Snapshot the event data."""
         return {
-            "munge_key": self.munge_key,
+            "auth_key": self.auth_key,
             "jwt_rsa": self.jwt_rsa,
         }
 
     def restore(self, snapshot):
         """Restore the snapshot of the event data."""
-        self.munge_key = snapshot.get("munge_key")
+        self.auth_key = snapshot.get("auth_key")
         self.jwt_rsa = snapshot.get("jwt_rsa")
 
 
@@ -84,7 +84,7 @@ class Slurmctld(Object):
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle the relation-changed event.
 
-        Get the cluster_info (munge_key and jwt_rsa) from slurmctld and emit to the charm.
+        Get the cluster_info (auth_key and jwt_rsa) from slurmctld and emit to the charm.
         """
         if app := event.app:
             event_app_data = event.relation.data[app]

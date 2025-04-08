@@ -5,7 +5,7 @@ name: slurmctld
 summary: |
   Slurmctld, the central management daemon of Slurm.
 description: |
-  This charm provides slurmctld, munged, and the bindings to other utilities
+  This charm provides slurmctld and the bindings to other utilities
   that make lifecycle operations a breeze.
 
   slurmctld is the central management daemon of SLURM. It monitors all other

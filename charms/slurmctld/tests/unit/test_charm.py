@@ -127,8 +127,8 @@ class TestCharm(TestCase):
         self.harness.charm._slurmctld.version = Mock(return_value="24.05.2-1")
         self.harness.charm._slurmctld.jwt = Mock()
         self.harness.charm._slurmctld.jwt.get.return_value = "=X="
-        self.harness.charm._slurmctld.munge = Mock()
-        self.harness.charm._slurmctld.munge.key.get.return_value = "=X="
+        self.harness.charm._slurmctld.key = Mock()
+        self.harness.charm._slurmctld.key.get.return_value = "=X="
         self.harness.charm._slurmctld.exporter = Mock()
         self.harness.charm._slurmctld.service = Mock()
 
@@ -177,10 +177,10 @@ class TestCharm(TestCase):
             BlockedStatus("failed to install slurmctld. see logs for further details"),
         )
 
-    def test_get_munge_key(self) -> None:
-        """Test that the get_munge_key method works."""
-        setattr(self.harness.charm._stored, "munge_key", "=ABC=")  # Patch StoredState
-        self.assertEqual(self.harness.charm.get_munge_key(), "=ABC=")
+    def test_get_auth_key(self) -> None:
+        """Test that the get_auth_key method works."""
+        setattr(self.harness.charm._stored, "auth_key", "=ABC=")  # Patch StoredState
+        self.assertEqual(self.harness.charm.get_auth_key(), "=ABC=")
 
     def test_get_jwt_rsa(self) -> None:
         """Test that the get_jwt_rsa method works."""
@@ -233,7 +233,7 @@ class TestCharm(TestCase):
         self.harness.set_leader(True)
         # Patch StoredState
         setattr(self.harness.charm._stored, "slurm_installed", True)
-        setattr(self.harness.charm._stored, "munge_key", "=ABC=")
+        setattr(self.harness.charm._stored, "auth_key", "=ABC=")
 
         relation_id = self.harness.add_relation("login-node", "sackd")
         self.assertEqual(
