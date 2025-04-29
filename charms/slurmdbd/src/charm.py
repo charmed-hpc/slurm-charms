@@ -28,6 +28,7 @@ from ops import (
 from slurmutils.models import SlurmdbdConfig
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class SlurmdbdCharm(CharmBase):
         self._slurmdbd = SlurmdbdManager(snap=False)
         self._slurmctld = Slurmctld(self, "slurmctld")
         self._db = DatabaseRequires(self, relation_name="database", database_name=SLURM_ACCT_DB)
+        self._grafana_agent = COSAgentProvider(self)
 
         event_handler_bindings = {
             self.on.install: self._on_install,

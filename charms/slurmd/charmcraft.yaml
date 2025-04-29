@@ -50,6 +50,9 @@ provides:
   slurmctld:
     interface: slurmd
     limit: 1
+  cos-agent:
+    interface: cos_agent
+    limit: 1
 
 config:
   options:

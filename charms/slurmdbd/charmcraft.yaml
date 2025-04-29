@@ -45,3 +45,6 @@ requires:
 provides:
   slurmctld:
     interface: slurmdbd
+  cos-agent:
+    interface: cos_agent
+    limit: 1

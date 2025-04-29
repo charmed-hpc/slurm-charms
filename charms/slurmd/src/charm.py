@@ -27,6 +27,7 @@ from slurmutils import calculate_rs
 from slurmutils.models.option import NodeOptionSet, PartitionOptionSet
 from utils import gpu, machine, nhc, rdma, service
 
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore[import-untyped]
     ServiceStartedEvent,
     ServiceStoppedEvent,
@@ -60,6 +61,7 @@ class SlurmdCharm(CharmBase):
         self._slurmd = SlurmdManager(snap=False)
         self._slurmctld = Slurmctld(self, "slurmctld")
         self._systemd_notices = SystemdNotices(self, ["slurmd"])
+        self._grafana_agent = COSAgentProvider(self)
 
         event_handler_bindings = {
             self.on.install: self._on_install,
