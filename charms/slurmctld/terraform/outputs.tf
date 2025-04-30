@@ -22,5 +22,12 @@ output "requires" {
     slurmdbd   = "slurmdbd"
     slurmrestd = "slurmrestd"
     login-node = "login-node"
+    influxdb   = "influxdb"
+  }
+}
+
+output "provides" {
+  value = {
+    cos_agent = "cos-agent"
   }
 }

@@ -19,5 +19,6 @@ output "app_name" {
 output "provides" {
   value = {
     slurmctld = "slurmctld"
+    cos_agent = "cos-agent"
   }
 }

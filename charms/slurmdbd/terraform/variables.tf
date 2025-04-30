@@ -15,7 +15,7 @@
 variable "app_name" {
   description = "Application name"
   type        = string
-  default = "slurmdbd"
+  default     = "slurmdbd"
 }
 
 variable "base" {

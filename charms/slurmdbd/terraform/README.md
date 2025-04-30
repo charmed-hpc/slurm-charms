@@ -38,7 +38,6 @@ After applying, the module exports the following outputs:
 | `provides` | Map of `provides` endpoints |
 | `requires` | Map of `requires` endpoints |
 
-
 ## Usage
 
 Users should ensure that Terraform is aware of the Juju model dependency of the
