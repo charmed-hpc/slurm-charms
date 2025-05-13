@@ -24,6 +24,9 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: 0.5.8
+
+      - name: Install Charmcraft
+        run: sudo snap install charmcraft --classic --channel latest/stable
       
       - name: Run coverage tests
         run: just repo unit
