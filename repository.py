@@ -11,14 +11,12 @@ import os
 import shutil
 import subprocess
 import tomllib
-import fnmatch
 import sys
-import io
 import itertools
 from pathlib import Path
 from threading import Thread
 from dataclasses import dataclass
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, MutableSequence
 from typing import Any
 
 import yaml
@@ -55,7 +53,7 @@ class BuildTool:
 
         self.path = tool_path
 
-    def run_command(self, args: [str], *popenargs, **kwargs):
+    def run_command(self, args: MutableSequence[str], *popenargs, **kwargs):
         def reader(pipe):
             with pipe:
                 for line in pipe:
@@ -123,7 +121,7 @@ class Charm:
 
     metadata: dict[str, Any]
     path: Path
-    libraries: [CharmLibrary]
+    libraries: Iterable[CharmLibrary]
 
     @property
     def name(self) -> str:
@@ -145,11 +143,11 @@ class Charm:
 class Repository:
     """Information about the monorepo."""
 
-    charms: [Charm]
-    external_libraries: [CharmLibrary]
-    internal_libraries: [CharmLibrary]
+    charms: Iterable[Charm]
+    external_libraries: Iterable[CharmLibrary]
+    internal_libraries: Iterable[CharmLibrary]
 
-    def __init__(self) -> "Repository":
+    def __init__(self) -> None:
         """Load the monorepo information."""
         UV.run_command(["lock", "--quiet"])
         try:
@@ -180,7 +178,7 @@ class Repository:
         except KeyError:
             external_libraries = []
         except StopIteration:
-            raise RepositoryError(f"Could not find package {pkg} in the lock file.")
+            raise RepositoryError(f"Could not find package in the lock file.")
         except OSError:
             raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`.")
 
@@ -217,8 +215,8 @@ class Repository:
 
 def load_charm(
     charm: Path,
-    external_libraries: [CharmLibrary],
-    internal_libraries: [CharmLibrary],
+    external_libraries: Iterable[CharmLibrary],
+    internal_libraries: Iterable[CharmLibrary],
     binary_packages: Mapping[str, str],
     uv_lock: Mapping[str, Any],
 ) -> Charm:
@@ -342,7 +340,7 @@ def stage_charm(
 
 
 def stage_charms(
-    charms: [Charm], repository: Repository, clean: bool = False, dry_run: bool = False
+    charms: Iterable[Charm], repository: Repository, clean: bool = False, dry_run: bool = False
 ):
     """Stage the list of provided charms."""
     LIBS_CHARM = {
@@ -409,7 +407,7 @@ def clean_charm(
         charm.charm_path.unlink(missing_ok=True)
 
 
-def get_source_dirs(charms: [Charm], include_tests: bool = True) -> [str]:
+def get_source_dirs(charms: Iterable[Charm], include_tests: bool = True) -> list[str]:
     """Get all the source directories for the specified charms."""
     files = [
         file
@@ -423,10 +421,10 @@ def get_source_dirs(charms: [Charm], include_tests: bool = True) -> [str]:
     return files
 
 
-def uv_run(args: [str], *popenargs, **kwargs) -> str:
+def uv_run(args: Iterable[str], *popenargs, **kwargs) -> None:
     """Run a command using the uv runner."""
     args = ["run", "--frozen", "--extra", "dev"] + args
-    return UV.run_command(args, *popenargs, **kwargs)
+    UV.run_command(args, *popenargs, **kwargs)
 
 
 ###############################################
@@ -514,7 +512,7 @@ def main_cli():
 
 
 def stage_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     repository: Repository,
     clean: bool = False,
     dry_run: bool = False,
@@ -525,7 +523,7 @@ def stage_cli(
 
 
 def gen_token_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     **kwargs,
 ):
     """Generate Charmhub token to publish charms."""
@@ -560,18 +558,19 @@ def pythonpath_cli(repository: Repository, **kwargs):
 
 
 def fmt_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     **kwargs,
 ):
     """Apply formatting standards to code."""
     files = get_source_dirs(charms)
     files.append(str(ROOT_DIR / "tests"))
     logging.info(f"Formatting directories {files} with ruff...")
-    uv_run(["ruff", "format"] + files, cwd=ROOT_DIR)
+    uv_run(["black"] + files, cwd=ROOT_DIR)
+    uv_run(["ruff", "check", "--fix"] + files, cwd=ROOT_DIR)
 
 
 def lint_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     fix: bool,
     **kwargs,
 ):
@@ -588,7 +587,7 @@ def lint_cli(
 
 
 def typecheck_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     repository: Repository,
     **kwargs,
 ):
@@ -607,7 +606,7 @@ def typecheck_cli(
 
 
 def unit_test_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     repository: Repository,
     **kwargs,
 ):
@@ -656,7 +655,7 @@ def unit_test_cli(
 
 
 def build_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     repository: Repository,
     **kwargs,
 ):
@@ -684,23 +683,24 @@ def build_cli(
 
 
 def integration_tests_cli(
-    charms: [Charm],
+    charms: Iterable[Charm],
     repository: Repository,
-    rest: [str],
+    rest: Iterable[str],
     **kwargs,
 ):
     """Run integration tests."""
     stage_charms(charms, repository)
+    build_cli(charms, repository)
 
     local_charms = {}
-
     for charm in charms:
-        local_charms[f"{charm.name.upper().replace("-", "_")}_DIR"] = charm.build_path
+        local_charms[f"LOCAL_{charm.name.upper().replace("-", "_")}"] = charm.charm_path
 
     uv_run(
         [
             "pytest",
             "-v",
+            "--exitfirst",
             "-s",
             "--tb",
             "native",
