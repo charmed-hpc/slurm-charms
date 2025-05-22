@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2023-2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +13,138 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configure slurmctld operator integration tests."""
+"""Configure Slurm charm integration tests."""
 
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Union
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
-SLURMCTLD_DIR = Path(slurmctld) if (slurmctld := os.getenv("SLURMCTLD_DIR")) else None
-SLURMD_DIR = Path(slurmd) if (slurmd := os.getenv("SLURMD_DIR")) else None
-SLURMDBD_DIR = Path(slurmdbd) if (slurmdbd := os.getenv("SLURMDBD_DIR")) else None
-SLURMRESTD_DIR = Path(slurmrestd) if (slurmrestd := os.getenv("SLURMRESTD_DIR")) else None
-SACKD_DIR = Path(sackd) if (sackd := os.getenv("SACKD_DIR")) else None
+LOCAL_SACKD = Path(sackd) if (sackd := os.getenv("LOCAL_SACKD")) else None
+LOCAL_SLURMCTLD = Path(slurmctld) if (slurmctld := os.getenv("LOCAL_SLURMCTLD")) else None
+LOCAL_SLURMD = Path(slurmd) if (slurmd := os.getenv("LOCAL_SLURMD")) else None
+LOCAL_SLURMDBD = Path(slurmdbd) if (slurmdbd := os.getenv("LOCAL_SLURMDBD")) else None
+LOCAL_SLURMRESTD = Path(slurmrestd) if (slurmrestd := os.getenv("LOCAL_SLURMRESTD")) else None
+
+
+@pytest.fixture(scope="session")
+def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
+    """Yield wrapper for interfacing with the `juju` CLI command."""
+    keep_models = bool(request.config.getoption("--keep-models"))
+
+    with jubilant.temp_model(keep=keep_models) as juju:
+        juju.wait_timeout = 10 * 60
+
+        yield juju
+
+        if request.session.testsfailed:
+            log = juju.debug_log(limit=1000)
+            print(log, end="")
+
+
+@pytest.fixture(scope="module")
+def base(request: pytest.FixtureRequest) -> str:
+    """Get the base to deploy the Slurm charms on."""
+    return request.config.getoption("--charm-base")
+
+
+@pytest.fixture(scope="module")
+def sackd(request: pytest.FixtureRequest) -> Path | str:
+    """Get `sackd` charm to use for the integration tests.
+
+    If the `LOCAL_SACKD` environment variable is not set,
+    the `sackd` charm will be pulled from the `latest/edge` channel
+    on Charmhub instead.
+
+    Returns:
+        `Path` object if using a local `sackd` charm. `str` if pulling from Charmhub.
+    """
+    if not LOCAL_SACKD:
+        logger.info("pulling `sackd` charm from the `latest/edge` channel on charmhub")
+        return "sackd"
+
+    logger.info("using local `sackd` charm located at %s", LOCAL_SACKD)
+    return LOCAL_SACKD
+
+
+@pytest.fixture(scope="module")
+def slurmctld(request: pytest.FixtureRequest) -> Path | str:
+    """Get `slurmctld` charm to use for the integration tests.
+
+    If the `LOCAL_SLURMCTLD` environment variable is not set,
+    the `sackd` charm will be pulled from the `latest/edge` channel
+    on Charmhub instead.
+
+    Returns:
+        `Path` object if using a local `slurmctld` charm. `str` if pulling from Charmhub.
+    """
+    if not LOCAL_SLURMCTLD:
+        logger.info("pulling `slurmctld` charm from the `latest/edge` channel on charmhub")
+        return "slurmctld"
+
+    logger.info("using local `slurmctld` charm located at %s", LOCAL_SLURMCTLD)
+    return LOCAL_SLURMCTLD
+
+
+@pytest.fixture(scope="module")
+def slurmd(request: pytest.FixtureRequest) -> Path | str:
+    """Get `slurmd` charm to use for the integration tests.
+
+    If the `LOCAL_SLURMD` environment variable is not set,
+    the `sackd` charm will be pulled from the `latest/edge` channel
+    on Charmhub instead.
+
+    Returns:
+        `Path` object if using a local `slurmd` charm. `str` if pulling from Charmhub.
+    """
+    if not LOCAL_SLURMD:
+        logger.info("pulling `slurmd` charm from the `latest/edge` channel on charmhub")
+        return "slurmd"
+
+    logger.info("using local `slurmd` charm located at %s", LOCAL_SLURMD)
+    return LOCAL_SLURMD
+
+
+@pytest.fixture(scope="module")
+def slurmdbd(request: pytest.FixtureRequest) -> Path | str:
+    """Get `slurmdbd` charm to use for the integration tests.
+
+    If the `LOCAL_SLURMDBD` environment variable is not set,
+    the `sackd` charm will be pulled from the `latest/edge` channel
+    on Charmhub instead.
+
+    Returns:
+        `Path` object if using a local `slurmdbd` charm. `str` if pulling from Charmhub.
+    """
+    if not LOCAL_SLURMDBD:
+        logger.info("pulling `slurmdbd` charm from the `latest/edge` channel on charmhub")
+        return "slurmdbd"
+
+    logger.info("using local `slurmdbd` charm located at %s", LOCAL_SLURMDBD)
+    return LOCAL_SLURMDBD
+
+
+@pytest.fixture(scope="module")
+def slurmrestd(request: pytest.FixtureRequest) -> Path | str:
+    """Get `slurmrestd` charm to use for the integration tests.
+
+    If the `LOCAL_SLURMRESTD` environment variable is not set,
+    the `sackd` charm will be pulled from the `latest/edge` channel
+    on Charmhub instead.
+
+    Returns:
+        `Path` object if using a local `slurmrestd` charm. `str` if pulling from Charmhub.
+    """
+    if not LOCAL_SLURMRESTD:
+        logger.info("pulling `slurmrestd` charm from the `latest/edge` channel on charmhub")
+        return "slurmrestd"
+
+    logger.info("using local `slurmrestd` charm located at %s", LOCAL_SLURMRESTD)
+    return LOCAL_SLURMRESTD
 
 
 def pytest_addoption(parser) -> None:
@@ -36,96 +152,11 @@ def pytest_addoption(parser) -> None:
         "--charm-base",
         action="store",
         default="ubuntu@24.04",
-        help="Charm base version to use for integration tests",
+        help="the base to deploy the slurm charms on during the integration tests",
     )
-
-
-@pytest.fixture(scope="module")
-def charm_base(request) -> str:
-    """Get slurmctld charm base to use."""
-    return request.config.option.charm_base
-
-
-@pytest.fixture(scope="module")
-async def slurmctld_charm(request, ops_test: OpsTest) -> Union[str, Path]:
-    """Pack slurmctld charm to use for integration tests.
-
-    If the `SLURMCTLD_DIR` environment variable is not set, this will pull the charm from
-    Charmhub instead.
-
-    Returns:
-        `Path` if "slurmctld" is built locally. `str` otherwise.
-    """
-    if not SLURMCTLD_DIR:
-        logger.info("Pulling slurmctld from Charmhub")
-        return "slurmctld"
-
-    return await ops_test.build_charm(SLURMCTLD_DIR, verbosity="verbose")
-
-
-@pytest.fixture(scope="module")
-async def slurmd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
-    """Pack slurmd charm to use for integration tests.
-
-    If the `SLURMD_DIR` environment variable is not set, this will pull the charm from
-    Charmhub instead.
-
-    Returns:
-        `Path` if "slurmd" is built locally. `str` otherwise.
-    """
-    if not SLURMD_DIR:
-        logger.info("Pulling slurmd from Charmhub")
-        return "slurmd"
-
-    return await ops_test.build_charm(SLURMD_DIR, verbosity="verbose")
-
-
-@pytest.fixture(scope="module")
-async def slurmdbd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
-    """Pack slurmdbd charm to use for integration tests.
-
-    If the `SLURMDBD_DIR` environment variable is not set, this will pull the charm from
-    Charmhub instead.
-
-    Returns:
-        `Path` if "slurmdbd" is built locally. `str` otherwise..
-    """
-    if not SLURMDBD_DIR:
-        logger.info("Pulling slurmdbd from Charmhub")
-        return "slurmdbd"
-
-    return await ops_test.build_charm(SLURMDBD_DIR, verbosity="verbose")
-
-
-@pytest.fixture(scope="module")
-async def slurmrestd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
-    """Pack slurmrestd charm to use for integration tests.
-
-    If the `SLURMRESTD_DIR` environment variable is not set, this will pull the charm from
-    Charmhub instead.
-
-    Returns:
-        `Path` if "slurmrestd" is built locally. `str` otherwise..
-    """
-    if not SLURMRESTD_DIR:
-        logger.info("Pulling slurmrestd from Charmhub")
-        return "slurmrestd"
-
-    return await ops_test.build_charm(SLURMRESTD_DIR, verbosity="verbose")
-
-
-@pytest.fixture(scope="module")
-async def sackd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
-    """Pack sackd_charm charm to use for integration tests.
-
-    If the `SACKD_DIR` environment variable is not set, this will pull the charm from
-    Charmhub instead.
-
-    Returns:
-        `Path` if "sackd" is built locally. `str` otherwise..
-    """
-    if not SACKD_DIR:
-        logger.info("Pulling sackd from Charmhub")
-        return "sackd"
-
-    return await ops_test.build_charm(SACKD_DIR, verbosity="verbose")
+    parser.addoption(
+        "--keep-models",
+        action="store_true",
+        default=False,
+        help="keep temporarily created models",
+    )
