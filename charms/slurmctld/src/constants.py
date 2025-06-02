@@ -4,7 +4,7 @@
 """This module provides constants for the slurmctld-operator charm."""
 
 SLURMCTLD_PORT = 6817
-EXPORTER_PORT = 9092
+PROMETHEUS_EXPORTER_PORT = 9092
 
 PEER_RELATION = "slurmctld-peer"
 

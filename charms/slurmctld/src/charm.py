@@ -14,8 +14,8 @@ from constants import (
     CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS,
     CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
     CLUSTER_NAME_PREFIX,
-    EXPORTER_PORT,
     PEER_RELATION,
+    PROMETHEUS_EXPORTER_PORT,
     SLURMCTLD_PORT,
 )
 from exceptions import IngressAddressUnavailableError
@@ -150,7 +150,7 @@ class SlurmctldCharm(CharmBase):
             event.defer()
 
         self.unit.open_port("tcp", SLURMCTLD_PORT)
-        self.unit.open_port("tcp", EXPORTER_PORT)
+        self.unit.open_port("tcp", PROMETHEUS_EXPORTER_PORT)
 
     def _on_start(self, event: StartEvent) -> None:
         """Set cluster_name and write slurm.conf.
