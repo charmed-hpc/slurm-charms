@@ -6,6 +6,7 @@
 
 import logging
 
+from constants import SACKD_PORT
 from hpc_libs.slurm_ops import SackdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
@@ -67,6 +68,7 @@ class SackdCharm(CharmBase):
             logger.error(e.message)
             event.defer()
 
+        self.unit.open_port("tcp", SACKD_PORT)
         self._check_status()
 
     def _on_update_status(self, _: UpdateStatusEvent) -> None:

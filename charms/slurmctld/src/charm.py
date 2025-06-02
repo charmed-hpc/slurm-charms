@@ -14,9 +14,9 @@ from constants import (
     CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS,
     CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
     CLUSTER_NAME_PREFIX,
+    EXPORTER_PORT,
     PEER_RELATION,
     SLURMCTLD_PORT,
-    EXPORTER_PORT,
 )
 from exceptions import IngressAddressUnavailableError
 from hpc_libs.is_container import is_container
