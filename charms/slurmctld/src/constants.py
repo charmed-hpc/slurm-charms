@@ -31,7 +31,7 @@ CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "PlugStackConfig": "/etc/slurm/plugstack.conf.d/plugstack.conf",
     "SelectType": "select/cons_tres",
     "SelectTypeParameters": "CR_CPU_Memory",
-    "SlurmctldPort": SLURMCTLD_PORT,
+    "SlurmctldPort": f"{SLURMCTLD_PORT}",
     "SlurmdPort": "6818",
     "StateSaveLocation": "/var/lib/slurm/checkpoint",
     "SlurmdSpoolDir": "/var/lib/slurm/slurmd",

@@ -7,7 +7,7 @@ SLURMDBD_PORT = 6819
 
 SLURM_ACCT_DB = "slurm_acct_db"
 CHARM_MAINTAINED_PARAMETERS = {
-    "DbdPort": SLURMDBD_PORT,
+    "DbdPort": f"{SLURMDBD_PORT}",
     "AuthType": "auth/slurm",
     "SlurmUser": "slurm",
     "PluginDir": ["/usr/lib/x86_64-linux-gnu/slurm-wlm"],
