@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, cast
 
+from constants import SLURMD_PORT
 from hpc_libs.slurm_ops import SlurmdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
@@ -116,6 +117,8 @@ class SlurmdCharm(CharmBase):
         except (SlurmOpsError, gpu.GPUOpsError) as e:
             logger.error(e.message)
             event.defer()
+
+        self.unit.open_port("tcp", SLURMD_PORT)
 
         self._check_status()
         self._reboot_if_required()

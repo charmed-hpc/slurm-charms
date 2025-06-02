@@ -3,6 +3,8 @@
 
 """This module provides constants for the slurmctld-operator charm."""
 
+SLURMCTLD_PORT = 6817
+
 PEER_RELATION = "slurmctld-peer"
 
 CLUSTER_NAME_PREFIX = "charmed-hpc"
@@ -28,7 +30,7 @@ CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "PlugStackConfig": "/etc/slurm/plugstack.conf.d/plugstack.conf",
     "SelectType": "select/cons_tres",
     "SelectTypeParameters": "CR_CPU_Memory",
-    "SlurmctldPort": "6817",
+    "SlurmctldPort": SLURMCTLD_PORT,
     "SlurmdPort": "6818",
     "StateSaveLocation": "/var/lib/slurm/checkpoint",
     "SlurmdSpoolDir": "/var/lib/slurm/slurmd",

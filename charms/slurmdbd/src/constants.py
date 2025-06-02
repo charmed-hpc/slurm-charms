@@ -3,9 +3,11 @@
 
 """Constants."""
 
+SLURMDBD_PORT = 6819
+
 SLURM_ACCT_DB = "slurm_acct_db"
 CHARM_MAINTAINED_PARAMETERS = {
-    "DbdPort": "6819",
+    "DbdPort": SLURMDBD_PORT,
     "AuthType": "auth/slurm",
     "SlurmUser": "slurm",
     "PluginDir": ["/usr/lib/x86_64-linux-gnu/slurm-wlm"],

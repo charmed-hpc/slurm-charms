@@ -11,7 +11,7 @@ from time import sleep
 from typing import Any, Dict, Union
 from urllib.parse import urlparse
 
-from constants import CHARM_MAINTAINED_PARAMETERS, SLURM_ACCT_DB
+from constants import CHARM_MAINTAINED_PARAMETERS, SLURM_ACCT_DB, SLURMDBD_PORT
 from hpc_libs.slurm_ops import SlurmdbdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
@@ -82,6 +82,7 @@ class SlurmdbdCharm(CharmBase):
             logger.error(e.message)
             event.defer()
 
+        self.unit.open_port("tcp", SLURMDBD_PORT)
         self._check_status()
 
     def _on_update_status(self, _: UpdateStatusEvent) -> None:

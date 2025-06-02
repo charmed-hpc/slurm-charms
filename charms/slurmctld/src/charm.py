@@ -15,6 +15,7 @@ from constants import (
     CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
     CLUSTER_NAME_PREFIX,
     PEER_RELATION,
+    SLURMCTLD_PORT,
 )
 from exceptions import IngressAddressUnavailableError
 from hpc_libs.is_container import is_container
@@ -146,6 +147,8 @@ class SlurmctldCharm(CharmBase):
         except SlurmOpsError as e:
             logger.error(e.message)
             event.defer()
+
+        self.unit.open_port("tcp", SLURMCTLD_PORT)
 
     def _on_start(self, event: StartEvent) -> None:
         """Set cluster_name and write slurm.conf.

@@ -6,6 +6,7 @@
 
 import logging
 
+from constants import SLURMRESTD_PORT
 from hpc_libs.slurm_ops import SlurmOpsError, SlurmrestdManager
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
@@ -60,6 +61,7 @@ class SlurmrestdCharm(CharmBase):
             logger.error(e.message)
             event.defer()
 
+        self.unit.open_port("tcp", SLURMRESTD_PORT)
         self._check_status()
 
     def _on_update_status(self, _: UpdateStatusEvent) -> None:
