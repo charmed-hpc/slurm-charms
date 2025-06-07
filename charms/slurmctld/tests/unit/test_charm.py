@@ -253,12 +253,27 @@ class TestCharm(TestCase):
         """Test that user supplied parameters are parsed correctly."""
         self.harness.add_relation("slurmd", "slurmd")
         self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
-        self.harness.update_config(
-            {"slurm-conf-parameters": "JobAcctGatherFrequency=task=30,network=40"}
+
+        select_type_parameters_val = "CR_Core_Memory"
+        job_acct_gather_frequency_val = "task=30,network=40"
+
+        select_type_parameters = f"SelectTypeParameters={select_type_parameters_val}"
+        job_acct_gather_frequency = f"JobAcctGatherFrequency={job_acct_gather_frequency_val}"
+
+        user_supplied_slurm_config = "\n".join([select_type_parameters, job_acct_gather_frequency])
+
+        # Set user suppled slurm config already defined by the charm in
+        # CHARM_MAINTAINED_SLURM_CONF_PARAMETERS so that we test overriding predefined
+        # key,val with user supplied config in addition to setting slurm config that doesn't
+        # override any predefined slurm configuration.
+        self.harness.update_config({"slurm-conf-parameters": user_supplied_slurm_config})
+        self.assertEqual(
+            self.harness.charm._assemble_slurm_conf().select_type_parameters,
+            select_type_parameters_val,
         )
         self.assertEqual(
             self.harness.charm._assemble_slurm_conf().job_acct_gather_frequency,
-            "task=30,network=40",
+            job_acct_gather_frequency_val,
         )
 
     def test_resume_nodes_valid_input(self) -> None:

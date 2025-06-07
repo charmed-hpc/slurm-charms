@@ -503,7 +503,6 @@ class SlurmctldCharm(CharmBase):
     def _assemble_slurm_conf(self) -> SlurmConfig:
         """Return the slurm.conf parameters."""
         user_supplied_parameters = self._get_user_supplied_parameters()
-
         slurmd_parameters = self._slurmd.get_new_nodes_and_nodes_and_partitions()
 
         def _assemble_slurmctld_parameters() -> dict[str, Any]:
@@ -535,19 +534,22 @@ class SlurmctldCharm(CharmBase):
             logger.debug(f"## profiling_params: {profiling_parameters}")
 
         slurm_conf = SlurmConfig(
-            ClusterName=self.cluster_name,
-            SlurmctldAddr=self._ingress_address,
-            SlurmctldHost=[self._slurmctld.hostname],
-            SlurmctldParameters=_assemble_slurmctld_parameters(),
-            ProctrackType="proctrack/linuxproc" if is_container() else "proctrack/cgroup",
-            TaskPlugin=["task/affinity"] if is_container() else ["task/cgroup", "task/affinity"],
-            **profiling_parameters,
-            **accounting_params,
-            **CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
-            **slurmd_parameters,
-            **user_supplied_parameters,
+            **{
+                "ClusterName": self.cluster_name,
+                "SlurmctldAddr": self._ingress_address,
+                "SlurmctldHost": [self._slurmctld.hostname],
+                "SlurmctldParameters": _assemble_slurmctld_parameters(),
+                "ProctrackType": "proctrack/linuxproc" if is_container() else "proctrack/cgroup",
+                "TaskPlugin": (
+                    ["task/affinity"] if is_container() else ["task/cgroup", "task/affinity"]
+                ),
+                **profiling_parameters,
+                **accounting_params,
+                **CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
+                **slurmd_parameters,
+                **user_supplied_parameters,
+            }
         )
-
         logger.debug(f"slurm.conf: {slurm_conf.dict()}")
         return slurm_conf
 
