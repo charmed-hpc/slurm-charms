@@ -41,7 +41,7 @@ juju integrate slurmdbd:database slurmdbd-mysql-router:database
 
 If you want to learn more about all the things you can do with the Slurm charms, here are some resources for you to explore:
 
-* [Documentation](https://canonical-charmed-hpc.readthedocs-hosted.com/en/latest)
+* [Documentation](https://canonical-charmed-hpc.readthedocs-hosted.com/latest)
 * [Open an issue](https://github.com/charmed-hpc/slurm-charms/issues/new?title=ISSUE+TITLE&body=*Please+describe+your+issue*)
 * [Ask a question on Github](https://github.com/orgs/charmed-hpc/discussions/categories/q-a)
 
