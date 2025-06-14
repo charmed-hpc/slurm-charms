@@ -37,11 +37,7 @@ def setup_influxdb(juju: jubilant.Juju) -> None:
 
 
 @pytest.mark.order(10)
-@tenacity.retry(
-    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
-    stop=tenacity.stop_after_attempt(3),
-    reraise=True,
-)
+#@tenacity.retry(stop=tenacity.stop_after_attempt(1))
 def test_task_accounting_works(juju: jubilant.Juju) -> None:
     """Test that `influxdb` is recording task level info."""
     if INFLUXDB_APP_NAME not in juju.status().apps:
@@ -55,6 +51,6 @@ def test_task_accounting_works(juju: jubilant.Juju) -> None:
         f"ubuntu@{unit}:~/sbatch_sleep_job.sh",
     )
     juju.exec("sbatch /home/ubuntu/sbatch_sleep_job.sh", unit=unit)
-    result = juju.exec("sstat 2 --format=NTasks --noheader | awk '{print $1}'", unit=unit)
+    result = juju.exec("sstat 2 --format=NTasks --noheader | tr -d ' ' | tr -d '\n'", unit=unit)
     # Validate that sstat shows 1 task running
     assert int(result.stdout) == 1

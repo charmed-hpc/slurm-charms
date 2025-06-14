@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2020-2024 Omnivector, LLC.
+# Copyright (c) 2025 Vantage Compute Corporation
 # See LICENSE file for licensing details.
 
 """Slurmdbd Operator Charm."""
@@ -8,7 +8,7 @@
 
 import logging
 from time import sleep
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 from urllib.parse import urlparse
 
 from constants import CHARM_MAINTAINED_PARAMETERS, SLURM_ACCT_DB, SLURMDBD_PORT
@@ -20,6 +20,8 @@ from ops import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
+    ModelError,
+    SecretChangedEvent,
     StoredState,
     UpdateStatusEvent,
     WaitingStatus,
@@ -31,6 +33,30 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, D
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _convert_db_uri_to_dict(db_uri: str) -> Dict:
+    """Convert db_uri to  a dict."""
+    parsed = urlparse(db_uri)
+    db_info = {
+        "scheme": parsed.scheme,
+        "StorageUser": parsed.username,
+        "StoragePass": parsed.password,
+        "StorageHost": parsed.hostname,
+        "StoragePort": f"{parsed.port}",
+        "StorageLoc": parsed.path.lstrip("/"),
+    }
+    del db_info["scheme"]
+    return db_info
+
+
+class DBURISecretAccessError(RuntimeError):
+    """Exception raised when the db-uri secret cannot be accessed."""
+
+    @property
+    def message(self) -> str:
+        """Return message passed as argument to exception."""
+        return self.args[0]
 
 
 class SlurmdbdCharm(CharmBase):
@@ -59,6 +85,7 @@ class SlurmdbdCharm(CharmBase):
             self._db.on.database_created: self._on_database_created,
             self._slurmctld.on.slurmctld_available: self._on_slurmctld_available,
             self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
+            self.on.secret_changed: self._on_secret_changed,
         }
         for event, handler in event_handler_bindings.items():
             self.framework.observe(event, handler)
@@ -103,8 +130,30 @@ class SlurmdbdCharm(CharmBase):
 
         # Don't try to write the config before the database has been created.
         # Otherwise, this will trigger a defer on this event, which we don't really need.
-        if self._stored.db_info:
+        try:
+            db_info = self._get_db_info()
+        except DBURISecretAccessError as e:
+            self.unit.status = BlockedStatus(e.message)
+            logger.error(e.message)
+            event.defer()
+            return
+
+        if db_info:
             self._write_config_and_restart_slurmdbd(event)
+
+    def _on_secret_changed(self, event: SecretChangedEvent) -> None:
+        """Handle secret-changed event."""
+        if event.secret.label == "db-uri":
+            try:
+                db_info = self._get_db_info()
+            except DBURISecretAccessError as e:
+                self.unit.status = BlockedStatus(e.message)
+                logger.error(e.message)
+                event.defer()
+                return
+
+            if db_info:
+                self._write_config_and_restart_slurmdbd(event)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Process the DatabaseCreatedEvent and updates the database parameters.
@@ -114,7 +163,7 @@ class SlurmdbdCharm(CharmBase):
         the DatabaseCreatedEvent.
 
         If the endpoints provided are file paths to unix sockets
-        then the /etc/default/slurmdbd file will be updated to tell the MySQL client to
+        then the /etc/default/slurmdbd file will be updated to tell the mySQL client to
         use the socket.
 
         If the endpoints provided are Address:Port tuples, then the address and port are
@@ -139,7 +188,7 @@ class SlurmdbdCharm(CharmBase):
             # a human to look at and resolve the proper next steps. Reprocessing the
             # deferred event will only result in continual errors.
             logger.error(f"No endpoints provided: {event.endpoints}")
-            self.unit.status = BlockedStatus("No database endpoints provided")
+            self.unit.status = BlockedStatus("No database endpoints provided.")
             raise ValueError(f"Unexpected endpoint types: {event.endpoints}")
 
         for endpoint in [ep.strip() for ep in event.endpoints.split(",")]:
@@ -160,27 +209,27 @@ class SlurmdbdCharm(CharmBase):
         if socket_endpoints:
             # Socket endpoints will be preferred. This is the case when the mysql
             # configuration is using the mysql-router on the local node.
-            logger.debug("Updating environment for mysql socket access")
+            logger.debug("Updating environment for mysql socket access.")
             if len(socket_endpoints) > 1:
                 logger.warning(
                     f"{len(socket_endpoints)} socket endpoints are specified, "
                     f"but only first one will be used."
                 )
             # Make sure to strip the file:// off the front of the first endpoint
-            # otherwise slurmdbd will not be able to connect to the database
+            # otherwise slurmdbd will not be able to connect to the database.
             self._slurmdbd.mysql_unix_port = urlparse(socket_endpoints[0]).path
         elif tcp_endpoints:
-            # This must be using TCP endpoint and the connection information will
+            # This must be using tcp endpoint and the connection information will
             # be host_address:port. Only one remote mysql service will be configured
             # in this case.
-            logger.debug("Using tcp endpoints specified in the relation")
+            logger.debug("Using TCP endpoints specified in the relation.")
             if len(tcp_endpoints) > 1:
                 logger.warning(
                     f"{len(tcp_endpoints)} tcp endpoints are specified, "
                     f"but only the first one will be used."
                 )
             addr, port = tcp_endpoints[0].rsplit(":", 1)
-            # Check IPv6 and strip any brackets
+            # Check IPv6 and strip any brackets.
             if addr.startswith("[") and addr.endswith("]"):
                 addr = addr[1:-1]
             db_info.update(
@@ -189,14 +238,14 @@ class SlurmdbdCharm(CharmBase):
                     "StoragePort": port,
                 }
             )
-            # Make sure that the MYSQL_UNIX_PORT is removed from the env file.
+            # Make sure that the mysql_unix_port is removed from the env file.
             del self._slurmdbd.mysql_unix_port
         else:
             # This is 100% an error condition that the charm doesn't know how to handle
             # and is an unexpected condition. This happens when there are commas but no
             # usable data in the endpoints.
             logger.error(f"No endpoints provided: {event.endpoints}")
-            self.unit.status = BlockedStatus("No database endpoints provided")
+            self.unit.status = BlockedStatus("No database endpoints provided.")
             raise ValueError(f"No endpoints provided: {event.endpoints}")
 
         self._stored.db_info = db_info
@@ -213,36 +262,37 @@ class SlurmdbdCharm(CharmBase):
             DatabaseCreatedEvent,
             InstallEvent,
             SlurmctldAvailableEvent,
+            SecretChangedEvent,
         ],
     ) -> None:
         """Check that we have what we need before we proceed."""
-        # Ensure all pre-conditions are met with _check_status(), if not
-        # defer the event.
         if not self._check_status():
             event.defer()
             return
 
-        if (
-            charm_config_slurmdbd_conf_params := self.config.get("slurmdbd-conf-parameters")
-        ) is not None:
-            if (
-                charm_config_slurmdbd_conf_params
-                != self._stored.user_supplied_slurmdbd_conf_params
-            ):
+        if (slurmdbd_conf_params := self.config.get("slurmdbd-conf-parameters")) is not None:
+            if slurmdbd_conf_params != self._stored.user_supplied_slurmdbd_conf_params:
                 logger.debug("## User supplied parameters changed.")
-                self._stored.user_supplied_slurmdbd_conf_params = charm_config_slurmdbd_conf_params
+                self._stored.user_supplied_slurmdbd_conf_params = slurmdbd_conf_params
 
         if binding := self.model.get_binding("slurmctld"):
+
+            try:
+                db_info = self._get_db_info()
+            except DBURISecretAccessError as e:
+                self.unit.status = BlockedStatus(e.message)
+                logger.error(e.message)
+                return
+
             slurmdbd_config = SlurmdbdConfig(
                 **CHARM_MAINTAINED_PARAMETERS,
-                **self._stored.db_info,
+                **db_info if db_info is not None else {},
                 DbdHost=self._slurmdbd.hostname,
                 DbdAddr=f"{binding.network.ingress_address}",
                 **self._get_user_supplied_parameters(),
             )
 
-            # Check that slurmctld is joined and that we have the
-            # jwt_key.
+            # Check that slurmctld is joined and that we have the jwt_key.
             if self._slurmctld.is_joined and self._slurmdbd.jwt.path.exists():
                 slurmdbd_config.auth_alt_types = ["auth/jwt"]
                 slurmdbd_config.auth_alt_parameters = {"jwt_key": f"{self._slurmdbd.jwt.path}"}
@@ -252,21 +302,73 @@ class SlurmdbdCharm(CharmBase):
             self._slurmdbd.service.start()
 
             # At this point, we must guarantee that slurmdbd is correctly
-            # initialized. Its startup might take a while, so we have to wait
-            # for it.
+            # initialized. Its startup might take a while, so we have to wait for it.
             self._check_slurmdbd()
 
             # Only the leader can set relation data on the application.
-            # Enforce that no one other than the leader tries to set
-            # application relation data.
+            # Enforce that no one other than the leader tries to set application relation data.
             if self.model.unit.is_leader():
                 self._slurmctld.set_slurmdbd_host_on_app_relation_data(self._slurmdbd.hostname)
         else:
-            logger.debug("Cannot get network binding. Please Debug.")
-            event.defer()
-            return
+            msg = "Cannot get network binding, please debug."
+            self.unit.status = BlockedStatus(msg)
+            logger.error(msg)
 
         self._check_status()
+
+    def _get_db_info(self) -> Optional[dict]:
+        """Determine db configuration."""
+        db_info = {}
+
+        try:
+            db_info = self._get_user_suppied_db_config_if_exists()
+        except DBURISecretAccessError as e:
+            raise e
+
+        if db_info is not None:
+            return db_info
+
+        if (db_info := self._stored.db_info) != {}:
+            return db_info
+
+        return None
+
+    def _get_user_suppied_db_config_if_exists(self) -> Optional[dict]:
+        """Determine if user supplied db configuration."""
+        if (raw_id := self.config.get("db-uri-secret-id")) is not None:
+            db_uri_secret_id_charm_config = str(raw_id)
+            logger.debug(f"Attempting to retrieve secret: {db_uri_secret_id_charm_config}")
+            try:
+                if (db_uri := self._get_db_uri_secret(db_uri_secret_id_charm_config)) is not None:
+                    logger.debug("Acquired db-uri from secrets storage.")
+                    return _convert_db_uri_to_dict(db_uri)
+                else:
+                    logger.debug("db-uri-secret-id supplied but no secret found.")
+            except DBURISecretAccessError as e:
+                logger.error(e.message)
+                raise e
+        else:
+            logger.debug("No user supplied db-uri.")
+        return None
+
+    def _get_db_uri_secret(self, db_uri_secret_id: str) -> Optional[str]:
+        """Return the db_uri from secrets storage if it exists."""
+        db_uri = ""
+        try:
+            if db_uri_secret := self.model.get_secret(id=db_uri_secret_id):
+                db_uri = db_uri_secret.get_content(refresh=True)["db-uri"]
+            else:
+                msg = f"Cannot access secret: {db_uri_secret_id}"
+                self.unit.status = BlockedStatus(msg)
+                logger.error(msg)
+        except ModelError as e:
+            self.unit.status = BlockedStatus(
+                "Cannot access secret content `db-uri`- slurmdbd needs `read` permissions granted or the secret content is not correct."
+            )
+            logger.error(e)
+            raise DBURISecretAccessError(f"cannot access secret: {db_uri_secret_id}")
+
+        return db_uri if db_uri != "" else None
 
     def _get_user_supplied_parameters(self) -> Dict[Any, Any]:
         """Gather, parse, and return the user supplied parameters."""
@@ -284,14 +386,14 @@ class SlurmdbdCharm(CharmBase):
 
     def _check_slurmdbd(self, max_attemps: int = 5) -> None:
         """Ensure slurmdbd is up and running."""
-        logger.debug("## Checking if slurmdbd is active")
+        logger.debug("## checking if slurmdbd is active")
 
         for i in range(max_attemps):
             if self._slurmdbd.service.active():
-                logger.debug("## Slurmdbd running")
+                logger.debug("## slurmdbd running")
                 break
             else:
-                logger.warning("## Slurmdbd not running, trying to start it")
+                logger.warning("## slurmdbd not running, trying to start it")
                 self.unit.status = WaitingStatus("starting slurmdbd...")
                 self._slurmdbd.service.restart()
                 sleep(3 + i)
@@ -299,7 +401,7 @@ class SlurmdbdCharm(CharmBase):
         if self._slurmdbd.service.active():
             self._check_status()
         else:
-            self.unit.status = BlockedStatus("cannot start slurmdbd")
+            self.unit.status = BlockedStatus("Cannot start slurmdbd.")
 
     def _check_status(self) -> bool:
         """Check that we have the things we need."""
@@ -311,11 +413,18 @@ class SlurmdbdCharm(CharmBase):
 
         if self._stored.slurm_installed is not True:
             self.unit.status = BlockedStatus(
-                "failed to install slurmdbd. see logs for further details"
+                "Failed to install slurmdbd, see logs for further details."
             )
             return False
 
-        if self._stored.db_info == {}:
+        try:
+            db_info = self._get_db_info()
+        except DBURISecretAccessError as e:
+            self.unit.status = BlockedStatus(e.message)
+            logger.error(e.message)
+            return False
+
+        if db_info is None:
             self.unit.status = WaitingStatus("Waiting on: MySQL")
             return False
 
