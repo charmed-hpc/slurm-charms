@@ -48,3 +48,11 @@ provides:
   cos-agent:
     interface: cos_agent
     limit: 1
+
+config:
+  options:
+    db-uri-secret-id:
+      default:
+      type: secret
+      description: |
+        The secret-id for db-uri. E.g. "secret:XXXXXXXXXXX" 
