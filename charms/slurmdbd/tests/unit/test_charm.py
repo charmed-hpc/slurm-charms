@@ -246,3 +246,29 @@ class TestCharm(TestCase):
         }
         self.assertEqual(self.harness.charm._stored.db_info, db_info)
         _write_config_and_restart_slurmdbd.assert_called_once_with(event)
+
+    def test_user_supplied_slurmdbd_conf_parameters(self, *_) -> None:
+        """Test that user supplied slurmdbd.conf parameters are parsed correctly."""
+        self.harness.add_relation("slurmdbd-peer", self.harness.charm.app.name)
+
+        log_file_val = "/tmp/test.log"
+        allow_no_def_acct_val = "yes"
+
+        log_file = f"LogFile={log_file_val}"
+        allow_no_def_acct = f"AllowNoDefAcct={allow_no_def_acct_val}"
+
+        user_supplied_slurmdbd_config = "\n".join([log_file, allow_no_def_acct])
+
+        # Set user suppled slurmdbd config already defined by the charm in
+        # CHARM_MAINTAINED_SLURMDBD_CONF_PARAMETERS so that we test overriding predefined
+        # key,val with user supplied config in addition to setting slurm config that doesn't
+        # override any predefined slurmdbd configuration.
+        self.harness.update_config({"slurmdbd-conf-parameters": user_supplied_slurmdbd_config})
+        self.assertEqual(
+            self.harness.charm._assemble_slurmdbd_conf().log_file,
+            log_file_val,
+        )
+        self.assertEqual(
+            self.harness.charm._assemble_slurmdbd_conf().allow_no_def_acct,
+            allow_no_def_acct_val,
+        )

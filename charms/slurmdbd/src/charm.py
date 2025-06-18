@@ -8,10 +8,11 @@
 
 import logging
 from time import sleep
-from typing import Any, Dict, Union
+from typing import Union
 from urllib.parse import urlparse
 
-from constants import CHARM_MAINTAINED_PARAMETERS, SLURM_ACCT_DB, SLURMDBD_PORT
+from constants import CHARM_MAINTAINED_PARAMETERS, PEER_RELATION, SLURM_ACCT_DB, SLURMDBD_PORT
+from exceptions import IngressAddressUnavailableError
 from hpc_libs.slurm_ops import SlurmdbdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
@@ -20,6 +21,7 @@ from ops import (
     CharmBase,
     ConfigChangedEvent,
     InstallEvent,
+    ModelError,
     StoredState,
     UpdateStatusEvent,
     WaitingStatus,
@@ -45,6 +47,8 @@ class SlurmdbdCharm(CharmBase):
         self._stored.set_default(
             slurm_installed=False,
             db_info={},
+            user_slurmdbd_params={},
+            user_slurmdbd_params_str=str(),
         )
 
         self._slurmdbd = SlurmdbdManager(snap=False)
@@ -55,7 +59,7 @@ class SlurmdbdCharm(CharmBase):
         event_handler_bindings = {
             self.on.install: self._on_install,
             self.on.update_status: self._on_update_status,
-            self.on.config_changed: self._write_config_and_restart_slurmdbd,
+            self.on.config_changed: self._on_config_changed,
             self._db.on.database_created: self._on_database_created,
             self._slurmctld.on.slurmctld_available: self._on_slurmctld_available,
             self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
@@ -84,6 +88,27 @@ class SlurmdbdCharm(CharmBase):
 
         self.unit.open_port("tcp", SLURMDBD_PORT)
         self._check_status()
+
+    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
+        """Process configuration changes."""
+        write_config_and_restart = False
+
+        if (user_slurmdbd_params_str := self.config.get("slurmdbd-conf-parameters")) is not None:
+            user_slurmdbd_params_str = str(user_slurmdbd_params_str)
+            if user_slurmdbd_params_str != self._stored.user_slurmdbd_params_str:
+                logger.debug("## User supplied parameters changed, saving to charm state.")
+                self._stored.user_slurmdbd_params_str = user_slurmdbd_params_str
+
+                try:
+                    config = SlurmdbdConfig.from_str(user_slurmdbd_params_str)
+                    self._stored.user_slurmdbd_params = config.dict()
+                    write_config_and_restart = True
+                except (ModelError, ValueError) as e:
+                    logger.error("could not parse user supplied parameters. reason: %s", e.message)
+                    raise e
+
+        if write_config_and_restart is True:
+            self._write_config_and_restart_slurmdbd(event)
 
     def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status."""
@@ -206,6 +231,36 @@ class SlurmdbdCharm(CharmBase):
         """Reset state and charm status when slurmctld broken."""
         self._check_status()
 
+    @property
+    def _ingress_address(self) -> str:
+        """Return the ingress_address from the peer relation if it exists."""
+        if (peer_binding := self.model.get_binding(PEER_RELATION)) is not None:
+            ingress_address = f"{peer_binding.network.ingress_address}"
+            logger.debug("slurmdbd ingress_address: %s", ingress_address)
+            return ingress_address
+        raise IngressAddressUnavailableError("Ingress address unavailable")
+
+    def _assemble_slurmdbd_conf(self) -> SlurmdbdConfig:
+        """Assemble and return the SlurmdbdConfig."""
+        slurmdbd_config = SlurmdbdConfig.from_dict(
+            {
+                **CHARM_MAINTAINED_PARAMETERS,
+                **self._stored.db_info,
+                "DbdHost": self._slurmdbd.hostname,
+                "DbdAddr": self._ingress_address,
+                **self._stored.user_slurmdbd_params,
+            }
+        )
+
+        # Check that slurmctld is joined and that we have the
+        # jwt_key.
+        if self._slurmctld.is_joined and self._slurmdbd.jwt.path.exists():
+            slurmdbd_config.auth_alt_types = ["auth/jwt"]
+            slurmdbd_config.auth_alt_parameters = {"jwt_key": f"{self._slurmdbd.jwt.path}"}
+
+        logger.debug("slurmdbd.conf: %s", slurmdbd_config.dict() | {"StoragePass": "***"})
+        return slurmdbd_config
+
     def _write_config_and_restart_slurmdbd(
         self,
         event: Union[
@@ -222,65 +277,24 @@ class SlurmdbdCharm(CharmBase):
             event.defer()
             return
 
-        if (
-            charm_config_slurmdbd_conf_params := self.config.get("slurmdbd-conf-parameters")
-        ) is not None:
-            if (
-                charm_config_slurmdbd_conf_params
-                != self._stored.user_supplied_slurmdbd_conf_params
-            ):
-                logger.debug("## User supplied parameters changed.")
-                self._stored.user_supplied_slurmdbd_conf_params = charm_config_slurmdbd_conf_params
+        slurmdbd_config = self._assemble_slurmdbd_conf()
 
-        if binding := self.model.get_binding("slurmctld"):
-            slurmdbd_config = SlurmdbdConfig(
-                **CHARM_MAINTAINED_PARAMETERS,
-                **self._stored.db_info,
-                DbdHost=self._slurmdbd.hostname,
-                DbdAddr=f"{binding.network.ingress_address}",
-                **self._get_user_supplied_parameters(),
-            )
+        self._slurmdbd.service.stop()
+        self._slurmdbd.config.dump(slurmdbd_config)
+        self._slurmdbd.service.start()
 
-            # Check that slurmctld is joined and that we have the
-            # jwt_key.
-            if self._slurmctld.is_joined and self._slurmdbd.jwt.path.exists():
-                slurmdbd_config.auth_alt_types = ["auth/jwt"]
-                slurmdbd_config.auth_alt_parameters = {"jwt_key": f"{self._slurmdbd.jwt.path}"}
+        # At this point, we must guarantee that slurmdbd is correctly
+        # initialized. Its startup might take a while, so we have to wait
+        # for it.
+        self._check_slurmdbd()
 
-            self._slurmdbd.service.stop()
-            self._slurmdbd.config.dump(slurmdbd_config)
-            self._slurmdbd.service.start()
-
-            # At this point, we must guarantee that slurmdbd is correctly
-            # initialized. Its startup might take a while, so we have to wait
-            # for it.
-            self._check_slurmdbd()
-
-            # Only the leader can set relation data on the application.
-            # Enforce that no one other than the leader tries to set
-            # application relation data.
-            if self.model.unit.is_leader():
-                self._slurmctld.set_slurmdbd_host_on_app_relation_data(self._slurmdbd.hostname)
-        else:
-            logger.debug("Cannot get network binding. Please Debug.")
-            event.defer()
-            return
+        # Only the leader can set relation data on the application.
+        # Enforce that no one other than the leader tries to set
+        # application relation data.
+        if self.model.unit.is_leader():
+            self._slurmctld.set_slurmdbd_host_on_app_relation_data(self._slurmdbd.hostname)
 
         self._check_status()
-
-    def _get_user_supplied_parameters(self) -> Dict[Any, Any]:
-        """Gather, parse, and return the user supplied parameters."""
-        user_supplied_parameters = {}
-        if custom_config := self.config.get("slurmdbd-conf-parameters"):
-            try:
-                user_supplied_parameters = {
-                    line.split("=")[0]: line.split("=")[1]
-                    for line in str(custom_config).split("\n")
-                    if not line.startswith("#") and line.strip() != ""
-                }
-            except IndexError as e:
-                logger.error(f"Could not parse user supplied parameters: {e}.")
-        return user_supplied_parameters
 
     def _check_slurmdbd(self, max_attemps: int = 5) -> None:
         """Ensure slurmdbd is up and running."""

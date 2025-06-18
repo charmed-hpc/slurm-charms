@@ -38,6 +38,10 @@ parts:
       - cryptography ~= 44.0.0
       - rpds-py ~= 0.23.1
 
+peers:
+  slurmdbd-peer:
+    interface: slurmdbd-peer
+
 requires:
   database:
     interface: mysql_client
@@ -48,3 +52,14 @@ provides:
   cos-agent:
     interface: cos_agent
     limit: 1
+
+config:
+  options:
+    slurmdbd-conf-parameters:
+      type: string
+      default: ""
+      description: |
+        User supplied Slurmdbd configuration as a multiline string.
+
+        Example usage:
+        $ juju config slurmdbd slurmdbd-conf-parameters="$(cat additional.conf)"

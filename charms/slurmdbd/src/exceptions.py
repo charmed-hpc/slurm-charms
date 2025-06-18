@@ -1,5 +1,4 @@
-# Copyright 2024 Omnivector, LLC
-# Copyright 2025 Vantage Compute Corporation
+# Copyright (c) 2025 Vantage Compute Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,20 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Slurmdbd Charm Constants."""
+"""Custom exceptions for the slurmdbd operator."""
 
 
-PEER_RELATION = "slurmdbd-peer"
+class IngressAddressUnavailableError(Exception):
+    """Exception raised when a slurm operation failed."""
 
-SLURMDBD_PORT = 6819
-
-SLURM_ACCT_DB = "slurm_acct_db"
-CHARM_MAINTAINED_PARAMETERS = {
-    "DbdPort": f"{SLURMDBD_PORT}",
-    "AuthType": "auth/slurm",
-    "SlurmUser": "slurm",
-    "PluginDir": ["/usr/lib/x86_64-linux-gnu/slurm-wlm"],
-    "PidFile": "/var/run/slurmdbd/slurmdbd.pid",
-    "LogFile": "/var/log/slurm/slurmdbd.log",
-    "StorageType": "accounting_storage/mysql",
-}
+    @property
+    def message(self) -> str:
+        """Return message passed as argument to exception."""
+        return self.args[0]
