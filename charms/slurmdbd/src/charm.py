@@ -333,6 +333,10 @@ class SlurmdbdCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting on: MySQL")
             return False
 
+        if not self._slurmctld.is_joined:
+            self.unit.status = BlockedStatus("Need relation: slurmctld")
+            return False
+
         # Account for the case where slurmctld relation has joined
         # but slurmctld hasn't sent the key data yet.
         if self._slurmctld.is_joined and not self._slurmdbd.jwt.path.exists():

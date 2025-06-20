@@ -19,7 +19,7 @@ from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmdbdCharm
 from hpc_libs.slurm_ops import SlurmOpsError
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 from pyfakefs.fake_filesystem_unittest import TestCase
 
@@ -31,15 +31,25 @@ class TestCharm(TestCase):
         self.setUpPyfakefs()
         self.harness.begin()
 
-    @patch("hpc_libs.slurm_ops._SystemctlServiceManager.enable")
-    def test_install_success(self, *_) -> None:
+    @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock)
+    def test_install_success(self, is_joined) -> None:
         """Test `InstallEvent` hook success."""
         self.harness.set_leader(True)
-        self.harness.charm._slurmdbd.install = Mock()
-        self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
-        self.harness.charm._stored.db_info = {"rats": "123"}
-        self.harness.charm.on.install.emit()
+        is_joined.return_value = True
 
+        # Patch jwt.path.exists on the instance
+        mock_jwt = Mock()
+        mock_jwt.path.exists.return_value = True
+        self.harness.charm._slurmdbd.jwt = mock_jwt
+
+        self.harness.charm._slurmdbd.install = Mock()
+        self.harness.charm._slurmdbd.service.enable = Mock()
+        self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
+
+        self.harness.charm._stored.db_info = {"rats": "123"}
+        self.harness.charm._stored.slurm_installed = True
+
+        self.harness.charm.on.install.emit()
         self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
     @patch("ops.framework.EventBase.defer")
@@ -78,7 +88,7 @@ class TestCharm(TestCase):
         defer.assert_called()
 
     def test_update_status_fail(self) -> None:
-        """Test `UpdateStatusEvent` hook failure."""
+        """Test `UpdateStatusEvent` on failed install."""
         self.harness.set_leader(True)
         self.harness.charm.on.update_status.emit()
 
@@ -86,6 +96,66 @@ class TestCharm(TestCase):
             self.harness.charm.unit.status,
             BlockedStatus("failed to install slurmdbd. see logs for further details"),
         )
+
+    @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock)
+    def test_status_blocked_on_missing_slurmctld_relation(self, is_joined) -> None:
+        """Test that BlockedStatus is set when slurmctld relation is missing."""
+        self.harness.set_leader(True)
+        is_joined.return_value = False
+
+        self.harness.charm._slurmdbd.install = Mock()
+        self.harness.charm._slurmdbd.service.enable = Mock()
+        self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
+
+        self.harness.charm._stored.db_info = {"rats": "123"}
+        self.harness.charm._stored.slurm_installed = True
+
+        self.harness.charm.on.install.emit()
+        self.assertEqual(self.harness.charm.unit.status, BlockedStatus("Need relation: slurmctld"))
+
+    @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock)
+    def test_status_waiting_on_missing_jwt_key_relation_data(self, is_joined) -> None:
+        """Test that WaitingStatus is set when slurmctld is related but relation data has not been received."""
+        self.harness.set_leader(True)
+        is_joined.return_value = True
+
+        # Patch jwt.path.exists on the instance
+        mock_jwt = Mock()
+        mock_jwt.path.exists.return_value = False
+        self.harness.charm._slurmdbd.jwt = mock_jwt
+
+        self.harness.charm._slurmdbd.install = Mock()
+        self.harness.charm._slurmdbd.service.enable = Mock()
+        self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
+
+        self.harness.charm._stored.db_info = {"rats": "123"}
+        self.harness.charm._stored.slurm_installed = True
+
+        self.harness.charm.on.install.emit()
+        self.assertEqual(
+            self.harness.charm.unit.status, WaitingStatus("Waiting on: data from slurmctld...")
+        )
+
+    @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock)
+    def test_status_waiting_on_mysql(self, is_joined) -> None:
+        """Test `InstallEvent` hook success."""
+        self.harness.set_leader(True)
+        is_joined.return_value = True
+
+        # Patch jwt.path.exists on the instance
+        mock_jwt = Mock()
+        mock_jwt.path.exists.return_value = True
+        self.harness.charm._slurmdbd.jwt = mock_jwt
+
+        self.harness.charm._slurmdbd.install = Mock()
+        self.harness.charm._slurmdbd.service.enable = Mock()
+        self.harness.charm._slurmdbd.version = Mock(return_value="24.05.2.-1")
+        self.harness.charm._get_db_info = Mock(return_value={})
+
+        self.harness.charm._stored.slurm_installed = True
+
+        self.harness.charm.on.install.emit()
+        self.assertEqual(self.harness.charm.unit.status, WaitingStatus("Waiting on: MySQL"))
 
     @patch("charm.sleep")
     def test_check_slurmdbd(self, *_) -> None:
