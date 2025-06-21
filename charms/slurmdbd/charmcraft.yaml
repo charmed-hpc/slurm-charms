@@ -55,6 +55,11 @@ provides:
 
 config:
   options:
+    db-uri-secret-id:
+      default:
+      type: secret
+      description: |
+        The secret-id for db-uri. E.g. "secret:XXXXXXXXXXX" 
     slurmdbd-conf-parameters:
       type: string
       default: ""

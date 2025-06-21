@@ -15,6 +15,7 @@
 
 """Slurmdbd Charm Constants."""
 
+DB_URI_SECRET_LABEL = "db-uri"
 
 PEER_RELATION = "slurmdbd-peer"
 

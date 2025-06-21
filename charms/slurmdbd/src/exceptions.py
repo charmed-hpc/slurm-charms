@@ -15,6 +15,15 @@
 """Custom exceptions for the slurmdbd operator."""
 
 
+class DBURISecretAccessError(RuntimeError):
+    """Exception raised when the db-uri secret cannot be accessed."""
+
+    @property
+    def message(self) -> str:
+        """Return message passed as argument to exception."""
+        return self.args[0]
+
+
 class IngressAddressUnavailableError(Exception):
     """Exception raised when a slurm operation failed."""
 
@@ -22,3 +31,7 @@ class IngressAddressUnavailableError(Exception):
     def message(self) -> str:
         """Return message passed as argument to exception."""
         return self.args[0]
+
+
+class InvalidDBURIError(ValueError):
+    """Raised when a database URI is malformed or missing required components."""

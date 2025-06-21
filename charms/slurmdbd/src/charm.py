@@ -8,11 +8,17 @@
 
 import logging
 from time import sleep
-from typing import Union
+from typing import Any, Dict, Union
 from urllib.parse import urlparse
 
-from constants import CHARM_MAINTAINED_PARAMETERS, PEER_RELATION, SLURM_ACCT_DB, SLURMDBD_PORT
-from exceptions import IngressAddressUnavailableError
+from constants import (
+    CHARM_MAINTAINED_PARAMETERS,
+    DB_URI_SECRET_LABEL,
+    PEER_RELATION,
+    SLURM_ACCT_DB,
+    SLURMDBD_PORT,
+)
+from exceptions import DBURISecretAccessError, IngressAddressUnavailableError, InvalidDBURIError
 from hpc_libs.slurm_ops import SlurmdbdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
@@ -22,12 +28,15 @@ from ops import (
     ConfigChangedEvent,
     InstallEvent,
     ModelError,
+    SecretChangedEvent,
+    SecretNotFoundError,
     StoredState,
     UpdateStatusEvent,
     WaitingStatus,
     main,
 )
 from slurmutils.models import SlurmdbdConfig
+from utils import convert_db_uri_to_dict
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
@@ -49,6 +58,7 @@ class SlurmdbdCharm(CharmBase):
             db_info={},
             user_slurmdbd_params={},
             user_slurmdbd_params_str=str(),
+            db_uri_secret_id=str(),
         )
 
         self._slurmdbd = SlurmdbdManager(snap=False)
@@ -63,6 +73,7 @@ class SlurmdbdCharm(CharmBase):
             self._db.on.database_created: self._on_database_created,
             self._slurmctld.on.slurmctld_available: self._on_slurmctld_available,
             self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
+            self.on.secret_changed: self._on_secret_changed,
         }
         for event, handler in event_handler_bindings.items():
             self.framework.observe(event, handler)
@@ -107,8 +118,36 @@ class SlurmdbdCharm(CharmBase):
                     logger.error("could not parse user supplied parameters. reason: %s", e.message)
                     raise e
 
+        if (
+            db_uri_secret_id := self.config.get("db-uri-secret-id")
+        ) != self._stored.db_uri_secret_id:
+            write_config_and_restart = True
+            logger.debug("## db-uri-secret-id changed, saving to charm state.")
+
+            if db_uri_secret_id is None:
+                self._stored.db_uri_secret_id = ""
+            elif db_uri_secret_id == "":
+                self._stored.db_uri_secret_id = ""
+            else:
+                db_uri_secret_id = str(db_uri_secret_id)
+                self._stored.db_uri_secret_id = db_uri_secret_id
+
         if write_config_and_restart is True:
             self._write_config_and_restart_slurmdbd(event)
+
+    def _on_secret_changed(self, event: SecretChangedEvent) -> None:
+        """Handle secret-changed event."""
+        if event.secret.label == DB_URI_SECRET_LABEL:
+            try:
+                db_info = self._get_db_info()
+            except DBURISecretAccessError as e:
+                self.unit.status = BlockedStatus(e.message)
+                logger.error(e.message)
+                event.defer()
+                return
+
+            if db_info:
+                self._write_config_and_restart_slurmdbd(event)
 
     def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status."""
@@ -128,7 +167,15 @@ class SlurmdbdCharm(CharmBase):
 
         # Don't try to write the config before the database has been created.
         # Otherwise, this will trigger a defer on this event, which we don't really need.
-        if self._stored.db_info:
+        try:
+            db_info = self._get_db_info()
+        except DBURISecretAccessError as e:
+            self.unit.status = BlockedStatus(e.message)
+            logger.error(e.message)
+            event.defer()
+            return
+
+        if db_info:
             self._write_config_and_restart_slurmdbd(event)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
@@ -240,12 +287,56 @@ class SlurmdbdCharm(CharmBase):
             return ingress_address
         raise IngressAddressUnavailableError("Ingress address unavailable")
 
+    def _get_db_info(self) -> Dict[Any, Any]:
+        """Determine if user supplied db configuration."""
+        db_uri_parsed = {}
+
+        def _handle_secret_error(error: Exception, msg: str) -> None:
+            """Consolidated secret error handler."""
+            self.unit.status = BlockedStatus(msg)
+            logger.error(f"{msg} - {getattr(error, 'message', str(error))}")
+            raise DBURISecretAccessError(msg)
+
+        if (db_uri_secret_id := self._stored.db_uri_secret_id) != "":
+
+            logger.debug(f"Attempting to retrieve secret: {db_uri_secret_id}")
+            try:
+                db_uri_secret = self.model.get_secret(
+                    id=f"{db_uri_secret_id}", label=DB_URI_SECRET_LABEL
+                )
+                db_uri = db_uri_secret.get_content(refresh=True)["db-uri"]
+                db_uri_parsed = convert_db_uri_to_dict(db_uri)
+            except InvalidDBURIError as e:
+                _handle_secret_error(e, f"Invalid db-uri: {db_uri_secret_id}")
+            except SecretNotFoundError as e:
+                _handle_secret_error(e, f"Secret does not exist: {db_uri_secret_id}")
+            except ModelError as e:
+                _handle_secret_error(e, f"Insufficient privileges: {db_uri_secret_id}")
+            except KeyError as e:
+                _handle_secret_error(
+                    e, f"Cannot access secret content 'db-uri': {db_uri_secret_id}"
+                )
+        else:
+            logger.debug("No user supplied db-uri.")
+            return self._stored.db_info
+
+        return db_uri_parsed
+
     def _assemble_slurmdbd_conf(self) -> SlurmdbdConfig:
         """Assemble and return the SlurmdbdConfig."""
+        db_info = {}
+
+        try:
+            db_info = self._get_db_info()
+        except DBURISecretAccessError as e:
+            self.unit.status = BlockedStatus(e.message)
+            logger.error(e.message)
+            raise e
+
         slurmdbd_config = SlurmdbdConfig.from_dict(
             {
                 **CHARM_MAINTAINED_PARAMETERS,
-                **self._stored.db_info,
+                **db_info,
                 "DbdHost": self._slurmdbd.hostname,
                 "DbdAddr": self._ingress_address,
                 **self._stored.user_slurmdbd_params,
@@ -265,6 +356,7 @@ class SlurmdbdCharm(CharmBase):
         self,
         event: Union[
             ConfigChangedEvent,
+            SecretChangedEvent,
             DatabaseCreatedEvent,
             InstallEvent,
             SlurmctldAvailableEvent,
@@ -329,7 +421,14 @@ class SlurmdbdCharm(CharmBase):
             )
             return False
 
-        if self._stored.db_info == {}:
+        try:
+            db_info = self._get_db_info()
+        except DBURISecretAccessError as e:
+            self.unit.status = BlockedStatus(e.message)
+            logger.error(e.message)
+            return False
+
+        if db_info == {}:
             self.unit.status = WaitingStatus("Waiting on: MySQL")
             return False
 

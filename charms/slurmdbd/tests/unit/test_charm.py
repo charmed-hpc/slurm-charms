@@ -18,8 +18,9 @@
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SlurmdbdCharm
+from exceptions import DBURISecretAccessError, InvalidDBURIError
 from hpc_libs.slurm_ops import SlurmOpsError
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, ModelError, SecretNotFoundError
 from ops.testing import Harness
 from pyfakefs.fake_filesystem_unittest import TestCase
 
@@ -271,4 +272,87 @@ class TestCharm(TestCase):
         self.assertEqual(
             self.harness.charm._assemble_slurmdbd_conf().allow_no_def_acct,
             allow_no_def_acct_val,
+        )
+
+    def test_user_supplied_db_uri_parser(self, *_) -> None:
+        """Test that db_uri supplied via juju user secret parses correctly."""
+        db = {
+            "StorageUser": "fake-user",
+            "StoragePass": "fake-password",
+            "StorageLoc": "slurm_acct_db",
+            "StorageHost": "localhost",
+            "StoragePort": "3306",
+        }
+
+        secret_content = {
+            "db-uri": f"mysql://{db['StorageUser']}:{db['StoragePass']}@{db['StorageHost']}:{db['StoragePort']}/{db['StorageLoc']}"
+        }
+
+        secret_id = self.harness.add_user_secret(secret_content)
+        self.harness.grant_secret(secret_id, "slurmdbd")
+
+        self.harness.update_config({"db-uri-secret-id": secret_id})
+        self.assertEqual(self.harness.charm._get_db_info(), db)
+
+    @patch("charm.convert_db_uri_to_dict", side_effect=InvalidDBURIError("bad URI"))
+    @patch("ops.model.Secret.get_content")
+    def test_get_db_info_invalid_uri(self, mock_get_content, mock_convert):
+        """Test the correct exception is thrown when a malformed db-uri is supplied."""
+        db_uri_secret_id = "test-id"
+        self.harness.charm._stored.db_uri_secret_id = db_uri_secret_id
+
+        mock_secret = Mock()
+        mock_secret.get_content.return_value = {"db-uri": "bad_uri"}
+        self.harness.charm.model.get_secret = Mock(return_value=mock_secret)
+
+        with self.assertRaises(DBURISecretAccessError):
+            self.harness.charm._get_db_info()
+
+        self.assertEqual(
+            self.harness.charm.unit.status, BlockedStatus(f"Invalid db-uri: {db_uri_secret_id}")
+        )
+
+    def test_get_db_info_secret_not_found(self):
+        """Test the correct exception is thrown and correct charm status is set when the secret does not exist."""
+        db_uri_secret_id = "missing-id"
+        self.harness.charm._stored.db_uri_secret_id = db_uri_secret_id
+        self.harness.charm.model.get_secret = Mock(side_effect=SecretNotFoundError("not found"))
+
+        with self.assertRaises(DBURISecretAccessError):
+            self.harness.charm._get_db_info()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus(f"Secret does not exist: {db_uri_secret_id}"),
+        )
+
+    def test_get_db_info_secret_access_permissions(self):
+        """Test the correct exception is thrown and correct charm status is set when the charm does not have permissions to access the secret."""
+        db_uri_secret_id = "unauthorized-id"
+        self.harness.charm._stored.db_uri_secret_id = db_uri_secret_id
+        self.harness.charm.model.get_secret = Mock(side_effect=ModelError("forbidden"))
+
+        with self.assertRaises(DBURISecretAccessError):
+            self.harness.charm._get_db_info()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus(f"Insufficient privileges: {db_uri_secret_id}"),
+        )
+
+    def test_get_db_info_secret_content_key_error(self):
+        """Test the correct exception is thrown and correct charm status is set when db-uri doesn't exist in the secret content."""
+        secret_mock = Mock()
+        secret_mock.get_content.return_value = {}
+        self.harness.charm.model.get_secret = Mock(return_value=secret_mock)
+
+        secret_id = "secret-id"
+        self.harness.charm._stored.db_uri_secret_id = secret_id
+
+        with self.assertRaises(DBURISecretAccessError):
+            self.harness.charm._get_db_info()
+
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus(f"Cannot access secret content 'db-uri': {secret_id}"),
         )
