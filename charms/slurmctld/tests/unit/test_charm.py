@@ -46,34 +46,6 @@ class TestCharm(TestCase):
 
     @patch("charm.SlurmctldCharm._on_install")
     @patch("ops.framework.EventBase.defer")
-    def test_start_hook_defers_if_setting_cluster_name_fails(self, defer, *_) -> None:
-        """Test that the start event defers if setting cluster_name fails when no relation exists.
-
-        This test checks that event.defer() is called, and charm unit status is Blocked
-        when the cluster_name is set, but no peer-relation is available.
-
-        The slurmctld-peer relation isn't available until after the install hook event completes,
-        so in theory, the peer-relation *should* always be available by the start hook event executes
-        and thus, this case *should* never happen. This code tests that the appropriate action is taken
-        in the unusual case that the peer-relation isn't made by the time the start hook executes.
-        """
-        self.harness.set_leader(True)
-
-        # Do not add the peer-relation
-        # self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
-
-        self.harness.update_config({"cluster-name": "osd-cluster"})
-        self.harness.charm.on.start.emit()
-
-        defer.assert_called()
-
-        self.assertEqual(
-            self.harness.charm.unit.status,
-            BlockedStatus("`slurmctld-peer` relation not available yet, cannot set cluster_name."),
-        )
-
-    @patch("charm.SlurmctldCharm._on_install")
-    @patch("ops.framework.EventBase.defer")
     def test_slurmctld_status_in_start_hook_as_non_leader(self, defer, *_) -> None:
         """Test that the correct status is set if you enter the start hook as a non-leader."""
         self.harness.set_leader(False)
@@ -85,27 +57,23 @@ class TestCharm(TestCase):
 
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("High availability of slurmctld is not supported at this time."),
+            BlockedStatus(
+                "High availability requires slurmctld to have been deployed with `use-network-state` enabled."
+            ),
         )
 
-    @patch("charm.SlurmctldCharm._on_write_slurm_conf")
-    @patch("charm.SlurmctldCharm._on_install")
-    def test_cluster_name(self, *_) -> None:
+    def test_cluster_name(self) -> None:
         """Test that the _cluster_name property works."""
         self.harness.set_leader(True)
-        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
         self.harness.update_config({"cluster-name": "osd-cluster"})
-        self.harness.charm.on.start.emit()
+        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
         self.assertEqual(self.harness.charm.cluster_name, "osd-cluster")
 
-    @patch("charm.SlurmctldCharm._on_write_slurm_conf")
-    @patch("charm.SlurmctldCharm._on_install")
-    def test_cluster_name_type(self, *_) -> None:
+    def test_cluster_name_type(self) -> None:
         """Test the cluster_name is indeed a string."""
         self.harness.set_leader(True)
-        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
         self.harness.update_config({"cluster-name": "osd-cluster"})
-        self.harness.charm.on.start.emit()
+        self.harness.add_relation("slurmctld-peer", self.harness.charm.app.name)
         self.assertEqual(type(self.harness.charm.cluster_name), str)
 
     def test_is_slurm_installed(self) -> None:
@@ -135,22 +103,27 @@ class TestCharm(TestCase):
         self.harness.charm.on.install.emit()
         defer.assert_not_called()
 
+    @patch("charm.SlurmctldCharm._on_install")
     @patch("ops.framework.EventBase.defer")
-    def test_install_fail_ha_support(self, defer) -> None:
-        """Test `InstallEvent` hook when multiple slurmctld units are deployed.
+    def test_install_fail_ha_support(self, defer, *_) -> None:
+        """Test erroneous deployment of multiple slurmctld units.
 
         Notes:
-            The slurmctld charm currently does not support high-availability so this
-            unit test validates that we properly handle if multiple slurmctld units
-            are deployed.
+            The slurmctld charm currently does not support high-availability without
+            the `use-network-state` configuration set to True and a shared file system
+            provided via the filesystem-client charm. This unit test validates that we
+            properly handle if multiple slurmctld units are deployed without these
+            conditions met.
         """
         self.harness.set_leader(False)
-        self.harness.charm.on.install.emit()
+        self.harness.charm.on.start.emit()
 
         defer.assert_called()
         self.assertEqual(
             self.harness.charm.unit.status,
-            BlockedStatus("slurmctld high-availability not supported"),
+            BlockedStatus(
+                "High availability requires slurmctld to have been deployed with `use-network-state` enabled."
+            ),
         )
 
     @patch("ops.framework.EventBase.defer")
@@ -177,14 +150,18 @@ class TestCharm(TestCase):
             BlockedStatus("failed to install slurmctld. see logs for further details"),
         )
 
-    def test_get_auth_key(self) -> None:
+    @patch("shutil.chown")
+    def test_get_auth_key(self, _) -> None:
         """Test that the get_auth_key method works."""
-        setattr(self.harness.charm._stored, "auth_key", "=ABC=")  # Patch StoredState
-        self.assertEqual(self.harness.charm.get_auth_key(), "=ABC=")
+        self.harness.charm._slurmctld.key.path.parent.mkdir(parents=True)
+        self.harness.charm._slurmctld.key.set("MTIzNDU2Nzg5MA==")
+        self.assertEqual(self.harness.charm.get_auth_key(), "MTIzNDU2Nzg5MA==")
 
-    def test_get_jwt_rsa(self) -> None:
+    @patch("shutil.chown")
+    def test_get_jwt_rsa(self, _) -> None:
         """Test that the get_jwt_rsa method works."""
-        setattr(self.harness.charm._stored, "jwt_rsa", "=ABC=")  # Patch StoredState
+        self.harness.charm._slurmctld.jwt.path.parent.mkdir(parents=True)
+        self.harness.charm._slurmctld.jwt.set("=ABC=")
         self.assertEqual(self.harness.charm.get_jwt_rsa(), "=ABC=")
 
     @patch("charm.SlurmctldCharm._check_status", return_value=False)
@@ -228,17 +205,17 @@ class TestCharm(TestCase):
         "hpc_libs.slurm_ops.SlurmctldManager.hostname",
         new_callable=PropertyMock(return_value="test_hostname"),
     )
+    @patch("shutil.chown")
     def test_sackd_on_relation_created(self, *_) -> None:
         """Test that sackd relation is created successfully."""
         self.harness.set_leader(True)
-        # Patch StoredState
-        setattr(self.harness.charm._stored, "slurm_installed", True)
-        setattr(self.harness.charm._stored, "auth_key", "=ABC=")
+        self.harness.charm._slurmctld.key.path.parent.mkdir(parents=True)
+        self.harness.charm._slurmctld.key.set("MTIzNDU2Nzg5MA==")
 
         relation_id = self.harness.add_relation("login-node", "sackd")
         self.assertEqual(
             self.harness.get_relation_data(relation_id, "slurmctld")["cluster_info"],
-            '{"auth_key": "=ABC=", "slurmctld_host": "test_hostname"}',
+            '{"auth_key": "MTIzNDU2Nzg5MA==", "slurmctld_hosts": ["test_hostname"]}',
         )
 
     @patch("ops.framework.EventBase.defer")

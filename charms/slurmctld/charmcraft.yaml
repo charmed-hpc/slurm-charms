@@ -68,6 +68,24 @@ config:
         This is important if a single database is used to record information from
         multiple Slurm-managed clusters.
 
+    use-network-state:
+      type: boolean
+      default: false
+      description: |
+        Use an external network file system for holding the Slurm configuration files
+        and controller state, i.e. its `StateSaveLocation` data`. If `false`, the
+        local root disk is used.
+
+        The network file system must be provided by another mechanism, such as the
+        `filesystem-client` charm. Deployment will block until a file system is
+        mounted at `/var/lib/slurm/checkpoint`.
+
+        NOTE: To use `slurmctld` High Availability, this configuration value must have
+        been `true` at charm deployment time.
+
+        This configuration can be set only at charm deployment. Migration from a local
+        disk to a network file system is not supported.
+
     default-partition:
       type: string
       default: ""

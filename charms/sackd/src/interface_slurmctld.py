@@ -2,14 +2,12 @@
 
 import json
 import logging
-from typing import Union
 
 from ops import (
     EventBase,
     EventSource,
     Object,
     ObjectEvents,
-    Relation,
     RelationBrokenEvent,
     RelationChangedEvent,
 )
@@ -24,24 +22,24 @@ class SlurmctldAvailableEvent(EventBase):
         self,
         handle,
         auth_key,
-        slurmctld_host,
+        slurmctld_hosts,
     ):
         super().__init__(handle)
 
         self.auth_key = auth_key
-        self.slurmctld_host = slurmctld_host
+        self.slurmctld_hosts = slurmctld_hosts
 
     def snapshot(self):
         """Snapshot the event data."""
         return {
             "auth_key": self.auth_key,
-            "slurmctld_host": self.slurmctld_host,
+            "slurmctld_hosts": self.slurmctld_hosts,
         }
 
     def restore(self, snapshot):
         """Restore the snapshot of the event data."""
         self.auth_key = snapshot.get("auth_key")
-        self.slurmctld_host = snapshot.get("slurmctld_host")
+        self.slurmctld_hosts = snapshot.get("slurmctld_hosts")
 
 
 class SlurmctldUnavailableEvent(EventBase):
@@ -114,11 +112,6 @@ class Slurmctld(Object):
         self.on.slurmctld_unavailable.emit()
 
     @property
-    def _relation(self) -> Union[Relation, None]:
-        """Return the relation."""
-        return self.model.get_relation(self._relation_name)
-
-    @property
     def is_joined(self) -> bool:
-        """Return True if relation is joined."""
-        return True if self.model.relations.get(self._relation_name) else False
+        """Return True if relation(s) are joined."""
+        return all(self.model.relations.get(self._relation_name, ()))

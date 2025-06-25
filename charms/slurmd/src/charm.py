@@ -54,7 +54,7 @@ class SlurmdCharm(CharmBase):
             nhc_params=str(),
             slurm_installed=False,
             slurmctld_available=False,
-            slurmctld_host=str(),
+            slurmctld_hosts=str(),
             user_supplied_node_parameters={},
             user_supplied_partition_parameters={},
         )
@@ -170,13 +170,14 @@ class SlurmdCharm(CharmBase):
             event.defer()
             return
 
-        if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
-            if slurmctld_host is not None:
-                self._slurmd.config_server = f"{slurmctld_host}:6817"
-                self._stored.slurmctld_host = slurmctld_host
-                logger.debug(f"slurmctld_host={slurmctld_host}")
+        if (slurmctld_hosts := event.slurmctld_hosts) != self._stored.slurmctld_hosts:
+            if slurmctld_hosts is not None:
+                # Create comma-separated list of slurmctld hosts with port number appended
+                self._slurmd.config_server = ",".join(f"{host}:6817" for host in slurmctld_hosts)
+                self._stored.slurmctld_hosts = slurmctld_hosts
+                logger.debug(f"slurmctld_hosts={slurmctld_hosts}")
             else:
-                logger.debug("'slurmctld_host' not in event data.")
+                logger.debug("'slurmctld_hosts' not in event data.")
                 return
 
         if (auth_key := event.auth_key) != self._stored.auth_key:
@@ -213,7 +214,7 @@ class SlurmdCharm(CharmBase):
         self._stored.slurmctld_available = False
         self._stored.nhc_params = ""
         self._stored.auth_key = ""
-        self._stored.slurmctld_host = ""
+        self._stored.slurmctld_hosts = ""
         self._slurmd.service.stop()
         self._check_status()
 

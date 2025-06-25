@@ -50,27 +50,29 @@ class Slurmrestd(Object):
 
     @property
     def is_joined(self) -> bool:
-        """Return True if relation is joined."""
-        return True if self.model.relations.get(self._relation_name) else False
+        """Return True if relation(s) are joined."""
+        return all(self.model.relations.get(self._relation_name, ()))
 
     def _on_relation_created(self, event: RelationCreatedEvent) -> None:
-        # Check that slurm has been installed so that we know the auth key is
-        # available. Defer if slurm has not been installed yet.
-        if not self._charm.slurm_installed:
+        if not self.framework.model.unit.is_leader():
+            return
+
+        if not (auth_key := self._charm.get_auth_key()):
+            logger.debug("auth key not yet available. deferring event")
             event.defer()
             return
 
         # Get the auth_key from the slurm_ops_manager and set it to the app
         # data on the relation to be retrieved on the other side by slurmdbd.
         app_relation_data = event.relation.data[self.model.app]
-        app_relation_data["auth_key"] = self._charm.get_auth_key()
+        app_relation_data["auth_key"] = auth_key
         self.on.slurmrestd_available.emit()
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         self.on.slurmrestd_unavailable.emit()
 
     def set_slurm_config_on_app_relation_data(self, slurm_config: str) -> None:
-        """Set the slurm_conifg to the app data on the relation.
+        """Set the slurm_config to the app data on the relation.
 
         Setting data on the relation forces the units of related applications
         to observe the relation-changed event so they can acquire and

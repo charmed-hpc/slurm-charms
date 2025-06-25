@@ -92,8 +92,16 @@ class Slurmd(Object):
 
     def _on_relation_created(self, event: RelationCreatedEvent) -> None:
         """Set our data on the relation."""
-        # Need to wait until the charm has installed slurm before we can proceed.
-        if not self._charm.slurm_installed:
+        if not self.framework.model.unit.is_leader():
+            return
+
+        if not (auth_key := self._charm.get_auth_key()):
+            logger.debug("auth key not yet available. deferring event")
+            event.defer()
+            return
+
+        if not self._charm.all_units_observed():
+            logger.debug("not observed all other controller units. deferring event")
             event.defer()
             return
 
@@ -104,14 +112,17 @@ class Slurmd(Object):
         )
         event.relation.data[self.model.app]["cluster_info"] = json.dumps(
             {
-                "auth_key": self._charm.get_auth_key(),
-                "slurmctld_host": self._charm.hostname,
+                "auth_key": auth_key,
+                "slurmctld_hosts": self._charm.get_controllers(),
                 "nhc_params": health_check_params,
             }
         )
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Emit slurmd available event and conditionally update new_nodes."""
+        if not self.framework.model.unit.is_leader():
+            return
+
         if app := event.app:
             app_data = event.relation.data[app]
             if not app_data.get("partition"):
@@ -291,3 +302,12 @@ class Slurmd(Object):
                             # Get the NodeName and append to the partition nodes
                             nodes.append(node_config["NodeName"])
         return nodes
+
+    def update_controllers(self) -> None:
+        """Synchronize the current set of slurmctld controllers with data on the relation."""
+        for rel in self.model.relations.get(self._relation_name, ()):
+            if rel and "cluster_info" in rel.data[self.model.app]:
+                cluster_info = json.loads(rel.data[self.model.app]["cluster_info"])
+                cluster_info["slurmctld_hosts"] = self._charm.get_controllers()
+                rel.data[self.model.app]["cluster_info"] = json.dumps(cluster_info)
+                logger.debug("slurmd cluster_info set to %s", cluster_info)
