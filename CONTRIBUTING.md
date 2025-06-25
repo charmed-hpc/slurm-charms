@@ -231,6 +231,32 @@ The following guidelines must be adhered to if you are writing code to be merged
   * We only need one extensive set of documentation rather than individual
     sets scoped per Slurm charm.
 
+#### Adding new internal packages
+
+If you want to add a new internal Python package to the monorepo, you can run:
+
+```bash
+uv init --lib pkgs/pkg-name
+```
+
+This will create all the scaffolding for a new package. Then, to use the
+package as a common dependency, modify the `sources` section of the
+`pyproject.toml` file with the name of the new package.
+
+```toml
+[tool.uv.sources]
+pkg-name = { workspace = true }
+```
+
+After doing this, the package will be available as a normal dependency, so you can
+add it to the `dependencies` section in the `pyproject.toml` file of any charm:
+
+```toml
+[project]
+# ...
+dependencies = ["ops", "pkg-name"]
+```
+
 ### Juju and charmed operators
 
 * Adhere to the operator development best practices outlined in the [operator development styleguide](https://juju.is/docs/sdk/styleguide).

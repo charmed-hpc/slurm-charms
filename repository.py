@@ -24,6 +24,7 @@ import yaml
 ROOT_DIR = Path(__file__).parent.resolve()
 BUILD_PATH = ROOT_DIR / "_build"
 CHARMS_PATH = ROOT_DIR / "charms"
+PKGS_PATH = ROOT_DIR / "pkgs"
 PYPROJECT_FILE = "pyproject.toml"
 CHARMCRAFT_FILE = "charmcraft.yaml"
 LOCK_FILE = "uv.lock"
@@ -116,12 +117,22 @@ class CharmLibrary:
 
 
 @dataclass
+class Package:
+    """Information about an internal Python package."""
+
+    name: str
+    version: str
+    path: Path
+
+
+@dataclass
 class Charm:
     """Information used to build a charm."""
 
     metadata: dict[str, Any]
     path: Path
     libraries: Iterable[CharmLibrary]
+    packages: Iterable[Package]
 
     @property
     def name(self) -> str:
@@ -144,6 +155,7 @@ class Repository:
     """Information about the monorepo."""
 
     charms: Iterable[Charm]
+    internal_packages: Iterable[Package]
     external_libraries: Iterable[CharmLibrary]
     internal_libraries: Iterable[CharmLibrary]
 
@@ -154,7 +166,13 @@ class Repository:
             with (ROOT_DIR / PYPROJECT_FILE).open(mode="rb") as f:
                 project = tomllib.load(f)
         except OSError:
-            raise RepositoryError(f"Failed to read file `{ROOT_DIR / PYPROJECT_FILE}`.")
+            raise RepositoryError(f"Failed to read file `{ROOT_DIR / PYPROJECT_FILE}`")
+
+        try:
+            with (ROOT_DIR / LOCK_FILE).open(mode="rb") as f:
+                uv_lock = tomllib.load(f)
+        except OSError:
+            raise RepositoryError("Failed to read uv.lock file")
 
         try:
             external_libraries = [
@@ -166,8 +184,6 @@ class Repository:
 
         try:
             binary_packages = project["tool"]["repository"]["binary-packages"]
-            with (ROOT_DIR / LOCK_FILE).open(mode="rb") as f:
-                uv_lock = tomllib.load(f)
 
             resolved_binary_packages = {
                 bin_pkg: package["version"]
@@ -176,11 +192,11 @@ class Repository:
                 if package["name"] == bin_pkg
             }
         except KeyError:
-            external_libraries = []
+            resolved_binary_packages = {}
         except StopIteration:
-            raise RepositoryError(f"Could not find package in the lock file.")
+            raise RepositoryError("Could not find package in the lock file")
         except OSError:
-            raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`.")
+            raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`")
 
         internal_libraries = []
         for charm in CHARMS_PATH.iterdir():
@@ -201,36 +217,53 @@ class Repository:
                         minor_version=-1,
                     )
                 )
+        internal_packages = [
+            pkg for path in PKGS_PATH.iterdir() if (pkg := load_package(path)) is not None
+        ]
         charms = [
-            load_charm(
-                charm, external_libraries, internal_libraries, resolved_binary_packages, uv_lock
+            charm
+            for path in CHARMS_PATH.iterdir()
+            if (
+                charm := load_charm(
+                    path,
+                    external_libraries,
+                    internal_libraries,
+                    internal_packages,
+                    resolved_binary_packages,
+                    uv_lock,
+                )
             )
-            for charm in CHARMS_PATH.iterdir()
+            is not None
         ]
 
         self.charms = charms
         self.external_libraries = external_libraries
         self.internal_libraries = internal_libraries
+        self.internal_packages = internal_packages
 
 
 def load_charm(
     charm: Path,
     external_libraries: Iterable[CharmLibrary],
     internal_libraries: Iterable[CharmLibrary],
+    internal_packages: Iterable[Package],
     binary_packages: Mapping[str, str],
     uv_lock: Mapping[str, Any],
-) -> Charm:
+) -> Charm | None:
     try:
         with (charm / PYPROJECT_FILE).open(mode="rb") as f:
             project = tomllib.load(f)
+    except NotADirectoryError:
+        logger.info("skipping %s because it is not a charm directory", charm)
+        return None
     except OSError:
-        raise RepositoryError(f"Failed to read file `{charm / PYPROJECT_FILE}`.")
+        raise RepositoryError(f"Failed to read file `{charm / PYPROJECT_FILE}`")
 
     try:
         with (charm / CHARMCRAFT_FILE).open(mode="rb") as f:
             metadata = dict(yaml.safe_load(f))
     except OSError:
-        raise RepositoryError(f"Failed to read file `{charm / CHARMCRAFT_FILE}`.")
+        raise RepositoryError(f"Failed to read file `{charm / CHARMCRAFT_FILE}`")
 
     # Since the `lock` file only lists direct dependencies for a specific package,
     # we need to recursively collect all the dependencies in order to see which
@@ -267,10 +300,26 @@ def load_charm(
     except KeyError:
         pass
 
-    return Charm(
-        metadata=metadata,
-        path=charm,
-        libraries=libraries,
+    packages = []
+    for pkg in internal_packages:
+        if pkg.name in deps:
+            packages.append(pkg)
+
+    return Charm(metadata=metadata, path=charm, libraries=libraries, packages=packages)
+
+
+def load_package(package: Path) -> Package | None:
+    try:
+        with (package / PYPROJECT_FILE).open(mode="rb") as f:
+            metadata = tomllib.load(f)
+    except NotADirectoryError:
+        logger.info("skipping %s because it is not a package directory", package)
+        return None
+    except OSError:
+        raise RepositoryError(f"Failed to read file `{package / PYPROJECT_FILE}`")
+
+    return Package(
+        name=metadata["project"]["name"], version=metadata["project"]["version"], path=package
     )
 
 
@@ -301,7 +350,7 @@ def stage_charm(
 
     Will copy internal and external libraries.
     """
-    logger.info("Staging charm %s...", charm.path.name)
+    logger.info("staging charm %s...", charm.path.name)
     if not dry_run:
         remove_dir_if_exists(charm.build_path)
         shutil.copytree(charm.path, charm.build_path, dirs_exist_ok=True)
@@ -313,7 +362,7 @@ def stage_charm(
             with open(charm.build_path / CHARMCRAFT_FILE, "wt") as f:
                 yaml.safe_dump(charm.metadata, f, sort_keys=False)
         except OSError:
-            raise RepositoryError(f"Failed to write file `{charm.build_path / CHARMCRAFT_FILE}`.")
+            raise RepositoryError(f"Failed to write file `{charm.build_path / CHARMCRAFT_FILE}`")
 
     for lib in charm.libraries:
         src = LIBS_CHARM_PATH / "lib" / "charms" / lib.path
@@ -331,12 +380,26 @@ def stage_charm(
                 charm.name,
                 "--frozen",
                 "--no-hashes",
+                "--no-emit-workspace",
                 "--format=requirements-txt",
                 "-o",
                 str(charm.build_path / "requirements.txt"),
             ]
         )
-    logger.info("Staged charm %s at %s.", charm.path.name, charm.build_path)
+
+    if not dry_run:
+        with open(charm.build_path / "requirements.txt", "+a") as f:
+            print("# ===== Local packages =====", file=f)
+            for pkg in charm.packages:
+                filename = f"{pkg.name.replace('-', '_')}-{pkg.version}.tar.gz"
+                src = BUILD_PATH / "dist" / filename
+                dest = charm.build_path / "dist" / filename
+                logger.debug("Copying %s to %s", src, dest)
+                if not dry_run:
+                    copy(src, dest)
+                print(f"./dist/{filename}", file=f)
+
+    logger.info("staged charm %s at %s", charm.path.name, charm.build_path)
 
 
 def stage_charms(
@@ -363,10 +426,10 @@ def stage_charms(
             with (LIBS_CHARM_PATH / CHARMCRAFT_FILE).open(mode="w") as f:
                 yaml.safe_dump(LIBS_CHARM, f)
     except OSError:
-        raise RepositoryError(f"Failed to write file `{LIBS_CHARM_PATH / CHARMCRAFT_FILE}`.")
+        raise RepositoryError(f"Failed to write file `{LIBS_CHARM_PATH / CHARMCRAFT_FILE}`")
 
     if repository.external_libraries:
-        logger.info("Fetching external libraries...")
+        logger.info("fetching external libraries...")
         if not dry_run:
             CHARMCRAFT.run_command(["fetch-libs"], cwd=LIBS_CHARM_PATH)
 
@@ -377,8 +440,14 @@ def stage_charms(
         if not dry_run:
             copy(src, dest)
 
+    for pkg in repository.internal_packages:
+        if not dry_run:
+            UV.run_command(
+                ["build", "--package", pkg.name, "--sdist", "--out-dir", str(BUILD_PATH / "dist")]
+            )
+
     for charm in charms:
-        logger.info("Preparing charm %s", charm.path.name)
+        logger.info("preparing charm %s", charm.path.name)
         if clean:
             clean_charm(charm, dry_run=dry_run)
         stage_charm(
@@ -393,7 +462,7 @@ def validate_charm(charm: str, repository: Repository) -> Charm:
     try:
         return next(filter(lambda c: c.name == charm, repository.charms))
     except StopIteration:
-        raise RepositoryError(f"Unknown charm `{charm.name}`")
+        raise RepositoryError(f"Unknown charm `{charm}`")
 
 
 def clean_charm(
@@ -421,7 +490,7 @@ def get_source_dirs(charms: Iterable[Charm], include_tests: bool = True) -> list
     return files
 
 
-def uv_run(args: Iterable[str], *popenargs, **kwargs) -> None:
+def uv_run(args: list[str], *popenargs, **kwargs) -> None:
     """Run a command using the uv runner."""
     args = ["run", "--frozen", "--extra", "dev"] + args
     UV.run_command(args, *popenargs, **kwargs)
@@ -595,7 +664,7 @@ def typecheck_cli(
     stage_charms(charms, repository)
 
     for charm in charms:
-        logger.info("Running pyright...")
+        logger.info("running pyright...")
         uv_run(
             ["pyright", str(charm.build_path / "src")],
             env={
@@ -618,7 +687,7 @@ def unit_test_cli(
     files = []
 
     for charm in charms:
-        logger.info("Running unit tests for %s", charm.path.name)
+        logger.info("running unit tests for %s", charm.path.name)
         coverage_file = charm.build_path / ".coverage"
         uv_run(
             ["coverage", "erase"],
@@ -647,7 +716,7 @@ def unit_test_cli(
         if coverage_file.is_file():
             files.append(str(coverage_file))
 
-    logger.info("Generating global results...")
+    logger.info("generating global results...")
     uv_run(["coverage", "combine"] + files)
     uv_run(["coverage", "report"])
     uv_run(["coverage", "xml", "-o", "cover/coverage.xml"])
@@ -663,7 +732,7 @@ def build_cli(
     stage_charms(charms, repository)
 
     for charm in charms:
-        logger.info("Building the charm %s", charm.name)
+        logger.info("building the charm %s", charm.name)
         subprocess.run(
             "charmcraft -v pack".split(),
             cwd=charm.build_path,
@@ -674,12 +743,12 @@ def build_cli(
             charm.build_path
             / glob.glob(f"{charm.path.name}_*.charm", root_dir=charm.build_path)[0]
         )
-        logger.info("Moving charm %s to %s", charm_long_path, charm.charm_path)
+        logger.info("moving charm %s to %s", charm_long_path, charm.charm_path)
 
         charm.charm_path.unlink(missing_ok=True)
         copy(charm_long_path, charm.charm_path)
         charm_long_path.unlink()
-        logger.info("Built charm %s", charm.charm_path)
+        logger.info("built charm %s", charm.charm_path)
 
 
 def integration_tests_cli(
@@ -694,7 +763,7 @@ def integration_tests_cli(
 
     local_charms = {}
     for charm in charms:
-        local_charms[f"LOCAL_{charm.name.upper().replace("-", "_")}"] = charm.charm_path
+        local_charms[f"LOCAL_{charm.name.upper().replace('-', '_')}"] = charm.charm_path
 
     uv_run(
         [
@@ -707,7 +776,7 @@ def integration_tests_cli(
             "--log-cli-level=INFO",
             "./tests/integration",
         ]
-        + rest,
+        + list(rest),
         env={"PYTHONPATH": LIBS_CHARM_PATH / "lib", **os.environ, **local_charms},
     )
 

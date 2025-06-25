@@ -59,7 +59,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["charms/*"]
+members = ["charms/*", "packages/*"]
 
 [tool.uv.sources]
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
