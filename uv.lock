@@ -6,6 +6,7 @@ requires-python = "==3.12.*"
 members = [
     "sackd",
     "slurm-charms",
+    "slurm-ops",
     "slurmctld",
     "slurmd",
     "slurmdbd",
@@ -290,13 +291,18 @@ wheels = [
 [[package]]
 name = "hpc-libs"
 version = "0.1.0"
-source = { git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6#ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "distro" },
+source = { git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a#c90ff0436e6c6dff3058eac324761e125b105c0a" }
+
+[package.optional-dependencies]
+all = [
+    { name = "ops" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "slurmutils" },
+]
+machine = [
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
 ]
 
 [[package]]
@@ -334,6 +340,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f1/70/7703c29685631f5a7590aa73f1f1d3fa9a380e654b86af429e0934a32f7d/idna-3.10.tar.gz", hash = "sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9", size = 190490, upload-time = "2024-09-15T18:07:39.745Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl", hash = "sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3", size = 70442, upload-time = "2024-09-15T18:07:37.964Z" },
+]
+
+[[package]]
+name = "importlib-metadata"
+version = "8.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "zipp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/76/66/650a33bd90f786193e4de4b3ad86ea60b53c89b669a5c7be931fac31cdb0/importlib_metadata-8.7.0.tar.gz", hash = "sha256:d13b81ad223b890aa16c5471f2ac3056cf76c5f10f82d6f9292f0b415f389000", size = 56641, upload-time = "2025-04-27T15:29:01.736Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/b0/36bd937216ec521246249be3bf9855081de4c5e06a0c9b4219dbeda50373/importlib_metadata-8.7.0-py3-none-any.whl", hash = "sha256:e5dd1551894c77868a30651cef00984d50e1002d06942a7101d34870c5f02afd", size = 27656, upload-time = "2025-04-27T15:29:00.214Z" },
 ]
 
 [[package]]
@@ -505,16 +523,31 @@ wheels = [
 ]
 
 [[package]]
-name = "ops"
-version = "2.20.0"
+name = "opentelemetry-api"
+version = "1.34.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "importlib-metadata" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/5e/94a8cb759e4e409022229418294e098ca7feca00eb3c467bb20cbd329bda/opentelemetry_api-1.34.1.tar.gz", hash = "sha256:64f0bd06d42824843731d05beea88d4d4b6ae59f9fe347ff7dfa2cc14233bbb3", size = 64987, upload-time = "2025-06-10T08:55:19.818Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/3a/2ba85557e8dc024c0842ad22c570418dc02c36cbd1ab4b832a93edf071b8/opentelemetry_api-1.34.1-py3-none-any.whl", hash = "sha256:b7df4cb0830d5a6c29ad0c0691dbae874d8daefa934b8b1d642de48323d32a8c", size = 65767, upload-time = "2025-06-10T08:54:56.717Z" },
+]
+
+[[package]]
+name = "ops"
+version = "2.23.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "importlib-metadata" },
+    { name = "opentelemetry-api" },
     { name = "pyyaml" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/af/d2eb331b6424b879a448611524f54590fde6e3726f7513941f4fc26c4b08/ops-2.20.0.tar.gz", hash = "sha256:be1dcfd0bb748839fbc200bbd073a6acf9648401c3729db22d8594ebb4301e05", size = 492365, upload-time = "2025-03-31T20:43:20.044Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/c8/1e85a3e025fdf28283107c56d40229075e79ae1ac0736f2ca67ae1e2a635/ops-2.23.0.tar.gz", hash = "sha256:3e6c29a8f2119c7b8eaa88c82b5371de236dfcb7a7bf0012a6e2a829f0837fb7", size = 527426, upload-time = "2025-06-30T07:50:04.444Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/62/83/0acfc15b24d1bc302e47f2e5e9170c8707cef9e7eb90177d38afce8cd6e8/ops-2.20.0-py3-none-any.whl", hash = "sha256:94791a4b45f00c6902494a4934480c85947880b27f5ebf3a0ec32e8cc6279c99", size = 180997, upload-time = "2025-03-31T20:43:15.433Z" },
+    { url = "https://files.pythonhosted.org/packages/63/0e/86b8893f08c4ff8e3c15f983b30cf59f99b0a940600a484b886703aba317/ops-2.23.0-py3-none-any.whl", hash = "sha256:7a42840410e8570acc3a4b498973a5bcd3fd0b12dd06837f57b9379b3acdfac3", size = 188165, upload-time = "2025-06-30T07:50:02.779Z" },
 ]
 
 [package.optional-dependencies]
@@ -524,15 +557,15 @@ testing = [
 
 [[package]]
 name = "ops-scenario"
-version = "7.20.0"
+version = "7.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/d6/85a7d0a1f0df597a82caa5350a45f0e99ef2c72eed5705d80cae72101925/ops_scenario-7.20.0.tar.gz", hash = "sha256:f1c058dac51bb953389cbddedbf131fe545b9932ae8fe32c1e701833b31ea88b", size = 142159, upload-time = "2025-03-31T20:36:39.027Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/6d/c492eeb69930b33cc1d099c510df890fd27afc296ca88e1d5c3fac675636/ops_scenario-7.23.0.tar.gz", hash = "sha256:32a40966a92138779e5f47fff0653037e98e4561fcb30a02014733a88a68c998", size = 109460, upload-time = "2025-06-30T07:50:12.54Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/a3/8cb3445f8666082a8b20c6547debca47902c15f5a9ff608dd767632b4a70/ops_scenario-7.20.0-py3-none-any.whl", hash = "sha256:ee8defa368751d819e3b8ae08de672fa281af16274567f022c42a5f2c6c584a3", size = 72497, upload-time = "2025-03-31T20:36:36.706Z" },
+    { url = "https://files.pythonhosted.org/packages/03/a6/cfc7ef8e1530363f55462eb24e6a37f429891a287209bb288c4f80525459/ops_scenario-7.23.0-py3-none-any.whl", hash = "sha256:88ddb6b8b41688c580b38fc10dfa3706ab65a481931c26b07a298f2dd82a86ae", size = 64313, upload-time = "2025-06-30T07:50:10.799Z" },
 ]
 
 [[package]]
@@ -649,11 +682,11 @@ wheels = [
 
 [[package]]
 name = "pyfakefs"
-version = "5.7.1"
+version = "5.9.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/14/43/e0d0f256734cc03bcfb1f7d15d6bf19339531e8cd6fadfc3fcb8ae077a10/pyfakefs-5.7.1.tar.gz", hash = "sha256:24774c632f3b67ea26fd56b08115ba7c339d5cd65655410bca8572d73a1ae9a4", size = 211163, upload-time = "2024-10-13T07:52:19.339Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/73/89/cb396a7aef5c76013cb44efd778ba3d89953b1d64304bf2d684a1d4ae06a/pyfakefs-5.9.1.tar.gz", hash = "sha256:ca02a1441dc77d7512bebfe4224b32f2127e83c45672f5fe2c02c33d4284bc70", size = 230395, upload-time = "2025-06-23T19:54:59.85Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/8b/0d90a59d571aa6df4f8ea18ced442a66203e20a4d97a71ba10a39595477c/pyfakefs-5.7.1-py3-none-any.whl", hash = "sha256:6503ffe7f401701cf974b502311f926da2b0657a72244a6ba36e985ceb3dd783", size = 226093, upload-time = "2024-10-13T07:52:17.936Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/64/353b1a119c688d06a0be07312a3bb17154b63f95ebf8f2da625be765bb20/pyfakefs-5.9.1-py3-none-any.whl", hash = "sha256:b3c1f391f1990112ff6b0642182e75f07a6d7fcd81cf1357277680bf6c9b8a84", size = 244717, upload-time = "2025-06-23T19:54:57.66Z" },
 ]
 
 [[package]]
@@ -712,6 +745,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-mock"
+version = "3.14.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/28/67172c96ba684058a4d24ffe144d64783d2a270d0af0d9e792737bddc75c/pytest_mock-3.14.1.tar.gz", hash = "sha256:159e9edac4c451ce77a5cdb9fc5d1100708d2dd4ba3c3df572f14097351af80e", size = 33241, upload-time = "2025-05-26T13:58:45.167Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b2/05/77b60e520511c53d1c1ca75f1930c7dd8e971d0c4379b7f4b3f9644685ba/pytest_mock-3.14.1-py3-none-any.whl", hash = "sha256:178aefcd11307d874b4cd3100344e7e2d888d9791a6a1d9bfe90fbc1b74fd1d0", size = 9923, upload-time = "2025-05-26T13:58:43.487Z" },
+]
+
+[[package]]
 name = "pytest-order"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -737,11 +782,11 @@ wheels = [
 
 [[package]]
 name = "python-dotenv"
-version = "1.0.1"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bc/57/e84d88dfe0aec03b7a2d4327012c1627ab5f03652216c63d49846d7a6c58/python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca", size = 39115, upload-time = "2024-01-23T06:33:00.505Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/b0/4bc07ccd3572a2f9df7e6782f52b0c6c90dcbb803ac4a167702d7d0dfe1e/python_dotenv-1.1.1.tar.gz", hash = "sha256:a8a6399716257f45be6a007360200409fce5cda2661e3dec71d23dc15f6189ab", size = 41978, upload-time = "2025-06-24T04:21:07.341Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a", size = 19863, upload-time = "2024-01-23T06:32:58.246Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/ed/539768cf28c661b5b068d66d96a2f155c4971a5d55684a514c1a0e0dec2f/python_dotenv-1.1.1-py3-none-any.whl", hash = "sha256:31f23644fe2602f88ff55e1f5c79ba497e01224ee7737937930c448e4d0e24dc", size = 20556, upload-time = "2025-06-24T04:21:06.073Z" },
 ]
 
 [[package]]
@@ -856,7 +901,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "ops" },
 ]
 
@@ -875,12 +920,13 @@ version = "0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cosl" },
-    { name = "hpc-libs" },
+    { name = "hpc-libs", extra = ["all"] },
     { name = "influxdb" },
     { name = "netifaces-plus" },
     { name = "nvidia-ml-py" },
     { name = "ops" },
     { name = "rpds-py" },
+    { name = "slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -900,6 +946,7 @@ dev = [
     { name = "pylint" },
     { name = "pyright" },
     { name = "pytest" },
+    { name = "pytest-mock" },
     { name = "pytest-order" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -917,7 +964,7 @@ requires-dist = [
     { name = "dbus-fast", marker = "extra == 'dev'", specifier = ">=1.90.2" },
     { name = "distro", marker = "extra == 'dev'", specifier = "==1.9.0" },
     { name = "flake8", marker = "extra == 'dev'" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" },
+    { name = "hpc-libs", extras = ["all"], git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "influxdb", specifier = "==5.3.2" },
     { name = "jubilant", marker = "extra == 'dev'", specifier = "~=1.0" },
     { name = "netifaces-plus", specifier = "==0.12.4" },
@@ -925,20 +972,33 @@ requires-dist = [
     { name = "ops", specifier = "~=2.19" },
     { name = "ops", extras = ["testing"], marker = "extra == 'dev'", specifier = "~=2.19" },
     { name = "pycryptodome", marker = "extra == 'dev'", specifier = "==3.20.0" },
-    { name = "pyfakefs", marker = "extra == 'dev'", specifier = "==5.7.1" },
+    { name = "pyfakefs", marker = "extra == 'dev'", specifier = "==5.9.1" },
     { name = "pylint", marker = "extra == 'dev'" },
     { name = "pyright", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "~=7.2" },
+    { name = "pytest-mock", marker = "extra == 'dev'", specifier = "~=3.14" },
     { name = "pytest-order", marker = "extra == 'dev'", specifier = "~=1.3" },
-    { name = "python-dotenv", marker = "extra == 'dev'", specifier = "~=1.0.1" },
+    { name = "python-dotenv", marker = "extra == 'dev'", specifier = "~=1.1.1" },
     { name = "pyyaml", marker = "extra == 'dev'" },
     { name = "rpds-py", specifier = "~=0.23.1" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "slurmutils", specifier = ">=0.11.0,<1.0.0" },
+    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurmutils", specifier = ">=1.1.1,<2.0.0" },
     { name = "tenacity", marker = "extra == 'dev'", specifier = "~=8.2" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "slurm-ops"
+version = "0.1.0"
+source = { editable = "pkgs/slurm-ops" }
+dependencies = [
+    { name = "hpc-libs", extra = ["machine"] },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hpc-libs", extras = ["machine"], git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" }]
 
 [[package]]
 name = "slurmctld"
@@ -956,7 +1016,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cosl" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "influxdb" },
     { name = "netifaces-plus" },
     { name = "ops" },
@@ -979,7 +1039,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cosl" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "nvidia-ml-py" },
     { name = "ops" },
     { name = "slurmutils" },
@@ -1000,7 +1060,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cosl" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "ops" },
     { name = "slurmutils" },
 ]
@@ -1017,22 +1077,22 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=ff1f0df95e3d8b0fafd6ee69fe81836eefb2e4f6" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "ops" },
     { name = "slurmutils" },
 ]
 
 [[package]]
 name = "slurmutils"
-version = "0.12.0"
+version = "1.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/93/de/aab466a285cc678880e61faa72c6d5bba0afe61feed7ef4bfe4b1f6d0dda/slurmutils-0.12.0.tar.gz", hash = "sha256:88d3ddfa61f930bf72dffcfbe7e8c7cf732a563685ea773fc0b049d2278b42f3", size = 24423, upload-time = "2025-01-09T14:07:17.785Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/c6/f7c0a3afc74ee379690bb84be28af28678d990a45f9f16ed4d0b247984cb/slurmutils-1.1.4.tar.gz", hash = "sha256:83874212689f993dc47708879018a281f7eacbb3ba35fbc2aacd44365d9e1bde", size = 36456, upload-time = "2025-06-25T13:41:26.735Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/8d/6199006b73b78894d48fdee1d418e03eb0165ee620055ecc7e16d369c0ca/slurmutils-0.12.0-py3-none-any.whl", hash = "sha256:50bc513b693276a04e01df8856911768372f9e9a95ac1a3fecf31e08df5e1374", size = 36149, upload-time = "2025-01-09T14:07:16.59Z" },
+    { url = "https://files.pythonhosted.org/packages/39/27/8ba1bdf35ea2cfe4c0a6a8c3329f37a91c5b9ab81f3690c8067ccd872ebf/slurmutils-1.1.4-py3-none-any.whl", hash = "sha256:2f873abca0d01dbb21e96c65b5df117b0bccb71564b80f68e0a4158f75e01341", size = 49994, upload-time = "2025-06-25T13:41:25.264Z" },
 ]
 
 [[package]]
@@ -1064,11 +1124,11 @@ wheels = [
 
 [[package]]
 name = "typing-extensions"
-version = "4.12.2"
+version = "4.14.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/df/db/f35a00659bc03fec321ba8bce9420de607a1d37f8342eee1863174c69557/typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8", size = 85321, upload-time = "2024-06-07T18:52:15.995Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/bc/51647cd02527e87d05cb083ccc402f93e441606ff1f01739a62c8ad09ba5/typing_extensions-4.14.0.tar.gz", hash = "sha256:8676b788e32f02ab42d9e7c61324048ae4c6d844a399eebace3d4979d75ceef4", size = 107423, upload-time = "2025-06-02T14:52:11.399Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438, upload-time = "2024-06-07T18:52:13.582Z" },
+    { url = "https://files.pythonhosted.org/packages/69/e0/552843e0d356fbb5256d21449fa957fa4eff3bbc135a74a691ee70c7c5da/typing_extensions-4.14.0-py3-none-any.whl", hash = "sha256:a1514509136dd0b477638fc68d6a91497af5076466ad0fa6c338e44e359944af", size = 43839, upload-time = "2025-06-02T14:52:10.026Z" },
 ]
 
 [[package]]
@@ -1104,4 +1164,13 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e6/30/fba0d96b4b5fbf5948ed3f4681f7da2f9f64512e1d303f94b4cc174c24a5/websocket_client-1.8.0.tar.gz", hash = "sha256:3239df9f44da632f96012472805d40a23281a991027ce11d2f45a6f24ac4c3da", size = 54648, upload-time = "2024-04-23T22:16:16.976Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/84/44687a29792a70e111c5c477230a72c4b957d88d16141199bf9acb7537a3/websocket_client-1.8.0-py3-none-any.whl", hash = "sha256:17b44cc997f5c498e809b22cdf2d9c7a9e71c02c8cc2b6c56e7c2d1239bfa526", size = 58826, upload-time = "2024-04-23T22:16:14.422Z" },
+]
+
+[[package]]
+name = "zipp"
+version = "3.23.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/02/0f2892c661036d50ede074e376733dca2ae7c6eb617489437771209d4180/zipp-3.23.0.tar.gz", hash = "sha256:a07157588a12518c9d4034df3fbbee09c814741a33ff63c05fa29d26a2404166", size = 25547, upload-time = "2025-06-08T17:06:39.4Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/54/647ade08bf0db230bfea292f893923872fd20be6ac6f53b2b936ba839d75/zipp-3.23.0-py3-none-any.whl", hash = "sha256:071652d6115ed432f5ce1d34c336c0adfd6a884660d1e9712a256d3d3bd4b14e", size = 10276, upload-time = "2025-06-08T17:06:38.034Z" },
 ]
