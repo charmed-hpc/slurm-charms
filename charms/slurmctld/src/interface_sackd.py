@@ -29,19 +29,38 @@ class Sackd(Object):
 
     def _on_relation_created(self, event: RelationCreatedEvent) -> None:
         """Set our data on the relation."""
-        # Need to wait until the charm has installed slurm before we can proceed.
-        if not self._charm.slurm_installed:
+        if not self.framework.model.unit.is_leader():
+            return
+
+        if not (auth_key := self._charm.get_auth_key()):
+            logger.debug("auth key not yet available. deferring event")
+            event.defer()
+            return
+
+        if not self._charm.all_units_observed():
+            logger.debug("not observed all other controller units. deferring event")
             event.defer()
             return
 
         event.relation.data[self.model.app]["cluster_info"] = json.dumps(
             {
-                "auth_key": self._charm.get_auth_key(),
-                "slurmctld_host": self._charm.hostname,
+                "auth_key": auth_key,
+                "slurmctld_hosts": self._charm.get_controllers(),
             }
         )
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Clear the cluster info if the relation is broken."""
-        if self.framework.model.unit.is_leader():
+        # Avoid cluster info being cleared in instance where leader unit is removed but other units
+        # remain by proceeding only if all units are departing/application is being scaled to 0.
+        if self.framework.model.unit.is_leader() and self.model.app.planned_units() == 0:
             event.relation.data[self.model.app]["cluster_info"] = ""
+
+    def update_controllers(self) -> None:
+        """Synchronize the current set of slurmctld controllers with data on the relation."""
+        for rel in self.model.relations.get(self._relation_name, ()):
+            if rel and "cluster_info" in rel.data[self.model.app]:
+                cluster_info = json.loads(rel.data[self.model.app]["cluster_info"])
+                cluster_info["slurmctld_hosts"] = self._charm.get_controllers()
+                rel.data[self.model.app]["cluster_info"] = json.dumps(cluster_info)
+                logger.debug("sackd cluster_info set to %s", cluster_info)

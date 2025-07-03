@@ -73,17 +73,22 @@ class Slurmdbd(Object):
 
     def _on_relation_created(self, event: RelationCreatedEvent) -> None:
         """Perform relation-created event operations."""
-        # Check that slurm has been installed so that we know the auth key is
-        # available. Defer if slurm has not been installed yet.
-        if not self._charm.slurm_installed:
+        if not self.framework.model.unit.is_leader():
+            return
+
+        # Defer if keys not yet available.
+        if not (auth_key := self._charm.get_auth_key()) or not (
+            jwt_rsa := self._charm.get_jwt_rsa()
+        ):
+            logger.debug("auth and JWT keys not yet available. deferring event")
             event.defer()
             return
 
         try:
             event.relation.data[self.model.app]["cluster_info"] = json.dumps(
                 {
-                    "auth_key": self._charm.get_auth_key(),
-                    "jwt_rsa": self._charm.get_jwt_rsa(),
+                    "auth_key": auth_key,
+                    "jwt_rsa": jwt_rsa,
                 }
             )
         except json.JSONDecodeError as e:

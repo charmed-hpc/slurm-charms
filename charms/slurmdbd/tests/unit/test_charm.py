@@ -111,7 +111,9 @@ class TestCharm(TestCase):
         self.harness.charm._stored.slurm_installed = True
 
         self.harness.charm.on.install.emit()
-        self.assertEqual(self.harness.charm.unit.status, BlockedStatus("Need relations: slurmctld"))
+        self.assertEqual(
+            self.harness.charm.unit.status, BlockedStatus("Need relations: slurmctld")
+        )
 
     @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock)
     def test_status_waiting_on_missing_jwt_key_relation_data(self, is_joined) -> None:
