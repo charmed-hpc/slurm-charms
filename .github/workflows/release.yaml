@@ -44,14 +44,10 @@ jobs:
       - name: Select Charmhub channel
         uses: canonical/charming-actions/channel@2.5.0-rc
         id: channel
-      - name: Install Just
-        uses: extractions/setup-just@v2
-        with:
-          just-version: 1.38.0
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: 0.5.8
+      - name: Install `just`
+        run: sudo snap install just --classic
+      - name: Install `uv`
+        run: sudo snap install astral-uv --classic
       - name: Install Charmcraft
         run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Stage charm
