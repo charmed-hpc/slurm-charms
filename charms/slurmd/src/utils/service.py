@@ -78,9 +78,7 @@ def _start_slurmd_service() -> None:
     # command will fail to execute if the inline environment variable
     # has a whitespace-delimited value. $SLURMD_OPTIONS is white-space
     # delimited, so it is expanded here to simplify the call to Popen.
-    slurmd_cmd = shlex.split(
-        os.path.expandvars("/usr/sbin/slurmd -D -s --conf-server $SLURMD_CONFIG_SERVER")
-    )
+    slurmd_cmd = shlex.split(os.path.expandvars("/usr/sbin/slurmd -D -s $SLURMD_OPTIONS"))
 
     # Try to start slurmd with ~5 seconds in-between each attempt. Timeout after 15 minutes.
     end_time = datetime.datetime.now() + datetime.timedelta(minutes=15)
