@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2023-2025 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the `slurmd` charm."""
+"""Configure unit tests for the `slurmctld` charm."""
+
+import pytest
+from charm import SlurmdbdCharm
+from ops import testing
 
 
-def test_on_install() -> None:
-    """Test the `_on_install` event handler."""
+@pytest.fixture(scope="function")
+def mock_charm() -> testing.Context[SlurmdbdCharm]:
+    """Mock `SlurmctldCharm`."""
+    return testing.Context(SlurmdbdCharm)

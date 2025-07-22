@@ -19,9 +19,9 @@ from unittest import TestCase
 from unittest.mock import Mock, PropertyMock, patch
 
 from charm import SackdCharm
-from hpc_libs.slurm_ops import SlurmOpsError
 from ops.model import ActiveStatus, BlockedStatus
 from scenario import Context, State
+from slurm_ops import SlurmOpsError
 
 
 class TestCharm(TestCase):
@@ -66,7 +66,7 @@ class TestCharm(TestCase):
         with self.ctx(self.ctx.on.update_status(), State()) as manager:
             manager.charm._stored.sackd_installed = True
             manager.charm._stored.slurmctld_available = True
-            manager.charm._sackd.service.active = Mock(return_value=True)
+            manager.charm._sackd.service.is_active = Mock(return_value=True)
             manager.charm.unit.status = ActiveStatus()
             manager.run()
             # ActiveStatus is the expected value when _check_status does not
