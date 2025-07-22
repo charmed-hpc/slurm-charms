@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,27 +17,44 @@
 import logging
 import subprocess
 
+from hpc_libs.machine import call
+from slurm_ops import SlurmOpsError
+from slurmutils import Node
+
+from .gpu import get_all_gpu
+
 _logger = logging.getLogger(__name__)
 
 
-def get_slurmd_info() -> dict[str, str | list[str]]:
+def get_node_info() -> Node:
     """Get machine info as reported by `slurmd -C`.
 
     For details see: https://slurm.schedmd.com/slurmd.html
+
+    Raises:
+        SlurmOpsError: Raised if the command `slurmd -C` fails.
     """
     try:
-        r = subprocess.check_output(["slurmd", "-C"], text=True).strip()
+        result = call("slurmd", "-C")
     except subprocess.CalledProcessError as e:
         _logger.error(e)
-        raise
+        raise SlurmOpsError(
+            (
+                f"slurmd command '{e.cmd}' failed with exit code {e.returncode}. "
+                + f"reason: {e.stderr}"
+            )
+        )
 
-    info = {}
-    for opt in r.split()[:-1]:
-        k, v = opt.split("=")
-        if k == "Gres":
-            info[k] = v.split(",")
-            continue
+    node = Node.from_str(result.stdout.splitlines()[:-1][0])
 
-        info[k] = v
+    # Set `memspeclimit` for this node. This memory allocation will be reserved for
+    # the services and other operations-related routines running on this unit.
+    node.mem_spec_limit = min(1024, node.real_memory // 2)
 
-    return info
+    # Detect if there are any additional GPU resources on this unit.
+    if gpus := get_all_gpu():
+        node.gres = []
+        for model, devices in gpus.items():
+            node.gres.append(f"gpu:{model}:{len(devices)}")
+
+    return node
