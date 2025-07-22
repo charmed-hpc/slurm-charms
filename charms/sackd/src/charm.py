@@ -7,7 +7,6 @@
 import logging
 
 from constants import SACKD_PORT
-from hpc_libs.slurm_ops import SackdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
     ActiveStatus,
@@ -19,6 +18,7 @@ from ops import (
     WaitingStatus,
     main,
 )
+from slurm_ops import SackdManager, SlurmOpsError
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class SackdCharm(CharmBase):
 
         if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
             if slurmctld_host is not None:
-                self._sackd.config_server = f"{slurmctld_host}:6817"
+                self._sackd.conf_server = [f"{slurmctld_host}:6817"]
                 self._stored.slurmctld_host = slurmctld_host
                 logger.debug(f"slurmctld_host={slurmctld_host}")
             else:
@@ -103,7 +103,7 @@ class SackdCharm(CharmBase):
 
         # Restart sackd after we write event data to respective locations.
         try:
-            if self._sackd.service.active():
+            if self._sackd.service.is_active():
                 self._sackd.service.restart()
             else:
                 self._sackd.service.start()
@@ -142,7 +142,7 @@ class SackdCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting on: slurmctld")
             return
 
-        if not self._sackd.service.active():
+        if not self._sackd.service.is_active():
             self.unit.status = WaitingStatus("Waiting for sackd service to start....")
             return
 

@@ -16,6 +16,7 @@ from ops import (
     RelationDepartedEvent,
     Unit,
 )
+from slurmutils import DownNodes, DownNodesList, Node, NodeMapping, Partition, PartitionMapping
 
 logger = logging.getLogger()
 
@@ -138,7 +139,7 @@ class Slurmd(Object):
 
                 if node.get("new_node"):
                     if node_config := node.get("node_parameters"):
-                        if node_name := node_config.get("NodeName"):
+                        if node_name := node_config.get("nodename"):
                             self._charm.new_nodes = list(set(self._charm.new_nodes + [node_name]))
                             self.on.slurmd_available.emit(
                                 node_name=node_name, gres_info=node.get("gres")
@@ -207,8 +208,8 @@ class Slurmd(Object):
         Iterate over the relation data to assemble the nodes, new_nodes
         and partition configuration.
         """
-        partitions = {}
-        nodes = {}
+        partitions = PartitionMapping()
+        nodes = NodeMapping()
         new_nodes = []
 
         if relations := self.framework.model.relations.get(self._relation_name):
@@ -226,58 +227,52 @@ class Slurmd(Object):
                 for partition_name, partition_parameters in partition_as_dict.items():
                     partition_nodes = []
                     for unit in relation.units:
-                        if node := self._get_node_from_relation(relation, unit):
+                        if node_data := self._get_node_from_relation(relation, unit):
                             # Check that the data we expect to exist, exists.
-                            if node_config := node.get("node_parameters"):
+                            if node_config := node_data.get("node_parameters"):
                                 # Get the NodeName and append to the partition nodes
-                                node_name = node_config["NodeName"]
+                                node_name = node_config["nodename"]
                                 partition_nodes.append(node_name)
 
                                 # Add this node config to the nodes dict.
-                                nodes[node_name] = {
-                                    k: v for k, v in node_config.items() if k not in ["NodeName"]
-                                }
+                                node = Node.from_dict(node_config)
+                                nodes[node.node_name] = node
 
                                 # Account for new node.
-                                if node.get("new_node"):
+                                if node_data.get("new_node"):
                                     new_nodes.append(node_name)
 
                     # Ensure we have a unique list and add it to the partition.
                     if len(partition_nodes) > 0:
-                        partition_parameters["Nodes"] = list(set(partition_nodes))
+                        partition_parameters["nodes"] = list(set(partition_nodes))
 
                     # Check for default partition.
                     if self._charm.model.config.get("default-partition") == partition_name:
-                        partition_parameters["Default"] = "YES"
+                        partition_parameters["default"] = True
 
-                    partitions[partition_name] = partition_parameters
+                    partition = Partition.from_dict(
+                        {"partitionname": partition_name, **partition_parameters}
+                    )
+                    partitions[partition.partition_name] = partition
 
         # If we have down nodes because they are new nodes, then set them here.
-        new_node_down_nodes = (
-            [{"DownNodes": list(set(new_nodes)), "State": "DOWN", "Reason": "New node."}]
-            if len(new_nodes) > 0
-            else []
+        new_node_down_nodes = DownNodesList(
+            DownNodes.from_dict(
+                {"downnodes": list(set(new_nodes)), "state": "down", "reason": "New node."}
+                if len(new_nodes) > 0
+                else {}
+            )
         )
-        return {"DownNodes": new_node_down_nodes, "Nodes": nodes, "Partitions": partitions}
 
-    def get_all_gres_info(self) -> Dict[str, Any]:
-        """Return GRES configuration for all currently related compute nodes."""
-        gres_info = {}
-        if relations := self.framework.model.relations.get(self._relation_name):
-            for relation in relations:
-                for unit in relation.units:
-                    if node := self._get_node_from_relation(relation, unit):
-                        # Ignore nodes without GRES devices
-                        if (gres := node.get("gres")) and (
-                            node_config := node.get("node_parameters")
-                        ):
-                            node_name = node_config["NodeName"]
-                            # Add NodeName to each GRES device to match the format required by slurmutils.
-                            for device in gres:
-                                device["NodeName"] = node_name
-                            gres_info[node_name] = gres
+        result = {}
+        if new_node_down_nodes:
+            result["downnodes"] = new_node_down_nodes
+        if nodes:
+            result["nodes"] = nodes
+        if partitions:
+            result["partitions"] = partitions
 
-        return gres_info
+        return result
 
     def get_active_nodes(self) -> list[str]:
         """Get active nodes."""
@@ -289,5 +284,5 @@ class Slurmd(Object):
                         # Check that the data we expect to exist, exists.
                         if node_config := node.get("node_parameters"):
                             # Get the NodeName and append to the partition nodes
-                            nodes.append(node_config["NodeName"])
+                            nodes.append(node_config["nodename"])
         return nodes

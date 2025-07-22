@@ -14,16 +14,15 @@ from constants import (
     CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS,
     CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
     CLUSTER_NAME_PREFIX,
-    PEER_RELATION,
+    PEER_INTEGRATION_NAME,
     PROMETHEUS_EXPORTER_PORT,
     SLURMCTLD_PORT,
 )
 from exceptions import IngressAddressUnavailableError
 from hpc_libs.is_container import is_container
-from hpc_libs.slurm_ops import SlurmctldManager, SlurmOpsError
+from integrations import SlurmctldPeer, SlurmctldPeerConnectedEvent
 from interface_influxdb import InfluxDB, InfluxDBAvailableEvent, InfluxDBUnavailableEvent
 from interface_sackd import Sackd
-from interface_slurmctld_peer import SlurmctldPeer, SlurmctldPeerError
 from interface_slurmd import (
     PartitionAvailableEvent,
     PartitionUnavailableEvent,
@@ -47,7 +46,8 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmutils.models import AcctGatherConfig, CgroupConfig, GRESConfig, GRESNode, SlurmConfig
+from slurm_ops import SlurmctldManager, SlurmOpsError, scontrol
+from slurmutils import AcctGatherConfig, CGroupConfig, SlurmConfig
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
@@ -77,7 +77,7 @@ class SlurmctldCharm(CharmBase):
         )
 
         self._slurmctld = SlurmctldManager(snap=False)
-        self._slurmctld_peer = SlurmctldPeer(self, PEER_RELATION)
+        self._slurmctld_peer = SlurmctldPeer(self, PEER_INTEGRATION_NAME)
         self._sackd = Sackd(self, "login-node")
         self._slurmd = Slurmd(self, "slurmd")
         self._slurmdbd = Slurmdbd(self, "slurmdbd")
@@ -96,6 +96,7 @@ class SlurmctldCharm(CharmBase):
             self.on.start: self._on_start,
             self.on.update_status: self._on_update_status,
             self.on.config_changed: self._on_config_changed,
+            self._slurmctld_peer.on.slurmctld_peer_connected: self._on_slurmctld_peer_connected,
             self._slurmdbd.on.slurmdbd_available: self._on_slurmdbd_available,
             self._slurmdbd.on.slurmdbd_unavailable: self._on_slurmdbd_unavailable,
             self._slurmd.on.partition_available: self._on_write_slurm_conf,
@@ -153,37 +154,31 @@ class SlurmctldCharm(CharmBase):
         self.unit.open_port("tcp", PROMETHEUS_EXPORTER_PORT)
 
     def _on_start(self, event: StartEvent) -> None:
-        """Set cluster_name and write slurm.conf.
+        """Write slurm.conf and start `slurmctld` service.
 
         Notes:
             - The start hook can execute multiple times in a charms lifecycle,
-              for example, after a reboot of the underlying instance. This code safeguards
-              against the potentiality of changing the cluster_name in subsequent start hook
-              executions by applying logic that ensures the cluster_name is only set on the
-              first execution of this hook, we log and return on any subsequent start hook
-              event executions.
+              for example, after a reboot of the underlying instance.
         """
         if self.unit.is_leader():
-            if self._slurmctld_peer.cluster_name is None:
-                if (charm_config_cluster_name := str(self.config.get("cluster-name", ""))) != "":
-                    cluster_name = charm_config_cluster_name
-                else:
-                    cluster_name = f"{CLUSTER_NAME_PREFIX}-{secrets.token_urlsafe(3)}"
+            self._on_write_slurm_conf(event)
+            if event.deferred:
+                logger.debug("attempt to write slurm.conf deferred event")
+                return
 
-                logger.debug(f"Cluster Name: {cluster_name}")
+            if not self._check_status():
+                logger.debug("unit not ready. deferring event")
+                event.defer()
+                return
 
-                try:
-                    self._slurmctld_peer.cluster_name = cluster_name
-                except SlurmctldPeerError as e:
-                    self.unit.status = BlockedStatus(e.message)
-                    logger.error(e.message)
-                    event.defer()
-                    return
-
-                self._on_write_slurm_conf(event)
-
-            else:
-                logger.debug("Cluster name already created - skipping creation.")
+            try:
+                self._slurmctld.service.enable()
+                self._slurmctld.service.start()
+                self._slurmctld.exporter.service.enable()
+                self._slurmctld.exporter.service.restart()
+            except SlurmOpsError as e:
+                logger.error(e.message)
+                event.defer()
         else:
             msg = "High availability of slurmctld is not supported at this time."
             self.unit.status = BlockedStatus(msg)
@@ -228,6 +223,14 @@ class SlurmctldCharm(CharmBase):
         """Show current slurm.conf."""
         event.set_results({"slurm.conf": str(self._slurmctld.config.load())})
 
+    def _on_slurmctld_peer_connected(self, _: SlurmctldPeerConnectedEvent) -> None:
+        """Handle when `slurmctld` peer integration is created."""
+        self._slurmctld_peer.cluster_name = (
+            cluster_name
+            if (cluster_name := self.config.get("cluster-name", "")) != ""
+            else f"{CLUSTER_NAME_PREFIX}-{secrets.token_urlsafe(3)}"
+        )
+
     def _on_slurmrestd_available(self, event: SlurmrestdAvailableEvent) -> None:
         """Check that we have slurm_config when slurmrestd available otherwise defer the event."""
         if self.unit.is_leader():
@@ -258,24 +261,24 @@ class SlurmctldCharm(CharmBase):
         logger.debug("## Generating acct gather configuration")
 
         acct_gather_params = {
-            "ProfileInfluxDBDefault": ["ALL"],
-            "ProfileInfluxDBHost": event.influxdb_host,
-            "ProfileInfluxDBUser": event.influxdb_user,
-            "ProfileInfluxDBPass": event.influxdb_pass,
-            "ProfileInfluxDBDatabase": event.influxdb_database,
-            "ProfileInfluxDBRTPolicy": event.influxdb_policy,
-            "SysfsInterfaces": interfaces(),
+            "profileinfluxdbdefault": ["all"],
+            "profileinfluxdbhost": event.influxdb_host,
+            "profileinfluxdbuser": event.influxdb_user,
+            "profileinfluxdbpass": event.influxdb_pass,
+            "profileinfluxdbdatabase": event.influxdb_database,
+            "profileinfluxdbrtpolicy": event.influxdb_policy,
+            "sysfsinterfaces": interfaces(),
         }
         logger.debug(f"## _stored.acct_gather_params: {acct_gather_params}")
         self._stored.acct_gather_params = acct_gather_params
 
         self._stored.job_profiling_slurm_conf = {
-            "AcctGatherProfileType": "acct_gather_profile/influxdb",
-            "AcctGatherInterconnectType": "acct_gather_interconnect/sysfs",
-            "AccountingStorageTRES": ["ic/sysfs"],
-            "AcctGatherNodeFreq": "30",
-            "JobAcctGatherFrequency": {"task": "5", "network": "5"},
-            "JobAcctGatherType": (
+            "acctgatherprofiletype": "acct_gather_profile/influxdb",
+            "acctgatherinterconnecttype": "acct_gather_interconnect/sysfs",
+            "accountingstoragetres": ["ic/sysfs"],
+            "acctgathernodefreq": 30,
+            "jobacctgatherfrequency": {"task": 5, "network": 5},
+            "jobacctgathertype": (
                 "jobacct_gather/linux" if is_container() else "jobacct_gather/cgroup"
             ),
         }
@@ -321,7 +324,6 @@ class SlurmctldCharm(CharmBase):
 
     def _on_slurmd_available(self, event: SlurmdAvailableEvent) -> None:
         """Triggers when a slurmd unit joins the relation."""
-        self._update_gres_conf(event)
         self._on_write_slurm_conf(event)
 
     def _on_slurmd_departed(self, event: SlurmdDepartedEvent) -> None:
@@ -345,64 +347,19 @@ class SlurmctldCharm(CharmBase):
 
         # Set the remaining new nodes
         self.new_nodes = new_nodes
-
-        self._refresh_gres_conf(event)
         self._on_write_slurm_conf(event)
-
-    def _update_gres_conf(self, event: SlurmdAvailableEvent) -> None:
-        """Write new nodes to gres.conf configuration file for Generic Resource scheduling.
-
-        Warnings:
-            * This function does not perform an `scontrol reconfigure`. It is expected
-               that the function `_on_write_slurm_conf()` is called immediately following to do this.
-        """
-        if not self.unit.is_leader():
-            return
-
-        if not self._check_status():
-            event.defer()
-            return
-
-        node_name = event.node_name
-        gres_info = event.gres_info
-        if gres_info and node_name:
-            gres_nodes = []
-            for resource in gres_info:
-                node = GRESNode(NodeName=node_name, **resource)
-                gres_nodes.append(node)
-
-            with self._slurmctld.gres.edit() as config:
-                config.nodes[node_name] = gres_nodes
-
-    def _refresh_gres_conf(self, event: SlurmdDepartedEvent) -> None:
-        """Write out current gres.conf configuration file for Generic Resource scheduling.
-
-        Warnings:
-            * This function does not perform an `scontrol reconfigure`. It is expected
-               that the function `_on_write_slurm_conf()` is called immediately following to do this.
-        """
-        if not self.unit.is_leader():
-            return
-
-        if not self._check_status():
-            event.defer()
-            return
-
-        gres_all_nodes = self._slurmd.get_all_gres_info()
-        gres_conf = GRESConfig(Nodes=gres_all_nodes)
-        self._slurmctld.gres.dump(gres_conf)
 
     def _assemble_acct_gather_config(self) -> Optional[AcctGatherConfig]:
         """Assemble and return the AcctGatherConfig."""
         if (acct_gather_stored_params := self._stored.acct_gather_params) != {}:
             return AcctGatherConfig(
-                ProfileInfluxDBDefault=list(acct_gather_stored_params["ProfileInfluxDBDefault"]),
-                ProfileInfluxDBHost=acct_gather_stored_params["ProfileInfluxDBHost"],
-                ProfileInfluxDBUser=acct_gather_stored_params["ProfileInfluxDBUser"],
-                ProfileInfluxDBPass=acct_gather_stored_params["ProfileInfluxDBPass"],
-                ProfileInfluxDBDatabase=acct_gather_stored_params["ProfileInfluxDBDatabase"],
-                ProfileInfluxDBRTPolicy=acct_gather_stored_params["ProfileInfluxDBRTPolicy"],
-                SysfsInterfaces=list(acct_gather_stored_params["SysfsInterfaces"]),
+                profileinfluxdbdefault=list(acct_gather_stored_params["profileinfluxdbdefault"]),
+                profileinfluxdbhost=acct_gather_stored_params["profileinfluxdbhost"],
+                profileinfluxdbuser=acct_gather_stored_params["profileinfluxdbuser"],
+                profileinfluxdbpass=acct_gather_stored_params["profileinfluxdbpass"],
+                profileinfluxdbdatabase=acct_gather_stored_params["profileinfluxdbdatabase"],
+                profileinfluxdbrtpolicy=acct_gather_stored_params["profileinfluxdbrtpolicy"],
+                sysfsinterfaces=list(acct_gather_stored_params["sysfsinterfaces"]),
             )
         return None
 
@@ -451,12 +408,12 @@ class SlurmctldCharm(CharmBase):
                 cgroup_config = CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS
                 if user_supplied_cgroup_params := self._get_user_supplied_cgroup_parameters():
                     cgroup_config.update(user_supplied_cgroup_params)
-                self._slurmctld.cgroup.dump(CgroupConfig(**cgroup_config))
+                self._slurmctld.cgroup.dump(CGroupConfig(**cgroup_config))
 
             self._slurmctld.service.start()
 
             try:
-                self._slurmctld.scontrol("reconfigure")
+                scontrol("reconfigure")
             except SlurmOpsError as e:
                 logger.error(e)
                 return
@@ -493,9 +450,9 @@ class SlurmctldCharm(CharmBase):
         job_profiling_slurm_conf_parameters = {}
         if (profiling_params := self._stored.job_profiling_slurm_conf) != {}:
             for k, v in profiling_params.items():
-                if k == "AccountingStorageTRES":
+                if k == "accountingstoragetres":
                     v = list(v)
-                if k == "JobAcctGatherFrequency":
+                if k == "jobacctgatherfrequency":
                     v = dict(v)
                 job_profiling_slurm_conf_parameters[k] = v
         return job_profiling_slurm_conf_parameters
@@ -511,7 +468,7 @@ class SlurmctldCharm(CharmBase):
 
             if (
                 user_supplied_slurmctld_parameters := user_supplied_parameters.get(
-                    "SlurmctldParameters", ""
+                    "slurmctldparameters", ""
                 )
                 != ""
             ):
@@ -525,9 +482,9 @@ class SlurmctldCharm(CharmBase):
         profiling_parameters = {}
         if (slurmdbd_host := self._stored.slurmdbd_host) != "":
             accounting_params = {
-                "AccountingStorageHost": slurmdbd_host,
-                "AccountingStorageType": "accounting_storage/slurmdbd",
-                "AccountingStoragePort": "6819",
+                "accountingstoragehost": slurmdbd_host,
+                "accountingstoragetype": "accounting_storage/slurmdbd",
+                "accountingstorageport": 6819,
             }
             # Need slurmdbd configured to use profiling
             profiling_parameters = self._assemble_profiling_params()
@@ -535,12 +492,12 @@ class SlurmctldCharm(CharmBase):
 
         slurm_conf = SlurmConfig.from_dict(
             {
-                "ClusterName": self.cluster_name,
-                "SlurmctldAddr": self._ingress_address,
-                "SlurmctldHost": [self._slurmctld.hostname],
-                "SlurmctldParameters": _assemble_slurmctld_parameters(),
-                "ProctrackType": "proctrack/linuxproc" if is_container() else "proctrack/cgroup",
-                "TaskPlugin": (
+                "clustername": self.cluster_name,
+                "slurmctldaddr": self._ingress_address,
+                "slurmctldhost": [self._slurmctld.hostname],
+                "slurmctldparameters": _assemble_slurmctld_parameters(),
+                "proctracktype": "proctrack/linuxproc" if is_container() else "proctrack/cgroup",
+                "taskplugin": (
                     ["task/affinity"] if is_container() else ["task/cgroup", "task/affinity"]
                 ),
                 **profiling_parameters,
@@ -582,9 +539,10 @@ class SlurmctldCharm(CharmBase):
         new_node_names = []
         if down_nodes_from_slurm_config := slurm_config.down_nodes:
             for down_nodes_entry in down_nodes_from_slurm_config:
-                for down_node_name in down_nodes_entry["DownNodes"]:
-                    if down_nodes_entry["Reason"] == "New node.":
-                        new_node_names.append(down_node_name)
+                if down_nodes_entry.down_nodes:
+                    for down_node_name in down_nodes_entry.down_nodes:
+                        if down_nodes_entry.reason == "New node.":
+                            new_node_names.append(down_node_name)
         return new_node_names
 
     def _check_status(self) -> bool:  # noqa C901
@@ -616,7 +574,7 @@ class SlurmctldCharm(CharmBase):
 
     def _resume_nodes(self, nodelist: List[str]) -> None:
         """Run scontrol to resume the specified node list."""
-        self._slurmctld.scontrol("update", f"nodename={','.join(nodelist)}", "state=resume")
+        scontrol("update", f"nodename={','.join(nodelist)}", "state=resume")
 
     @property
     def cluster_name(self) -> Optional[str]:
@@ -644,7 +602,7 @@ class SlurmctldCharm(CharmBase):
     @property
     def _ingress_address(self) -> str:
         """Return the ingress_address from the peer relation if it exists."""
-        if (peer_binding := self.model.get_binding(PEER_RELATION)) is not None:
+        if (peer_binding := self.model.get_binding(PEER_INTEGRATION_NAME)) is not None:
             ingress_address = f"{peer_binding.network.ingress_address}"
             logger.debug(f"Slurmctld ingress_address: {ingress_address}")
             return ingress_address

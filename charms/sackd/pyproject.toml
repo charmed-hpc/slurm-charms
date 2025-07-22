@@ -2,6 +2,6 @@
 name = "sackd"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = ["ops", "hpc-libs"]
+dependencies = ["ops", "hpc-libs", "slurm-ops"]
 
 [tool.repository]

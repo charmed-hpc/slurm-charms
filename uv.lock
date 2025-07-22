@@ -897,12 +897,14 @@ source = { virtual = "charms/sackd" }
 dependencies = [
     { name = "hpc-libs" },
     { name = "ops" },
+    { name = "slurm-ops" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "ops" },
+    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
 ]
 
 [[package]]
@@ -995,10 +997,14 @@ version = "0.1.0"
 source = { editable = "pkgs/slurm-ops" }
 dependencies = [
     { name = "hpc-libs", extra = ["machine"] },
+    { name = "slurmutils" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "hpc-libs", extras = ["machine"], git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" }]
+requires-dist = [
+    { name = "hpc-libs", extras = ["machine"], git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
+    { name = "slurmutils" },
+]
 
 [[package]]
 name = "slurmctld"
@@ -1010,6 +1016,7 @@ dependencies = [
     { name = "influxdb" },
     { name = "netifaces-plus" },
     { name = "ops" },
+    { name = "slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1020,6 +1027,7 @@ requires-dist = [
     { name = "influxdb" },
     { name = "netifaces-plus" },
     { name = "ops" },
+    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1032,6 +1040,7 @@ dependencies = [
     { name = "hpc-libs" },
     { name = "nvidia-ml-py" },
     { name = "ops" },
+    { name = "slurm-ops" },
     { name = "slurmutils" },
     { name = "ubuntu-drivers-common" },
 ]
@@ -1042,6 +1051,7 @@ requires-dist = [
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "nvidia-ml-py" },
     { name = "ops" },
+    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },
     { name = "ubuntu-drivers-common", git = "https://github.com/canonical/ubuntu-drivers-common?rev=554b91edfd3699625dbed90f679abb31a897b76e" },
 ]
@@ -1054,6 +1064,7 @@ dependencies = [
     { name = "cosl" },
     { name = "hpc-libs" },
     { name = "ops" },
+    { name = "slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1062,6 +1073,7 @@ requires-dist = [
     { name = "cosl" },
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "ops" },
+    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1072,6 +1084,7 @@ source = { virtual = "charms/slurmrestd" }
 dependencies = [
     { name = "hpc-libs" },
     { name = "ops" },
+    { name = "slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1079,20 +1092,21 @@ dependencies = [
 requires-dist = [
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=c90ff0436e6c6dff3058eac324761e125b105c0a" },
     { name = "ops" },
+    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },
 ]
 
 [[package]]
 name = "slurmutils"
-version = "1.1.4"
+version = "1.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/27/c6/f7c0a3afc74ee379690bb84be28af28678d990a45f9f16ed4d0b247984cb/slurmutils-1.1.4.tar.gz", hash = "sha256:83874212689f993dc47708879018a281f7eacbb3ba35fbc2aacd44365d9e1bde", size = 36456, upload-time = "2025-06-25T13:41:26.735Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/b6/d205b58796d51253352f8a14fc3742110fffb39475f6bba66633461e2190/slurmutils-1.1.5.tar.gz", hash = "sha256:259f2fc880b92776e66a9916d066ff840147d644b4c6221d62f79985373c916e", size = 74487, upload-time = "2025-07-16T13:24:29.017Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/39/27/8ba1bdf35ea2cfe4c0a6a8c3329f37a91c5b9ab81f3690c8067ccd872ebf/slurmutils-1.1.4-py3-none-any.whl", hash = "sha256:2f873abca0d01dbb21e96c65b5df117b0bccb71564b80f68e0a4158f75e01341", size = 49994, upload-time = "2025-06-25T13:41:25.264Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/47/3eeb525e2fdcd86c5762656c09aba19a864bf34ceb27b8ba770150dcb8a5/slurmutils-1.1.5-py3-none-any.whl", hash = "sha256:507059697d49ae3d1b23a481c4ca6162386106129c45de628dc9f2fead976c22", size = 50049, upload-time = "2025-07-16T13:24:27.748Z" },
 ]
 
 [[package]]

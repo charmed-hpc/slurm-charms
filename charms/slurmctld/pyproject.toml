@@ -2,7 +2,15 @@
 name = "slurmctld"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = ["ops", "slurmutils", "influxdb", "netifaces-plus", "hpc-libs", "cosl"]
+dependencies = [
+    "ops",
+    "slurmutils",
+    "influxdb",
+    "netifaces-plus",
+    "hpc-libs",
+    "cosl",
+    "slurm-ops",
+]
 
 [tool.repository]
 libraries = ["grafana-agent.cos_agent"]

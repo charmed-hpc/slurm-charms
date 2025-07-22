@@ -7,7 +7,6 @@
 import logging
 
 from constants import SLURMRESTD_PORT
-from hpc_libs.slurm_ops import SlurmOpsError, SlurmrestdManager
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
     ActiveStatus,
@@ -19,7 +18,8 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmutils.models import SlurmConfig
+from slurm_ops import SlurmOpsError, SlurmrestdManager
+from slurmutils import SlurmConfig
 
 logger = logging.getLogger()
 
@@ -80,7 +80,7 @@ class SlurmrestdCharm(CharmBase):
 
             self._stored.slurmctld_relation_data_available = True
 
-            if self._slurmrestd.service.active():
+            if self._slurmrestd.service.is_active():
                 self._slurmrestd.service.restart()
             else:
                 self._slurmrestd.service.start()
@@ -109,7 +109,7 @@ class SlurmrestdCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting on relation data from slurmctld.")
             return False
 
-        if not self._slurmrestd.service.active():
+        if not self._slurmrestd.service.is_active():
             self.unit.status = BlockedStatus("slurmrestd is not starting")
             return False
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, cast
 
 from constants import SLURMD_PORT
-from hpc_libs.slurm_ops import SlurmdManager, SlurmOpsError
+from hpc_libs.utils import plog
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
 from ops import (
     ActionEvent,
@@ -24,8 +24,8 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmutils import calculate_rs
-from slurmutils.models.option import NodeOptionSet, PartitionOptionSet
+from slurm_ops import SlurmdManager, SlurmOpsError
+from slurmutils import ModelError, Node, Partition
 from utils import gpu, machine, nhc, rdma, service
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
@@ -137,25 +137,14 @@ class SlurmdCharm(CharmBase):
         if self.model.unit.is_leader():
             if user_supplied_partition_parameters is not None:
                 try:
-                    tmp_params = {
-                        item.split("=")[0]: item.split("=")[1]
-                        for item in str(user_supplied_partition_parameters).split()
-                    }
-                except IndexError:
+                    partition = Partition.from_str(user_supplied_partition_parameters)
+                except (ModelError, ValueError):
                     logger.error(
                         "Error parsing partition-config. Please use KEY1=VALUE KEY2=VALUE."
                     )
                     return
 
-                # Validate the user supplied params are valid params.
-                for parameter in tmp_params:
-                    if parameter not in list(PartitionOptionSet.keys()):
-                        logger.error(
-                            f"Invalid user supplied partition configuration parameter: {parameter}."
-                        )
-                        return
-
-                self._stored.user_supplied_partition_parameters = tmp_params
+                self._stored.user_supplied_partition_parameters = partition.dict()
 
                 if self._slurmctld.is_joined:
                     self._slurmctld.set_partition()
@@ -172,7 +161,7 @@ class SlurmdCharm(CharmBase):
 
         if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
             if slurmctld_host is not None:
-                self._slurmd.config_server = f"{slurmctld_host}:6817"
+                self._slurmd.conf_server = [f"{slurmctld_host}:6817"]
                 self._stored.slurmctld_host = slurmctld_host
                 logger.debug(f"slurmctld_host={slurmctld_host}")
             else:
@@ -200,7 +189,7 @@ class SlurmdCharm(CharmBase):
         self._stored.slurmctld_available = True
 
         # Restart slurmd after we write the event data to their respective locations.
-        if self._slurmd.service.active():
+        if self._slurmd.service.is_active():
             self._slurmd.service.restart()
         else:
             self._slurmd.service.start()
@@ -247,52 +236,31 @@ class SlurmdCharm(CharmBase):
         parse, validate, and store the input of the `node-config` parameter in stored state.
         Lastly, update slurmctld if there are updates to the node config.
         """
-        valid_config = True
-        config_supplied = False
-
-        if (user_supplied_node_parameters := event.params.get("parameters")) is not None:
-            config_supplied = True
-
-            # Parse the user supplied node-config.
-            node_parameters_tmp = {}
+        custom = event.params.get("parameters", "")
+        valid_config = False
+        if custom:
             try:
-                node_parameters_tmp = {
-                    item.split("=")[0]: item.split("=")[1]
-                    for item in user_supplied_node_parameters.split()
-                }
-            except IndexError:
-                logger.error(
-                    "Invalid node parameters specified. Please use KEY1=VAL KEY2=VAL format."
-                )
-                valid_config = False
-
-            # Validate the user supplied params are valid params.
-            for param in node_parameters_tmp:
-                if param not in list(NodeOptionSet.keys()):
-                    logger.error(f"Invalid user supplied node parameter: {param}.")
-                    valid_config = False
-
-            # Validate the user supplied params have valid keys.
-            for k, v in node_parameters_tmp.items():
-                if v == "":
-                    logger.error(f"Invalid user supplied node parameter: {k}={v}.")
-                    valid_config = False
+                node = Node.from_str(custom)
+                valid_config = True
+            except (ModelError, ValueError) as e:
+                logger.error(e)
 
             if valid_config:
-                if (node_parameters := node_parameters_tmp) != self._user_supplied_node_parameters:
-                    self._user_supplied_node_parameters = node_parameters
+                if (custom_node := node.dict()) != self._user_supplied_node_parameters:
+                    logger.info("updating unit '%s' node configuration", self.unit.name)
+                    logger.debug("'%s' node configuration:\n%s", self.unit.name, plog(custom_node))
+                    self._user_supplied_node_parameters = custom_node
                     self._slurmctld.set_node()
+                    logger.info("'%s' node configuration successfully updated", self.unit.name)
 
-        results = {
-            "node-parameters": " ".join(
-                [f"{k}={v}" for k, v in self.get_node()["node_parameters"].items()]
-            )
-        }
-
-        if config_supplied is True:
-            results["user-supplied-node-parameters-accepted"] = f"{valid_config}"
-
-        event.set_results(results)
+        event.set_results(
+            {
+                "node-parameters": " ".join(
+                    [f"{k}={v}" for k, v in self.get_node()["node_parameters"].items()]
+                ),
+                "user-supplied-node-parameters-accepted": f"{valid_config}",
+            },
+        )
 
     @property
     def hostname(self) -> str:
@@ -347,39 +315,13 @@ class SlurmdCharm(CharmBase):
 
     def get_node(self) -> Dict[Any, Any]:
         """Get the node from stored state."""
-        slurmd_info = machine.get_slurmd_info()
-
-        gres_info = []
-        if gpus := gpu.get_all_gpu():
-            for model, devices in gpus.items():
-                # Build gres.conf line for this GPU model.
-                if len(devices) == 1:
-                    device_suffix = devices[0]
-                else:
-                    # Get numeric range of devices associated with this GRES resource. See:
-                    # https://slurm.schedmd.com/gres.conf.html#OPT_File
-                    device_suffix = calculate_rs(devices)
-                gres_line = {
-                    "Name": "gpu",
-                    "Type": model,
-                    "File": f"/dev/nvidia{device_suffix}",
-                }
-                gres_info.append(gres_line)
-                slurmd_info["Gres"] = cast(list[str], slurmd_info.get("Gres", [])) + [
-                    f"gpu:{model}:{len(devices)}"
-                ]
-
-        real_memory = int(cast(str, slurmd_info["RealMemory"]))
-
+        slurmd_info = machine.get_node_info()
         node = {
             "node_parameters": {
-                **slurmd_info,
-                "MemSpecLimit": str(min(1024, real_memory // 2)),
+                **slurmd_info.dict(),
                 **self._user_supplied_node_parameters,
             },
             "new_node": self._new_node,
-            # Do not include GRES configuration if no GPUs detected.
-            **({"gres": gres_info} if len(gres_info) > 0 else {}),
         }
         logger.debug(f"Node Configuration: {node}")
         return node
@@ -387,7 +329,7 @@ class SlurmdCharm(CharmBase):
     def get_partition(self) -> Dict[Any, Any]:
         """Return the partition."""
         partition = {
-            self.app.name: {**{"State": "UP"}, **self._stored.user_supplied_partition_parameters}
+            self.app.name: {**{"state": "up"}, **self._stored.user_supplied_partition_parameters}
         }  # type: ignore[dict-item]
         logger.debug(f"partition={partition}")
         return partition

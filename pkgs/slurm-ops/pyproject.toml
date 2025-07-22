@@ -20,7 +20,7 @@ authors = [
     { name = "Ubuntu High-Performance Computing", email = "hpc-ubuntu-group@canonical.com" },
 ]
 requires-python = ">=3.12"
-dependencies = ["hpc-libs[machine]"]
+dependencies = ["hpc-libs[machine]", "slurmutils"]
 
 [build-system]
 requires = ["hatchling"]

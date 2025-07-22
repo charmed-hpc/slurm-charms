@@ -8,12 +8,11 @@
 
 import logging
 from time import sleep
-from typing import Union
+from typing import Any, Union
 from urllib.parse import urlparse
 
 from constants import CHARM_MAINTAINED_PARAMETERS, PEER_RELATION, SLURM_ACCT_DB, SLURMDBD_PORT
 from exceptions import IngressAddressUnavailableError
-from hpc_libs.slurm_ops import SlurmdbdManager, SlurmOpsError
 from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
 from ops import (
     ActiveStatus,
@@ -27,7 +26,8 @@ from ops import (
     WaitingStatus,
     main,
 )
-from slurmutils.models import SlurmdbdConfig
+from slurm_ops import SlurmdbdManager, SlurmOpsError
+from slurmutils import SlurmdbdConfig
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
@@ -176,10 +176,10 @@ class SlurmdbdCharm(CharmBase):
             else:
                 tcp_endpoints.append(endpoint)
 
-        db_info = {
-            "StorageUser": event.username,
-            "StoragePass": event.password,
-            "StorageLoc": SLURM_ACCT_DB,
+        db_info: dict[str, Any] = {
+            "storageuser": event.username,
+            "storagepass": event.password,
+            "storageloc": SLURM_ACCT_DB,
         }
 
         if socket_endpoints:
@@ -210,8 +210,8 @@ class SlurmdbdCharm(CharmBase):
                 addr = addr[1:-1]
             db_info.update(
                 {
-                    "StorageHost": addr,
-                    "StoragePort": port,
+                    "storagehost": addr,
+                    "storageport": int(port),
                 }
             )
             # Make sure that the MYSQL_UNIX_PORT is removed from the env file.
@@ -246,8 +246,8 @@ class SlurmdbdCharm(CharmBase):
             {
                 **CHARM_MAINTAINED_PARAMETERS,
                 **self._stored.db_info,
-                "DbdHost": self._slurmdbd.hostname,
-                "DbdAddr": self._ingress_address,
+                "dbdhost": self._slurmdbd.hostname,
+                "dbdaddr": self._ingress_address,
                 **self._stored.user_slurmdbd_params,
             }
         )
@@ -258,7 +258,7 @@ class SlurmdbdCharm(CharmBase):
             slurmdbd_config.auth_alt_types = ["auth/jwt"]
             slurmdbd_config.auth_alt_parameters = {"jwt_key": f"{self._slurmdbd.jwt.path}"}
 
-        logger.debug("slurmdbd.conf: %s", slurmdbd_config.dict() | {"StoragePass": "***"})
+        logger.debug("slurmdbd.conf: %s", slurmdbd_config.dict() | {"storagepass": "***"})
         return slurmdbd_config
 
     def _write_config_and_restart_slurmdbd(
@@ -301,7 +301,7 @@ class SlurmdbdCharm(CharmBase):
         logger.debug("## Checking if slurmdbd is active")
 
         for i in range(max_attemps):
-            if self._slurmdbd.service.active():
+            if self._slurmdbd.service.is_active():
                 logger.debug("## Slurmdbd running")
                 break
             else:
@@ -310,7 +310,7 @@ class SlurmdbdCharm(CharmBase):
                 self._slurmdbd.service.restart()
                 sleep(3 + i)
 
-        if self._slurmdbd.service.active():
+        if self._slurmdbd.service.is_active():
             self._check_status()
         else:
             self.unit.status = BlockedStatus("cannot start slurmdbd")

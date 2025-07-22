@@ -9,6 +9,7 @@ dependencies = [
     "ubuntu-drivers-common",
     "hpc-libs",
     "cosl",
+    "slurm-ops",
 ]
 
 [tool.repository]
