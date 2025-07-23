@@ -16,6 +16,7 @@
 
 import logging
 import subprocess
+from typing import cast
 
 from hpc_libs.machine import call
 from slurm_ops import SlurmOpsError
@@ -47,9 +48,10 @@ def get_node_info() -> Node:
 
     node = Node.from_str(result.stdout.splitlines()[:-1][0])
 
-    # Set `memspeclimit` for this node. This memory allocation will be reserved for
+    # Set the `MemSpecLimit` for this node. This memory allocation will be reserved for
     # the services and other operations-related routines running on this unit.
-    node.mem_spec_limit = min(1024, node.real_memory // 2)
+    # We know `RealMemory` is type `int` because it is returned by `slurmd -C`.
+    node.mem_spec_limit = min(1024, cast(int, node.real_memory) // 2)
 
     # Detect if there are any additional GPU resources on this unit.
     if gpus := get_all_gpu():

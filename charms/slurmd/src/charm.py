@@ -132,7 +132,9 @@ class SlurmdCharm(CharmBase):
                 self._stored.nhc_conf = nhc_conf
                 nhc.generate_config(nhc_conf)
 
-        user_supplied_partition_parameters = self.model.config.get("partition-config")
+        user_supplied_partition_parameters = cast(
+            str | None, self.model.config.get("partition-config")
+        )
 
         if self.model.unit.is_leader():
             if user_supplied_partition_parameters is not None:
@@ -239,8 +241,9 @@ class SlurmdCharm(CharmBase):
         custom = event.params.get("parameters", "")
         valid_config = False
         if custom:
+            node = Node()
             try:
-                node = Node.from_str(custom)
+                node.update(Node.from_str(custom))
                 valid_config = True
             except (ModelError, ValueError) as e:
                 logger.error(e)

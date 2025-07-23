@@ -236,7 +236,7 @@ class Slurmd(Object):
 
                                 # Add this node config to the nodes dict.
                                 node = Node.from_dict(node_config)
-                                nodes[node.node_name] = node
+                                nodes[node_name] = node
 
                                 # Account for new node.
                                 if node_data.get("new_node"):
@@ -253,7 +253,7 @@ class Slurmd(Object):
                     partition = Partition.from_dict(
                         {"partitionname": partition_name, **partition_parameters}
                     )
-                    partitions[partition.partition_name] = partition
+                    partitions[partition_name] = partition
 
         # If we have down nodes because they are new nodes, then set them here.
         new_node_down_nodes = DownNodesList(
