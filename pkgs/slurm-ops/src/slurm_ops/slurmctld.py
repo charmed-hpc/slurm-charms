@@ -16,16 +16,15 @@
 
 __all__ = ["SlurmctldManager"]
 
-from slurm_ops.core import (
-    SLURM_GROUP,
-    SLURM_USER,
-    AcctGatherConfigManager,
-    CGroupConfigManager,
-    GresConfigManager,
-    OCIConfigManager,
-    SlurmConfigManager,
-    SlurmManager,
+from slurmutils import (
+    AcctGatherConfigEditor,
+    CGroupConfigEditor,
+    GresConfigEditor,
+    OCIConfigEditor,
+    SlurmConfigEditor,
 )
+
+from slurm_ops.core import SLURM_GROUP, SLURM_USER, SlurmConfigManager, SlurmManager
 
 
 class SlurmctldManager(SlurmManager):
@@ -35,19 +34,39 @@ class SlurmctldManager(SlurmManager):
         super().__init__("slurmctld", snap)
 
         self.config = SlurmConfigManager(
-            self._ops_manager.etc_path / "slurm.conf", user=self.user, group=self.group
+            SlurmConfigEditor,
+            file=self._ops_manager.etc_path / "slurm.conf",
+            mode=0o644,
+            user=self.user,
+            group=self.group,
         )
-        self.acct_gather = AcctGatherConfigManager(
-            self._ops_manager.etc_path / "acct_gather.conf", user=self.user, group=self.group
+        self.acct_gather = SlurmConfigManager(
+            AcctGatherConfigEditor,
+            file=self._ops_manager.etc_path / "acct_gather.conf",
+            mode=0o600,
+            user=self.user,
+            group=self.group,
         )
-        self.cgroup = CGroupConfigManager(
-            self._ops_manager.etc_path / "cgroup.conf", user=self.user, group=self.group
+        self.cgroup = SlurmConfigManager(
+            CGroupConfigEditor,
+            file=self._ops_manager.etc_path / "cgroup.conf",
+            mode=0o644,
+            user=self.user,
+            group=self.group,
         )
-        self.gres = GresConfigManager(
-            self._ops_manager.etc_path / "gres.conf", user=self.user, group=self.group
+        self.gres = SlurmConfigManager(
+            GresConfigEditor,
+            file=self._ops_manager.etc_path / "gres.conf",
+            mode=0o644,
+            user=self.user,
+            group=self.group,
         )
-        self.oci = OCIConfigManager(
-            self._ops_manager.etc_path / "oci.conf", user=self.user, group=self.group
+        self.oci = SlurmConfigManager(
+            OCIConfigEditor,
+            file=self._ops_manager.etc_path / "oci.conf",
+            mode=0o644,
+            user=self.user,
+            group=self.group,
         )
 
     @property

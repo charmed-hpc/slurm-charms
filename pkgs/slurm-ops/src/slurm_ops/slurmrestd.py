@@ -16,6 +16,8 @@
 
 __all__ = ["SlurmrestdManager"]
 
+from slurmutils import SlurmConfigEditor
+
 from slurm_ops.core import SLURMRESTD_GROUP, SLURMRESTD_USER, SlurmConfigManager, SlurmManager
 
 
@@ -26,7 +28,9 @@ class SlurmrestdManager(SlurmManager):
         super().__init__("slurmrestd", snap)
 
         self.config = SlurmConfigManager(
-            self._ops_manager.etc_path / "slurm.conf",
+            SlurmConfigEditor,
+            file=self._ops_manager.etc_path / "slurm.conf",
+            mode=0o644,
             user=self.user,
             group=self.group,
         )

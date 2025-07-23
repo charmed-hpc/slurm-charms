@@ -18,7 +18,9 @@ __all__ = ["SlurmdbdManager"]
 
 from os import PathLike
 
-from slurm_ops.core import SLURM_GROUP, SLURM_USER, SlurmdbdConfigManager, SlurmManager
+from slurmutils import SlurmdbdConfigEditor
+
+from slurm_ops.core import SLURM_GROUP, SLURM_USER, SlurmConfigManager, SlurmManager
 
 
 class SlurmdbdManager(SlurmManager):
@@ -27,9 +29,10 @@ class SlurmdbdManager(SlurmManager):
     def __init__(self, snap: bool = False) -> None:
         super().__init__("slurmdbd", snap)
 
-        self._env_manager = self._ops_manager.env_manager_for("slurmdbd")
-        self.config = SlurmdbdConfigManager(
-            self._ops_manager.etc_path / "slurmdbd.conf",
+        self.config = SlurmConfigManager(
+            SlurmdbdConfigEditor,
+            file=self._ops_manager.etc_path / "slurmdbd.conf",
+            mode=0o600,
             user=self.user,
             group=self.group,
         )

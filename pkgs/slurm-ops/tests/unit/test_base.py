@@ -282,7 +282,7 @@ class TestSnapManager:
         assert "--classic" in args[3:]
 
         f_info = Path("/var/snap/slurm/common/var/lib/slurm").stat()
-        assert stat.filemode(f_info.st_mode) ==  "drwxr-xr-x"
+        assert stat.filemode(f_info.st_mode) == "drwxr-xr-x"
         f_info = Path("/var/snap/slurm/common/var/lib/slurm/checkpoint").stat()
         assert stat.filemode(f_info.st_mode) == "drwxr-xr-x"
 
@@ -297,7 +297,9 @@ class TestSnapManager:
         assert mock_run.call_args[0][0] == ["snap", "info", "slurm"]
 
         # Test `version` when the Slurm snap is not installed.
-        mock_run.return_value = CompletedProcess([], returncode=0, stdout=SLURM_SNAP_INFO_NOT_INSTALLED)
+        mock_run.return_value = CompletedProcess(
+            [], returncode=0, stdout=SLURM_SNAP_INFO_NOT_INSTALLED
+        )
 
         with pytest.raises(SlurmOpsError) as exec_info:
             manager.version()
@@ -317,7 +319,9 @@ class TestSnapManager:
         assert manager.is_installed() is True
 
         # Test `is_installed` when the Slurm snap is not installed.
-        mock_run.return_value = CompletedProcess([], returncode=0, stdout=SLURM_SNAP_INFO_NOT_INSTALLED)
+        mock_run.return_value = CompletedProcess(
+            [], returncode=0, stdout=SLURM_SNAP_INFO_NOT_INSTALLED
+        )
 
         assert manager.is_installed() is False
 
