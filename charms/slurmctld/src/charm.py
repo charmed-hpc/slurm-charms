@@ -557,7 +557,7 @@ class SlurmctldCharm(CharmBase):
             )
             return False
 
-        if self.cluster_name is None:
+        if self.cluster_name == "":
             self.unit.status = WaitingStatus("Waiting for cluster_name....")
             return False
 
@@ -577,7 +577,7 @@ class SlurmctldCharm(CharmBase):
         scontrol("update", f"nodename={','.join(nodelist)}", "state=resume")
 
     @property
-    def cluster_name(self) -> Optional[str]:
+    def cluster_name(self) -> str:
         """Return the cluster name."""
         return self._slurmctld_peer.cluster_name
 

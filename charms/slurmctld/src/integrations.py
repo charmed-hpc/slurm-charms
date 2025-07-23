@@ -36,10 +36,6 @@ class ControllerPeerAppData:
 
     Attributes:
         cluster_name: The unique name of this cluster.
-
-    Warnings:
-        - `cluster_name` can only be set when the peer integration is created. The cluster name
-           becomes permanent after the `SlurmctldPeerConnectedEvent` is handled.
     """
 
     cluster_name: str = ""
@@ -115,12 +111,19 @@ class SlurmctldPeer(Interface):
         return integration.load(ControllerPeerAppData, integration.app)
 
     @property
-    def cluster_name(self) -> str | None:
-        """Get the unique cluster name from the application integration data."""
+    def cluster_name(self) -> str:
+        """Get the unique cluster name from the application integration data.
+
+        Warnings:
+            - The cluster name should only be set once during the entire lifetime of
+              a deployed `slurmctld` application. If the cluster name is overwritten
+              after being set, this will unrecoverably corrupt the controller's
+              `StateSaveLocation` data.
+        """
         if data := self.get_controller_peer_app_data():
             return data.cluster_name
         else:
-            return None
+            return ""
 
     @cluster_name.setter
     @leader
