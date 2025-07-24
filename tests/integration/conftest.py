@@ -160,3 +160,25 @@ def pytest_addoption(parser) -> None:
         default=False,
         help="keep temporarily created models",
     )
+    parser.addoption(
+        "--run-high-availability",
+        action="store_true",
+        default=False,
+        help="run high availability tests (slow)",
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "high_availability: marks tests for slurmctld high availability"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-high-availability"):
+        # Flag given in cli: do not skip tests
+        return
+    skip_ha = pytest.mark.skip(reason="need --run-high-availability option to run")
+    for item in items:
+        if "high_availability" in item.keywords:
+            item.add_marker(skip_ha)

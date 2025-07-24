@@ -44,11 +44,14 @@ def test_deploy(juju: jubilant.Juju, base, sackd, slurmctld, slurmd, slurmdbd, s
         base=base,
         channel=DEFAULT_SLURM_CHARM_CHANNEL if isinstance(sackd, str) else None,
     )
+    # Controller uses a VM with low `SlurmctldTimeout` to facilitate HA tests
     juju.deploy(
         slurmctld,
         SLURMCTLD_APP_NAME,
         base=base,
         channel=DEFAULT_SLURM_CHARM_CHANNEL if isinstance(slurmctld, str) else None,
+        constraints={"virt-type": "virtual-machine"},
+        config={"slurm-conf-parameters": "SlurmctldTimeout=10\n"},
     )
     juju.deploy(
         slurmd,

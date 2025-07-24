@@ -5,4 +5,4 @@ requires-python = "==3.12.*"
 dependencies = ["ops", "slurmutils", "influxdb", "netifaces-plus", "hpc-libs", "cosl"]
 
 [tool.repository]
-libraries = ["grafana-agent.cos_agent"]
+libraries = ["grafana-agent.cos_agent", "filesystem-client.mount_info"]

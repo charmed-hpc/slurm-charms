@@ -29,5 +29,6 @@ output "requires" {
 output "provides" {
   value = {
     cos_agent = "cos-agent"
+    mount     = "mount"
   }
 }

@@ -39,6 +39,9 @@ provides:
   cos-agent:
     interface: cos_agent
     limit: 1
+  mount:
+    interface: mount_info
+    scope: container
 
 peers:
   slurmctld-peer:

@@ -17,7 +17,7 @@ name = "slurm-charms"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops ~= 2.19",
+    "ops ~= 3.0.0",
     "slurmutils<1.0.0,>=0.11.0",
     "influxdb==5.3.2",
     "netifaces-plus==0.12.4",
@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     # Tests
-    "ops[testing]~=2.19",
+    "ops[testing]~=3.0.0",
     "cryptography~=44.0.1",
     "distro==1.9.0",
     "python-dotenv~=1.0.1",
@@ -75,6 +75,7 @@ external-libraries = [
     { lib = "operator-libs-linux.juju_systemd_notices", version = "0.2" },
     { lib = "data-platform-libs.data_interfaces", version = "0.41" },
     { lib = "grafana-agent.cos_agent", version = "0.20" },
+    { lib = "filesystem-client.mount_info", version = "0.1" },
 ]
 binary-packages = [
     "pydantic-core",
