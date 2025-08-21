@@ -13,77 +13,173 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the sackd operator."""
+"""Unit tests for the `sackd` charmed operator."""
 
-from unittest import TestCase
-from unittest.mock import Mock, PropertyMock, patch
+import json
 
-from charm import SackdCharm
-from ops.model import ActiveStatus, BlockedStatus
-from scenario import Context, State
+import ops
+import pytest
+from constants import SACKD_INTEGRATION_NAME
+from ops import testing
+from pytest_mock import MockerFixture
 from slurm_ops import SlurmOpsError
 
-
-class TestCharm(TestCase):
-    """Unit test sackd charm."""
-
-    def setUp(self) -> None:
-        """Set up unit test."""
-        self.ctx = Context(SackdCharm)
-
-    @patch("ops.framework.EventBase.defer")
-    def test_install_success(self, defer, *_) -> None:
-        """Test install success behavior."""
-        with self.ctx(self.ctx.on.install(), State()) as manager:
-            manager.charm._sackd.install = Mock()
-            manager.charm._sackd.service.stop = Mock()
-            manager.charm._sackd.version = Mock(return_value="24.05.2-1")
-            manager.run()
-            self.assertTrue(manager.charm._stored.sackd_installed)
-
-        defer.assert_not_called()
-
-    @patch("ops.framework.EventBase.defer")
-    def test_install_fail(self, defer) -> None:
-        """Test install failure behavior."""
-        with self.ctx(self.ctx.on.install(), State()) as manager:
-            manager.charm._sackd.install = Mock(
-                side_effect=SlurmOpsError("failed to install sackd")
-            )
-            manager.run()
-
-            self.assertEqual(
-                manager.charm.unit.status,
-                BlockedStatus("failed to install sackd. see logs for further details"),
-            )
-            self.assertFalse(manager.charm._stored.sackd_installed)
-
-        defer.assert_called()
-
-    @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock(return_value=True))
-    def test_update_status_success(self, *_) -> None:
-        """Test `UpdateStateEvent` hook success."""
-        with self.ctx(self.ctx.on.update_status(), State()) as manager:
-            manager.charm._stored.sackd_installed = True
-            manager.charm._stored.slurmctld_available = True
-            manager.charm._sackd.service.is_active = Mock(return_value=True)
-            manager.charm.unit.status = ActiveStatus()
-            manager.run()
-            # ActiveStatus is the expected value when _check_status does not
-            # modify the current state of the unit and should return True.
-            self.assertEqual(manager.charm.unit.status, ActiveStatus())
-
-    def test_update_status_install_fail(self) -> None:
-        """Test `UpdateStateEvent` hook failure."""
-        with self.ctx(self.ctx.on.update_status(), State()) as manager:
-            manager.run()
-            self.assertEqual(
-                manager.charm.unit.status,
-                BlockedStatus("failed to install sackd. see logs for further details"),
-            )
+EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_CONTROLLERS = ["juju-988225-0:6817", "juju-988225-1:6817"]
 
 
-if __name__ == "__main__":
-    import unittest
+@pytest.mark.parametrize(
+    "leader",
+    (
+        pytest.param(True, id="leader"),
+        pytest.param(False, id="not leader"),
+    ),
+)
+class TestSackdCharm:
+    """Unit tests for the `sackd` charmed operator."""
 
-    unittest.main()
+    @pytest.mark.parametrize(
+        "mock_install,expected",
+        (
+            pytest.param(
+                lambda: None,
+                ops.BlockedStatus("Waiting for integrations: [`slurmctld`]"),
+                id="success",
+            ),
+            pytest.param(
+                lambda: (_ for _ in ()).throw(SlurmOpsError("install failed")),
+                ops.BlockedStatus("Failed to install `sackd`. See `juju debug-log` for details"),
+                id="fail",
+            ),
+        ),
+    )
+    def test_install(
+        self,
+        mock_charm,
+        mocker: MockerFixture,
+        mock_install,
+        leader,
+        expected,
+    ) -> None:
+        """Test the `_on_install` event handler."""
+        with mock_charm(mock_charm.on.install(), testing.State(leader=leader)) as manager:
+            sackd = manager.charm.sackd
+            mocker.patch.object(sackd, "install", mock_install)
+            mocker.patch.object(sackd, "is_installed")
+            mocker.patch.object(sackd, "version", return_value="24.05.2-1")
+
+            state = manager.run()
+
+        assert state.unit_status == expected
+
+    @pytest.mark.parametrize(
+        "mock_restart,ready,expected",
+        (
+            pytest.param(
+                lambda: None,
+                True,
+                ops.ActiveStatus(),
+                id="ready-start success",
+            ),
+            pytest.param(
+                lambda: (_ for _ in ()).throw(SlurmOpsError("restart failed")),
+                True,
+                ops.BlockedStatus("Failed to start `sackd`. See `juju debug-log` for details"),
+                id="ready-start fail",
+            ),
+            pytest.param(
+                lambda: None,
+                False,
+                ops.WaitingStatus("Waiting for controller data"),
+                id="not ready-start success",
+            ),
+            pytest.param(
+                lambda: (_ for _ in ()).throw(SlurmOpsError("restart failed")),
+                False,
+                ops.WaitingStatus("Waiting for controller data"),
+                id="not ready-start fail",
+            ),
+        ),
+    )
+    def test_on_slurmctld_ready(
+        self, mock_charm, mocker: MockerFixture, mock_restart, ready, leader, expected
+    ) -> None:
+        """Test the `_on_slurmctld_ready` event handler."""
+        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+
+        integration_id = 1
+        integration = testing.Relation(
+            endpoint=SACKD_INTEGRATION_NAME,
+            interface="sackd",
+            id=integration_id,
+            remote_app_name="slurmctld",
+            remote_app_data=(
+                {
+                    "auth_key": '"***"',
+                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "controllers": json.dumps(EXAMPLE_CONTROLLERS),
+                }
+                if ready
+                else {"controllers": json.dumps(EXAMPLE_CONTROLLERS)}
+            ),
+        )
+
+        with mock_charm(
+            mock_charm.on.relation_changed(integration),
+            testing.State(leader=leader, relations={integration}, secrets={auth_key_secret}),
+        ) as manager:
+            sackd = manager.charm.sackd
+            mocker.patch.object(sackd, "is_installed", return_value=True)
+            mocker.patch.object(sackd.service, "is_active")
+            mocker.patch.object(sackd.service, "restart", mock_restart)
+            mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
+
+            state = manager.run()
+
+        assert state.unit_status == expected
+
+    @pytest.mark.parametrize(
+        "mock_stop,expected",
+        (
+            pytest.param(
+                lambda: None,
+                ops.BlockedStatus("Waiting for integrations: [`slurmctld`]"),
+                id="stop success",
+            ),
+            pytest.param(
+                lambda: (_ for _ in ()).throw(SlurmOpsError("install failed")),
+                ops.BlockedStatus("Failed to stop `sackd`. See `juju debug-log` for details"),
+                id="stop fail",
+            ),
+        ),
+    )
+    def test_on_slurmctld_disconnected(
+        self, mock_charm, mocker: MockerFixture, mock_stop, leader, expected
+    ) -> None:
+        """Test the `_on_slurmctld_disconnected` event handler."""
+        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+
+        integration_id = 1
+        integration = testing.Relation(
+            endpoint=SACKD_INTEGRATION_NAME,
+            interface="sackd",
+            id=integration_id,
+            remote_app_name="slurmctld",
+            remote_app_data={
+                "auth_key": '"***"',
+                "auth_key_id": json.dumps(auth_key_secret.id),
+                "controllers": json.dumps(EXAMPLE_CONTROLLERS),
+            },
+        )
+
+        with mock_charm(
+            mock_charm.on.relation_broken(integration),
+            testing.State(leader=leader, relations={integration}, secrets={auth_key_secret}),
+        ) as manager:
+            sackd = manager.charm.sackd
+            mocker.patch.object(sackd, "is_installed", return_value=True)
+            mocker.patch.object(sackd.service, "stop", mock_stop)
+
+            state = manager.run()
+
+        assert state.unit_status == expected

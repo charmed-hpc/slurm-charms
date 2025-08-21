@@ -1,153 +1,122 @@
 #!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
+# Copyright 2024-2025 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""Sackd Operator Charm."""
+"""Charmed operator for `sackd`, Slurm's authentication kiosk service."""
 
 import logging
 
-from constants import SACKD_PORT
-from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
-from ops import (
-    ActiveStatus,
-    BlockedStatus,
-    CharmBase,
-    InstallEvent,
-    StoredState,
-    UpdateStatusEvent,
-    WaitingStatus,
-    main,
+import ops
+from constants import SACKD_INTEGRATION_NAME, SACKD_PORT
+from hpc_libs.interfaces import (
+    SackdProvider,
+    SlurmctldDisconnectedEvent,
+    SlurmctldReadyEvent,
+    block_when,
+    controller_not_ready,
+    wait_when,
 )
+from hpc_libs.utils import StopCharm, refresh
 from slurm_ops import SackdManager, SlurmOpsError
+from state import check_sackd, sackd_not_installed
 
 logger = logging.getLogger(__name__)
+refresh = refresh(check=check_sackd)
 
 
-class SackdCharm(CharmBase):
-    """Sackd lifecycle events."""
+class SackdCharm(ops.CharmBase):
+    """Charmed operator for `sackd`, Slurm's authentication kiosk service."""
 
-    _stored = StoredState()
+    def __init__(self, framework: ops.Framework) -> None:
+        super().__init__(framework)
 
-    def __init__(self, *args, **kwargs):
-        """Init _stored attributes and interfaces, observe events."""
-        super().__init__(*args, **kwargs)
+        self.sackd = SackdManager(snap=False)
+        framework.observe(self.on.install, self._on_install)
+        framework.observe(self.on.update_status, self._on_update_status)
 
-        self._stored.set_default(
-            auth_key=str(),
-            sackd_installed=False,
-            slurmctld_available=False,
-            slurmctld_host=str(),
+        self.slurmctld = SackdProvider(self, SACKD_INTEGRATION_NAME)
+        framework.observe(
+            self.slurmctld.on.slurmctld_ready,
+            self._on_slurmctld_ready,
+        )
+        framework.observe(
+            self.slurmctld.on.slurmctld_disconnected,
+            self._on_slurmctld_disconnected,
         )
 
-        self._sackd = SackdManager(snap=False)
-        self._slurmctld = Slurmctld(self, "slurmctld")
+    @refresh
+    def _on_install(self, event: ops.InstallEvent) -> None:
+        """Install `sackd` after charm is deployed on unit.
 
-        event_handler_bindings = {
-            self.on.install: self._on_install,
-            self.on.update_status: self._on_update_status,
-            self._slurmctld.on.slurmctld_available: self._on_slurmctld_available,
-            self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
-        }
-        for event, handler in event_handler_bindings.items():
-            self.framework.observe(event, handler)
-
-    def _on_install(self, event: InstallEvent) -> None:
-        """Perform installation operations for sackd."""
-        self.unit.status = WaitingStatus("installing sackd")
-
+        Notes:
+            - The `sackd` service is enabled by default after being installed using `apt`,
+              so the service is stopped and disabled. The service is re-enabled after being
+              integrated with a `slurmctld` application.
+        """
+        self.unit.status = ops.MaintenanceStatus("Installing `sackd`")
         try:
-            self._sackd.install()
-            # Note: sackd is enabled and started by default following
-            #       installation via apt.
-            #
-            # Ensure sackd does not start before relation established.
-            self._sackd.service.stop()
-            self.unit.set_workload_version(self._sackd.version())
-            self._stored.sackd_installed = True
+            self.sackd.install()
+            self.sackd.service.stop()
+            self.sackd.service.disable()
+            self.unit.set_workload_version(self.sackd.version())
         except SlurmOpsError as e:
             logger.error(e.message)
             event.defer()
+            raise StopCharm(
+                ops.BlockedStatus("Failed to install `sackd`. See `juju debug-log` for details")
+            )
 
         self.unit.open_port("tcp", SACKD_PORT)
-        self._check_status()
 
-    def _on_update_status(self, _: UpdateStatusEvent) -> None:
-        """Handle update status."""
-        self._check_status()
+    @refresh
+    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
+        """Check status of the `sackd` application/unit."""
 
-    def _on_slurmctld_available(self, event: SlurmctldAvailableEvent) -> None:
-        """Retrieve the slurmctld_available event data and store in charm state."""
-        if self._stored.sackd_installed is not True:
-            event.defer()
-            return
+    @refresh
+    @wait_when(controller_not_ready)
+    @block_when(sackd_not_installed)
+    def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
+        """Handle when controller data is ready from `slurmctld`."""
+        data = self.slurmctld.get_controller_data(event.relation.id)
 
-        if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
-            if slurmctld_host is not None:
-                self._sackd.conf_server = [f"{slurmctld_host}:6817"]
-                self._stored.slurmctld_host = slurmctld_host
-                logger.debug(f"slurmctld_host={slurmctld_host}")
-            else:
-                logger.debug("'slurmctld_host' not in event data.")
-                return
-
-        if (auth_key := event.auth_key) != self._stored.auth_key:
-            if auth_key is not None:
-                self._stored.auth_key = auth_key
-                self._sackd.key.set(auth_key)
-            else:
-                logger.debug("'auth_key' not in event data.")
-                return
-
-        logger.debug("#### Storing slurmctld_available event relation data in charm StoredState.")
-        self._stored.slurmctld_available = True
-
-        # Restart sackd after we write event data to respective locations.
         try:
-            if self._sackd.service.is_active():
-                self._sackd.service.restart()
-            else:
-                self._sackd.service.start()
+            self.sackd.key.set(data.auth_key)
+            self.sackd.conf_server = data.controllers
+            self.sackd.service.enable()
+            self.sackd.service.restart()
         except SlurmOpsError as e:
-            logger.error(e)
-
-        self._check_status()
-
-    def _on_slurmctld_unavailable(self, _) -> None:
-        """Stop sackd and set slurmctld_available = False when we lose slurmctld."""
-        logger.debug("## Slurmctld unavailable")
-        self._stored.slurmctld_available = False
-        self._stored.auth_key = ""
-        self._stored.slurmctld_host = ""
-        self._sackd.service.disable()
-        self._check_status()
-
-    def _check_status(self) -> None:
-        """Check if we have all needed components.
-
-        - sackd installed
-        - slurmctld available and working
-        - auth key configured and working
-        """
-        if self._stored.sackd_installed is not True:
-            self.unit.status = BlockedStatus(
-                "failed to install sackd. see logs for further details"
+            logger.error(e.message)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus("Failed to start `sackd`. See `juju debug-log` for details")
             )
-            return
 
-        if self._slurmctld.is_joined is not True:
-            self.unit.status = BlockedStatus("Need relations: slurmctld")
-            return
-
-        if self._stored.slurmctld_available is not True:
-            self.unit.status = WaitingStatus("Waiting on: slurmctld")
-            return
-
-        if not self._sackd.service.is_active():
-            self.unit.status = WaitingStatus("Waiting for sackd service to start....")
-            return
-
-        self.unit.status = ActiveStatus()
+    @refresh
+    @block_when(sackd_not_installed)
+    def _on_slurmctld_disconnected(self, event: SlurmctldDisconnectedEvent) -> None:
+        """Handle when unit is disconnected from `slurmctld`."""
+        try:
+            self.sackd.service.stop()
+            self.sackd.service.disable()
+            del self.sackd.conf_server
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus("Failed to stop `sackd`. See `juju debug-log` for details")
+            )
 
 
 if __name__ == "__main__":  # pragma: nocover
-    main.main(SackdCharm)
+    ops.main(SackdCharm)
