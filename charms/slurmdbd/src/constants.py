@@ -1,5 +1,5 @@
-# Copyright 2024 Omnivector, LLC
 # Copyright 2025 Vantage Compute Corporation
+# Copyright 2024 Omnivector, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Slurmdbd Charm Constants."""
+"""Constants used within the `slurmdbd` charmed operator."""
 
-PEER_RELATION = "slurmdbd-peer"
+DATABASE_INTEGRATION_NAME = "database"
+PEER_INTEGRATION_NAME = "slurmdbd-peer"
+SLURMDBD_INTEGRATION_NAME = "slurmctld"
 
+SLURM_ACCT_DATABASE_NAME = "slurm_acct_db"
 SLURMDBD_PORT = 6819
 
-SLURM_ACCT_DB = "slurm_acct_db"
-CHARM_MAINTAINED_PARAMETERS = {
+OVERRIDES_CONFIG_FILE = "slurmdbd.conf.overrides"
+STORAGE_CONFIG_FILE = "slurmdbd.conf.storage"
+DEFAULT_SLURMDBD_CONFIG = {
     "dbdport": SLURMDBD_PORT,
     "authtype": "auth/slurm",
     "slurmuser": "slurm",

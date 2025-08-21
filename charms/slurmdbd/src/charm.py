@@ -1,159 +1,179 @@
 #!/usr/bin/env python3
+# Copyright 2025 Vantage Compute Corporation
 # Copyright 2020-2024 Omnivector, LLC.
-# See LICENSE file for licensing details.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""Slurmdbd Operator Charm."""
+"""Charmed operator for `slurmdbd`, Slurm's database service."""
 
 # pyright: reportAttributeAccessIssue=false
 
 import logging
-from time import sleep
-from typing import Any, Union
+from typing import Any
 from urllib.parse import urlparse
 
-from constants import CHARM_MAINTAINED_PARAMETERS, PEER_RELATION, SLURM_ACCT_DB, SLURMDBD_PORT
-from exceptions import IngressAddressUnavailableError
-from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent, SlurmctldUnavailableEvent
-from ops import (
-    ActiveStatus,
-    BlockedStatus,
-    CharmBase,
-    ConfigChangedEvent,
-    InstallEvent,
-    ModelError,
-    StoredState,
-    UpdateStatusEvent,
-    WaitingStatus,
-    main,
+import ops
+from config import (
+    reconfigure,
+    seed_default_config,
+    update_overrides,
+    update_storage,
 )
+from constants import (
+    DATABASE_INTEGRATION_NAME,
+    SLURM_ACCT_DATABASE_NAME,
+    SLURMDBD_INTEGRATION_NAME,
+    SLURMDBD_PORT,
+)
+from hpc_libs.interfaces import (
+    SlurmctldReadyEvent,
+    SlurmdbdProvider,
+    block_when,
+    controller_not_ready,
+    wait_when,
+)
+from hpc_libs.utils import StopCharm, leader, refresh
 from slurm_ops import SlurmdbdManager, SlurmOpsError
-from slurmutils import SlurmdbdConfig
+from state import check_slurmdbd, slurmdbd_not_installed
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 logger = logging.getLogger(__name__)
+refresh = refresh(check=check_slurmdbd)
 
 
-class SlurmdbdCharm(CharmBase):
-    """Slurmdbd Charm."""
+class SlurmdbdCharm(ops.CharmBase):
+    """Charmed operator for `slurmdbd`, Slurm's database service."""
 
-    _stored = StoredState()
+    stored = ops.StoredState()
+    service_needs_restart: bool = False
 
-    def __init__(self, *args, **kwargs) -> None:
-        """Set the default class attributes."""
-        super().__init__(*args, **kwargs)
+    def __init__(self, framework: ops.Framework) -> None:
+        super().__init__(framework)
 
-        self._stored.set_default(
-            slurm_installed=False,
-            db_info={},
-            user_slurmdbd_params={},
-            user_slurmdbd_params_str=str(),
+        self.slurmdbd = SlurmdbdManager(snap=False)
+        self.stored.set_default(
+            database_info={},
+            custom_slurmdbd_config={},
         )
+        framework.observe(self.on.install, self._on_install)
+        framework.observe(self.on.start, self._on_start)
+        framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.on.update_status, self._on_update_status)
 
-        self._slurmdbd = SlurmdbdManager(snap=False)
-        self._slurmctld = Slurmctld(self, "slurmctld")
-        self._db = DatabaseRequires(self, relation_name="database", database_name=SLURM_ACCT_DB)
+        self.slurmctld = SlurmdbdProvider(self, SLURMDBD_INTEGRATION_NAME)
+        framework.observe(self.slurmctld.on.slurmctld_ready, self._on_slurmctld_ready)
+
+        self.database = DatabaseRequires(
+            self,
+            relation_name=DATABASE_INTEGRATION_NAME,
+            database_name=SLURM_ACCT_DATABASE_NAME,
+        )
+        framework.observe(self.database.on.database_created, self._on_database_created)
+
         self._grafana_agent = COSAgentProvider(self)
 
-        event_handler_bindings = {
-            self.on.install: self._on_install,
-            self.on.update_status: self._on_update_status,
-            self.on.config_changed: self._on_config_changed,
-            self._db.on.database_created: self._on_database_created,
-            self._slurmctld.on.slurmctld_available: self._on_slurmctld_available,
-            self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
-        }
-        for event, handler in event_handler_bindings.items():
-            self.framework.observe(event, handler)
+    @refresh
+    def _on_install(self, event: ops.InstallEvent) -> None:
+        """Install `slurmdbd` after charm is deployed on the unit.
 
-    def _on_install(self, event: InstallEvent) -> None:
-        """Perform installation operations for slurmdbd."""
-        self.unit.status = WaitingStatus("installing slurmdbd")
-        try:
-            if self.unit.is_leader():
-                self._slurmdbd.install()
-                self.unit.set_workload_version(self._slurmdbd.version())
-                self._slurmdbd.service.enable()
-
-                self._stored.slurm_installed = True
-            else:
-                logger.warning(
-                    "slurmdbd high-availability is not supported yet. please scale down application."
+        Notes:
+            - The `slurmdbd` service is enabled by default after being installed using `apt`,
+              so the service is stopped and disabled. The service is re-enabled after being
+              integrated with a `slurmctld` application and backend database provider.
+        """
+        if not self.unit.is_leader():
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "`slurmdbd` high-availability is not supported. Scale down application"
                 )
-                event.defer()
+            )
+
+        self.unit.status = ops.MaintenanceStatus("Installing `slurmdbd`")
+        try:
+            self.slurmdbd.install()
+            self.slurmdbd.service.stop()
+            self.slurmdbd.service.disable()
+            self.unit.set_workload_version(self.slurmdbd.version())
         except SlurmOpsError as e:
             logger.error(e.message)
             event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to install `slurmdbd`. See `juju debug-log` for details."
+                )
+            )
 
         self.unit.open_port("tcp", SLURMDBD_PORT)
-        self._check_status()
 
-    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
-        """Process configuration changes."""
-        write_config_and_restart = False
+    @refresh
+    @reconfigure
+    def _on_start(self, _: ops.StartEvent) -> None:
+        """Write initial `slurmdbd.conf` file."""
+        if not self.unit.is_leader():
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "`slurmdbd` high-availability is not supported. Scale down application"
+                )
+            )
 
-        if (user_slurmdbd_params_str := self.config.get("slurmdbd-conf-parameters")) is not None:
-            user_slurmdbd_params_str = str(user_slurmdbd_params_str)
-            if user_slurmdbd_params_str != self._stored.user_slurmdbd_params_str:
-                logger.debug("## User supplied parameters changed, saving to charm state.")
-                self._stored.user_slurmdbd_params_str = user_slurmdbd_params_str
+        seed_default_config(self)
 
-                try:
-                    config = SlurmdbdConfig.from_str(user_slurmdbd_params_str)
-                    self._stored.user_slurmdbd_params = config.dict()
-                    write_config_and_restart = True
-                except (ModelError, ValueError) as e:
-                    logger.error("could not parse user supplied parameters. reason: %s", e.message)
-                    raise e
+    @leader
+    @refresh
+    @reconfigure
+    def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
+        """Update the `slurmdbd` charm's configuration."""
+        update_overrides(self)
 
-        if write_config_and_restart is True:
-            self._write_config_and_restart_slurmdbd(event)
+    @leader
+    @refresh
+    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
+        """Check status of the `slurmdbd` application unit."""
 
-    def _on_update_status(self, _: UpdateStatusEvent) -> None:
-        """Handle update status."""
-        self._check_status()
+    @leader
+    @refresh
+    @reconfigure
+    @wait_when(controller_not_ready)
+    @block_when(slurmdbd_not_installed)
+    def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
+        """Handle when controller data is ready from `slurmctld`."""
+        data = self.slurmctld.get_controller_data(event.relation.id)
 
-    def _on_slurmctld_available(self, event: SlurmctldAvailableEvent) -> None:
-        """Retrieve and configure the jwt_rsa and auth_key when slurmctld_available."""
-        if self._stored.slurm_installed is not True:
-            event.defer()
-            return
+        self.slurmdbd.key.set(data.auth_key)
+        self.slurmdbd.jwt.set(data.jwt_key)
 
-        if (jwt := event.jwt_rsa) is not None:
-            self._slurmdbd.jwt.set(jwt)
-
-        if (auth_key := event.auth_key) is not None:
-            self._slurmdbd.key.set(auth_key)
-
-        # Don't try to write the config before the database has been created.
-        # Otherwise, this will trigger a defer on this event, which we don't really need.
-        if self._stored.db_info:
-            self._write_config_and_restart_slurmdbd(event)
-
+    @leader
+    @refresh
+    @reconfigure
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
-        """Process the DatabaseCreatedEvent and updates the database parameters.
-
-        Updates the database parameters for the slurmdbd configuration based up on the
-        DatabaseCreatedEvent. The type of update depends on the endpoints provided in
-        the DatabaseCreatedEvent.
-
-        If the endpoints provided are file paths to unix sockets
-        then the /etc/default/slurmdbd file will be updated to tell the MySQL client to
-        use the socket.
-
-        If the endpoints provided are Address:Port tuples, then the address and port are
-        updated as the database parameters in the slurmdbd.conf configuration file.
-
-        Args:
-            event (DatabaseCreatedEvent):
-                Information passed by MySQL after the slurm_acct_db database has been created.
+        """Process the `DatabaseCreatedEvent` and update the database parameters.
 
         Raises:
-            ValueError:
-                When the database endpoints are invalid (e.g. empty).
+            ValueError: When the database endpoints are invalid (e.g. empty).
+
+        Notes:
+            - Updates the database parameters for the slurmdbd configuration based up on the
+              `DatabaseCreatedEvent`. The type of update depends on the endpoints provided in
+              the `DatabaseCreatedEvent`.
+            - If the endpoints provided are file paths to unix sockets then the
+              /etc/default/slurmdbd file will be updated to tell the MySQL client to
+              use the socket.
+            - If the endpoints provided are Address:Port tuples, then the address and port are
+              updated as the database parameters in the slurmdbd.conf configuration file.
         """
-        logger.debug("Configuring new backend database for slurmdbd.")
+        logger.debug("configuring new backend database for slurmdbd")
 
         socket_endpoints = []
         tcp_endpoints = []
@@ -163,9 +183,9 @@ class SlurmdbdCharm(CharmBase):
             # a bad way. The event isn't deferred as this is a situation that requires
             # a human to look at and resolve the proper next steps. Reprocessing the
             # deferred event will only result in continual errors.
-            logger.error(f"No endpoints provided: {event.endpoints}")
-            self.unit.status = BlockedStatus("No database endpoints provided")
-            raise ValueError(f"Unexpected endpoint types: {event.endpoints}")
+            logger.error("no endpoints provided: %s", event.endpoints)
+            self.unit.status = ops.BlockedStatus("No database endpoints provided")
+            raise ValueError(f"no endpoints provided: {event.endpoints}")
 
         for endpoint in [ep.strip() for ep in event.endpoints.split(",")]:
             if not endpoint:
@@ -176,176 +196,56 @@ class SlurmdbdCharm(CharmBase):
             else:
                 tcp_endpoints.append(endpoint)
 
-        db_info: dict[str, Any] = {
+        database_info: dict[str, Any] = {
             "storageuser": event.username,
             "storagepass": event.password,
-            "storageloc": SLURM_ACCT_DB,
+            "storageloc": SLURM_ACCT_DATABASE_NAME,
         }
 
         if socket_endpoints:
             # Socket endpoints will be preferred. This is the case when the mysql
             # configuration is using the mysql-router on the local node.
-            logger.debug("Updating environment for mysql socket access")
+            logger.debug("updating environment for mysql socket access")
             if len(socket_endpoints) > 1:
                 logger.warning(
-                    f"{len(socket_endpoints)} socket endpoints are specified, "
-                    f"but only first one will be used."
+                    "%s socket endpoints are specified, but only first one will be used.",
+                    len(socket_endpoints),
                 )
             # Make sure to strip the file:// off the front of the first endpoint
             # otherwise slurmdbd will not be able to connect to the database
-            self._slurmdbd.mysql_unix_port = urlparse(socket_endpoints[0]).path
+            self.slurmdbd.mysql_unix_port = urlparse(socket_endpoints[0]).path
         elif tcp_endpoints:
             # This must be using TCP endpoint and the connection information will
             # be host_address:port. Only one remote mysql service will be configured
             # in this case.
-            logger.debug("Using tcp endpoints specified in the relation")
+            logger.debug("using tcp endpoints specified in the relation")
             if len(tcp_endpoints) > 1:
                 logger.warning(
-                    f"{len(tcp_endpoints)} tcp endpoints are specified, "
-                    f"but only the first one will be used."
+                    "%s tcp endpoints are specified, but only the first one will be used",
+                    len(tcp_endpoints),
                 )
             addr, port = tcp_endpoints[0].rsplit(":", 1)
             # Check IPv6 and strip any brackets
             if addr.startswith("[") and addr.endswith("]"):
                 addr = addr[1:-1]
-            db_info.update(
+            database_info.update(
                 {
                     "storagehost": addr,
                     "storageport": int(port),
                 }
             )
             # Make sure that the MYSQL_UNIX_PORT is removed from the env file.
-            del self._slurmdbd.mysql_unix_port
+            del self.slurmdbd.mysql_unix_port
         else:
             # This is 100% an error condition that the charm doesn't know how to handle
             # and is an unexpected condition. This happens when there are commas but no
             # usable data in the endpoints.
-            logger.error(f"No endpoints provided: {event.endpoints}")
-            self.unit.status = BlockedStatus("No database endpoints provided")
-            raise ValueError(f"No endpoints provided: {event.endpoints}")
+            logger.error("no endpoints provided: %s", event.endpoints)
+            self.unit.status = ops.BlockedStatus("No database endpoints provided")
+            raise ValueError(f"no endpoints provided: {event.endpoints}")
 
-        self._stored.db_info = db_info
-        self._write_config_and_restart_slurmdbd(event)
-
-    def _on_slurmctld_unavailable(self, _: SlurmctldUnavailableEvent) -> None:
-        """Reset state and charm status when slurmctld broken."""
-        self._check_status()
-
-    @property
-    def _ingress_address(self) -> str:
-        """Return the ingress_address from the peer relation if it exists."""
-        if (peer_binding := self.model.get_binding(PEER_RELATION)) is not None:
-            ingress_address = f"{peer_binding.network.ingress_address}"
-            logger.debug("slurmdbd ingress_address: %s", ingress_address)
-            return ingress_address
-        raise IngressAddressUnavailableError("Ingress address unavailable")
-
-    def _assemble_slurmdbd_conf(self) -> SlurmdbdConfig:
-        """Assemble and return the SlurmdbdConfig."""
-        slurmdbd_config = SlurmdbdConfig.from_dict(
-            {
-                **CHARM_MAINTAINED_PARAMETERS,
-                **self._stored.db_info,
-                "dbdhost": self._slurmdbd.hostname,
-                "dbdaddr": self._ingress_address,
-                **self._stored.user_slurmdbd_params,
-            }
-        )
-
-        # Check that slurmctld is joined and that we have the
-        # jwt_key.
-        if self._slurmctld.is_joined and self._slurmdbd.jwt.path.exists():
-            slurmdbd_config.auth_alt_types = ["auth/jwt"]
-            slurmdbd_config.auth_alt_parameters = {"jwt_key": f"{self._slurmdbd.jwt.path}"}
-
-        logger.debug("slurmdbd.conf: %s", slurmdbd_config.dict() | {"storagepass": "***"})
-        return slurmdbd_config
-
-    def _write_config_and_restart_slurmdbd(
-        self,
-        event: Union[
-            ConfigChangedEvent,
-            DatabaseCreatedEvent,
-            InstallEvent,
-            SlurmctldAvailableEvent,
-        ],
-    ) -> None:
-        """Check that we have what we need before we proceed."""
-        # Ensure all pre-conditions are met with _check_status(), if not
-        # defer the event.
-        if not self._check_status():
-            event.defer()
-            return
-
-        slurmdbd_config = self._assemble_slurmdbd_conf()
-
-        self._slurmdbd.service.stop()
-        self._slurmdbd.config.dump(slurmdbd_config)
-        self._slurmdbd.service.start()
-
-        # At this point, we must guarantee that slurmdbd is correctly
-        # initialized. Its startup might take a while, so we have to wait
-        # for it.
-        self._check_slurmdbd()
-
-        # Only the leader can set relation data on the application.
-        # Enforce that no one other than the leader tries to set
-        # application relation data.
-        if self.model.unit.is_leader():
-            self._slurmctld.set_slurmdbd_host_on_app_relation_data(self._slurmdbd.hostname)
-
-        self._check_status()
-
-    def _check_slurmdbd(self, max_attemps: int = 5) -> None:
-        """Ensure slurmdbd is up and running."""
-        logger.debug("## Checking if slurmdbd is active")
-
-        for i in range(max_attemps):
-            if self._slurmdbd.service.is_active():
-                logger.debug("## Slurmdbd running")
-                break
-            else:
-                logger.warning("## Slurmdbd not running, trying to start it")
-                self.unit.status = WaitingStatus("starting slurmdbd...")
-                self._slurmdbd.service.restart()
-                sleep(3 + i)
-
-        if self._slurmdbd.service.is_active():
-            self._check_status()
-        else:
-            self.unit.status = BlockedStatus("cannot start slurmdbd")
-
-    def _check_status(self) -> bool:
-        """Check that we have the things we need."""
-        if self.unit.is_leader() is False:
-            self.unit.status = BlockedStatus(
-                "slurmdbd high-availability not supported. see logs for further details"
-            )
-            return False
-
-        if self._stored.slurm_installed is not True:
-            self.unit.status = BlockedStatus(
-                "failed to install slurmdbd. see logs for further details"
-            )
-            return False
-
-        if self._stored.db_info == {}:
-            self.unit.status = WaitingStatus("Waiting on: MySQL")
-            return False
-
-        if not self._slurmctld.is_joined:
-            self.unit.status = BlockedStatus("Need relations: slurmctld")
-            return False
-
-        # Account for the case where slurmctld relation has joined
-        # but slurmctld hasn't sent the key data yet.
-        if self._slurmctld.is_joined and not self._slurmdbd.jwt.path.exists():
-            self.unit.status = WaitingStatus("Waiting on: data from slurmctld...")
-            return False
-
-        self.unit.status = ActiveStatus()
-        return True
+        update_storage(self, database_info)
 
 
 if __name__ == "__main__":
-    main.main(SlurmdbdCharm)
+    ops.main(SlurmdbdCharm)
