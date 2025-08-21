@@ -43,7 +43,7 @@ class SlurmdManager(SlurmManager):
     @conf.deleter
     def conf(self) -> None:
         with self._edit_options() as options:
-            del options["--conf"]
+            options.pop("--conf", None)
 
     @property
     def conf_server(self) -> list[str]:
@@ -59,7 +59,7 @@ class SlurmdManager(SlurmManager):
     @conf_server.deleter
     def conf_server(self) -> None:
         with self._edit_options() as options:
-            del options["--conf-server"]
+            options.pop("--conf-server", None)
 
     @property
     def dynamic(self) -> bool:
