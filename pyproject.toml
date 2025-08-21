@@ -23,7 +23,7 @@ dependencies = [
     "netifaces-plus==0.12.4",
     "nvidia-ml-py==12.560.30",
     "rpds-py ~= 0.23.1",
-    "cosl >= 0.0.50",
+    "cosl < 1.0.0,>= 0.0.50",
     "hpc-libs[all]",
     "slurm-ops",
 ]
@@ -70,7 +70,7 @@ members = [
 [tool.uv.sources]
 slurm-ops = { workspace = true }
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
-hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "c90ff0436e6c6dff3058eac324761e125b105c0a" }
+hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "0ab6f7124216b6b3672e49d0a2eb98333c0f440d" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
