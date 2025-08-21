@@ -69,6 +69,21 @@ class SlurmctldManager(SlurmManager):
             group=self.group,
         )
 
+    def get_default_partition(self) -> str:
+        """Get the name of the default partition.
+
+        Returns:
+            Name of the default partition. An empty string is returned if there is
+            no configured default partition.
+        """
+        for include in self.config.includes.values():
+            config = include.load()
+            for partition in config.partitions.values():
+                if partition.default:
+                    return partition.partition_name
+
+        return ""
+
     @property
     def user(self) -> str:
         """Get the user that the `slurmctld` service runs as."""
