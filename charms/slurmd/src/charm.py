@@ -1,247 +1,239 @@
 #!/usr/bin/env python3
+# Copyright 2025 Vantage Compute Corporation
 # Copyright 2020-2024 Omnivector, LLC.
-# See LICENSE file for licensing details.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""Slurmd Operator Charm."""
+"""Charmed operator for `slurmd`, Slurm's compute node service."""
 
 import logging
-from pathlib import Path
-from typing import Any, Dict, cast
+from typing import cast
 
-from constants import SLURMD_PORT
-from hpc_libs.utils import plog
-from interface_slurmctld import Slurmctld, SlurmctldAvailableEvent
-from ops import (
-    ActionEvent,
-    ActiveStatus,
-    BlockedStatus,
-    CharmBase,
-    ConfigChangedEvent,
-    InstallEvent,
-    MaintenanceStatus,
-    StoredState,
-    UpdateStatusEvent,
-    WaitingStatus,
-    main,
+import gpu
+import nhc
+import ops
+import rdma
+from config import State, get_partition, reboot_if_required, reconfigure, set_partition
+from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
+from hpc_libs.interfaces import (
+    SlurmctldConnectedEvent,
+    SlurmctldDisconnectedEvent,
+    SlurmctldReadyEvent,
+    SlurmdProvider,
+    block_when,
+    controller_not_ready,
+    wait_when,
 )
-from slurm_ops import SlurmdManager, SlurmOpsError
-from slurmutils import ModelError, Node, Partition
-from utils import gpu, machine, nhc, rdma, service
+from hpc_libs.utils import StopCharm, refresh
+from slurm_ops import SlurmdManager, SlurmOpsError, scontrol
+from slurmutils import ModelError, Node
+from state import check_slurmd, slurmd_not_installed
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore[import-untyped]
-    ServiceStartedEvent,
-    ServiceStoppedEvent,
-    SystemdNotices,
-)
 
 logger = logging.getLogger(__name__)
+refresh = refresh(check=check_slurmd)
 
 
-class SlurmdCharm(CharmBase):
-    """Slurmd lifecycle events."""
+class SlurmdCharm(ops.CharmBase):
+    """Charmed operator for `slurmd`, Slurm's compute node service."""
 
-    _stored = StoredState()
+    stored = ops.StoredState()
+    service_needs_restart: bool = False
 
-    def __init__(self, *args, **kwargs):
-        """Init _stored attributes and interfaces, observe events."""
-        super().__init__(*args, **kwargs)
+    def __init__(self, framework: ops.Framework) -> None:
+        super().__init__(framework)
 
-        self._stored.set_default(
-            auth_key=str(),
-            new_node=True,
-            nhc_conf=str(),
-            nhc_params=str(),
-            slurm_installed=False,
-            slurmctld_available=False,
-            slurmctld_host=str(),
-            user_supplied_node_parameters={},
-            user_supplied_partition_parameters={},
+        self.slurmd = SlurmdManager(snap=False)
+        self.stored.set_default(
+            default_state=State.DOWN.value,
+            default_reason="New node.",
+            custom_node_config={},
+            custom_nhc_config="",
+            custom_partition_config="",
+        )
+        framework.observe(self.on.install, self._on_install)
+        framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.on.update_status, self._on_update_status)
+        framework.observe(self.on.node_configured_action, self._on_node_configured_action)
+        framework.observe(self.on.node_config_action, self._on_node_config_action)
+        framework.observe(self.on.show_nhc_config_action, self._on_show_nhc_config_action)
+
+        self.slurmctld = SlurmdProvider(self, SLURMD_INTEGRATION_NAME)
+        framework.observe(
+            self.slurmctld.on.slurmctld_connected,
+            self._on_slurmctld_connected,
+        )
+        framework.observe(
+            self.slurmctld.on.slurmctld_ready,
+            self._on_slurmctld_ready,
+        )
+        framework.observe(
+            self.slurmctld.on.slurmctld_disconnected,
+            self._on_slurmctld_disconnected,
         )
 
-        self._slurmd = SlurmdManager(snap=False)
-        self._slurmctld = Slurmctld(self, "slurmctld")
-        self._systemd_notices = SystemdNotices(self, ["slurmd"])
         self._grafana_agent = COSAgentProvider(self)
 
-        event_handler_bindings = {
-            self.on.install: self._on_install,
-            self.on.update_status: self._on_update_status,
-            self.on.config_changed: self._on_config_changed,
-            self._slurmctld.on.slurmctld_available: self._on_slurmctld_available,
-            self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
-            self.on.service_slurmd_started: self._on_slurmd_started,
-            self.on.service_slurmd_stopped: self._on_slurmd_stopped,
-            self.on.node_configured_action: self._on_node_configured_action,
-            self.on.node_config_action: self._on_node_config_action_event,
-        }
-        for event, handler in event_handler_bindings.items():
-            self.framework.observe(event, handler)
+    @refresh
+    def _on_install(self, event: ops.InstallEvent) -> None:
+        """Provision the compute node after charm is deployed on unit.
 
-    def _on_install(self, event: InstallEvent) -> None:
-        """Perform installation operations for slurmd."""
-        # Account for case where base image has been auto-upgraded by Juju and a reboot is pending
-        # before charm code runs. Reboot "now", before the current hook completes, and restart the
-        # hook after reboot. Prevents issues such as drivers/kernel modules being installed for a
-        # running kernel pending replacement by a newer version on reboot.
-        self._reboot_if_required(now=True)
-
-        self.unit.status = MaintenanceStatus("Installing slurmd")
+        Notes:
+            - The machine will be rebooted before the installation hook runs if the base image
+              has been upgraded by Juju and a reboot is required. The installation hook will be
+              restarted after the reboot completes. This preemptive reboot is performed to
+              Prevents issues such as device drivers or kernel modules being installed for a
+              running kernel pending replacement by a kernel version on reboot.
+        """
+        reboot_if_required(self, now=True)
+        self.unit.status = ops.MaintenanceStatus("Provisioning compute node")
 
         try:
-            self._slurmd.install()
+            self.unit.status = ops.MaintenanceStatus("Installing `slurmd`")
+            self.slurmd.install()
 
-            self.unit.status = MaintenanceStatus("Installing nhc")
+            self.unit.status = ops.MaintenanceStatus("Installing `nhc`")
             nhc.install()
 
-            self.unit.status = MaintenanceStatus("Installing RDMA packages")
+            self.unit.status = ops.MaintenanceStatus("Installing RDMA packages")
             rdma.install()
 
-            self.unit.status = MaintenanceStatus("Detecting if machine is GPU-equipped")
+            self.unit.status = ops.MaintenanceStatus("Detecting if machine is GPU-equipped")
             gpu_enabled = gpu.autoinstall()
             if gpu_enabled:
-                self.unit.status = MaintenanceStatus("Successfully installed GPU drivers")
+                self.unit.status = ops.MaintenanceStatus("Successfully installed GPU drivers")
             else:
-                self.unit.status = MaintenanceStatus("No GPUs found. Continuing")
+                self.unit.status = ops.MaintenanceStatus("No GPUs found. Continuing")
 
-            self.unit.set_workload_version(self._slurmd.version())
-            # TODO: https://github.com/orgs/charmed-hpc/discussions/10 -
-            #  Evaluate if we should continue doing the service override here
-            #  for `juju-systemd-notices`.
-            service.override_service()
-            self._systemd_notices.subscribe()
+            self.slurmd.service.stop()
+            self.slurmd.service.disable()
+            self.slurmd.dynamic = True
+            self.unit.set_workload_version(self.slurmd.version())
 
-            self._slurmd.service.enable()
-
-            self._stored.slurm_installed = True
         except (SlurmOpsError, gpu.GPUOpsError) as e:
             logger.error(e.message)
             event.defer()
 
         self.unit.open_port("tcp", SLURMD_PORT)
+        reboot_if_required(self)
 
-        self._check_status()
-        self._reboot_if_required()
+    @refresh
+    def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
+        """Update the `slurmd` application's configuration."""
+        custom_nhc_config = cast(str, self.config.get("nhc-conf", ""))
+        if custom_nhc_config != self.stored.custom_nhc_config:
+            logger.info("updating `nhc.conf` on unit '%s'", self.unit.name)
+            logger.debug("'%s' `nhc.conf`:\n%s", self.unit.name, custom_nhc_config)
+            nhc.generate_config(custom_nhc_config)
+            self.stored.custom_nhc_config = custom_nhc_config
+            logger.info("`nhc.conf` successfully updated on unit '%s'", self.unit.name)
 
-    def _on_config_changed(self, _: ConfigChangedEvent) -> None:
-        """Handle charm configuration changes."""
-        # Casting the type to str is required here because `get` returns a looser
-        # type than what `nhc.generate_config(...)` allows to be passed.
-        if nhc_conf := cast(str, self.model.config.get("nhc-conf", "")):
-            if nhc_conf != self._stored.nhc_conf:
-                self._stored.nhc_conf = nhc_conf
-                nhc.generate_config(nhc_conf)
-
-        user_supplied_partition_parameters = cast(
-            str | None, self.model.config.get("partition-config")
-        )
-
-        if self.model.unit.is_leader():
-            if user_supplied_partition_parameters is not None:
+        if self.unit.is_leader():
+            custom_partition_config = cast(str, self.config.get("partition-config", ""))
+            if custom_partition_config != self.stored.custom_partition_config:
                 try:
-                    partition = Partition.from_str(user_supplied_partition_parameters)
-                except (ModelError, ValueError):
-                    logger.error(
-                        "Error parsing partition-config. Please use KEY1=VALUE KEY2=VALUE."
+                    set_partition(self, get_partition(self))
+                except SlurmOpsError as e:
+                    logger.error(e)
+                    raise StopCharm(
+                        ops.BlockedStatus(
+                            "Failed to update partition configuration. "
+                            + "See `juju debug-log` for details"
+                        )
                     )
-                    return
 
-                self._stored.user_supplied_partition_parameters = partition.dict()
+                self.stored.custom_partition_config = custom_partition_config
 
-                if self._slurmctld.is_joined:
-                    self._slurmctld.set_partition()
-
-    def _on_update_status(self, _: UpdateStatusEvent) -> None:
+    @refresh
+    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
         """Handle update status."""
-        self._check_status()
 
-    def _on_slurmctld_available(self, event: SlurmctldAvailableEvent) -> None:
-        """Retrieve the slurmctld_available event data and store in charm state."""
-        if self._stored.slurm_installed is not True:
-            event.defer()
-            return
-
-        if (slurmctld_host := event.slurmctld_host) != self._stored.slurmctld_host:
-            if slurmctld_host is not None:
-                self._slurmd.conf_server = [f"{slurmctld_host}:6817"]
-                self._stored.slurmctld_host = slurmctld_host
-                logger.debug(f"slurmctld_host={slurmctld_host}")
-            else:
-                logger.debug("'slurmctld_host' not in event data.")
-                return
-
-        if (auth_key := event.auth_key) != self._stored.auth_key:
-            if auth_key is not None:
-                self._stored.auth_key = auth_key
-                self._slurmd.key.set(auth_key)
-            else:
-                logger.debug("'auth_key' not in event data.")
-                return
-
-        if (nhc_params := event.nhc_params) != self._stored.nhc_params:
-            if nhc_params is not None:
-                self._stored.nhc_params = nhc_params
-                nhc.generate_wrapper(nhc_params)
-                logger.debug(f"nhc_params={nhc_params}")
-            else:
-                logger.debug("'nhc_params' not in event data.")
-                return
-
-        logger.debug("#### Storing slurmctld_available event relation data in charm StoredState.")
-        self._stored.slurmctld_available = True
-
-        # Restart slurmd after we write the event data to their respective locations.
-        if self._slurmd.service.is_active():
-            self._slurmd.service.restart()
-        else:
-            self._slurmd.service.start()
-
-        self._check_status()
-
-    def _on_slurmctld_unavailable(self, _) -> None:
-        """Stop slurmd and set slurmctld_available = False when we lose slurmctld."""
-        logger.debug("## Slurmctld unavailable")
-        self._stored.slurmctld_available = False
-        self._stored.nhc_params = ""
-        self._stored.auth_key = ""
-        self._stored.slurmctld_host = ""
-        self._slurmd.service.stop()
-        self._check_status()
-
-    def _on_slurmd_started(self, _: ServiceStartedEvent) -> None:
-        """Handle event emitted by systemd after slurmd daemon successfully starts."""
-        self.unit.status = ActiveStatus()
-
-    def _on_slurmd_stopped(self, _: ServiceStoppedEvent) -> None:
-        """Handle event emitted by systemd after slurmd daemon is stopped."""
-        self.unit.status = BlockedStatus("slurmd not running")
-
-    def _on_node_configured_action(self, _: ActionEvent) -> None:
-        """Remove node from DownNodes and mark as active."""
-        # Trigger reconfiguration of slurmd node.
-        self._new_node = False
-        self._slurmctld.set_node()
-        self._slurmd.service.restart()
-        logger.debug("### This node is not new anymore")
-
-    def _on_show_nhc_config(self, event: ActionEvent) -> None:
-        """Show current nhc.conf."""
+    @refresh
+    @block_when(slurmd_not_installed)
+    def _on_slurmctld_connected(self, event: SlurmctldConnectedEvent) -> None:
+        """Handle when the `slurmd` application is connected to `slurmctld`."""
         try:
-            event.set_results({"nhc.conf": nhc.get_config()})
-        except FileNotFoundError:
-            event.set_results({"nhc.conf": "/etc/nhc/nhc.conf not found."})
+            set_partition(self, get_partition(self))
+        except SlurmOpsError as e:
+            logger.error(e)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to update partition configuration. "
+                    + "See `juju debug-log` for details"
+                )
+            )
 
-    def _on_node_config_action_event(self, event: ActionEvent) -> None:
+    @refresh
+    @reconfigure
+    @wait_when(controller_not_ready)
+    @block_when(slurmd_not_installed)
+    def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
+        """Handle when controller data is ready from the `slurmctld` application."""
+        data = self.slurmctld.get_controller_data(event.relation.id)
+
+        self.slurmd.key.set(data.auth_key)
+        self.slurmd.conf_server = data.controllers
+        nhc.generate_wrapper(data.nhc_args)
+        self.service_needs_restart = True
+
+    @refresh
+    @block_when(slurmd_not_installed)
+    def _on_slurmctld_disconnected(self, event: SlurmctldDisconnectedEvent) -> None:
+        """Handle when the unit is disconnected from `slurmctld`."""
+        try:
+            scontrol("delete", f"nodename={self.slurmd.hostname}")
+            self.slurmd.service.stop()
+            self.slurmd.service.disable()
+            del self.slurmd.conf_server
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus("Failed to stop `slurmd`. See `juju debug-log` for details")
+            )
+
+    def _on_node_configured_action(self, _: ops.ActionEvent) -> None:
+        """Move node from 'down' to 'idle'."""
+        self.stored.default_state = State.IDLE.value
+        self.stored.default_reason = ""
+
+        node = self.slurmd.conf
+        del node.state
+        self.slurmd.conf = node
+
+        # Update the nodes state if it is already enlisted with `slurmctld`.
+        try:
+            scontrol("update", f"nodename={self.slurmd.hostname}", "state=idle")
+        except SlurmOpsError:
+            pass
+
+        logger.debug("this node is not new anymore")
+
+    @refresh
+    @reconfigure
+    def _on_node_config_action(self, event: ops.ActionEvent) -> None:
         """Get or set the user_supplied_node_config.
 
         Return the node config if the `node-config` parameter is not specified, otherwise
         parse, validate, and store the input of the `node-config` parameter in stored state.
         Lastly, update slurmctld if there are updates to the node config.
         """
+        node = self.slurmd.conf
         custom = event.params.get("parameters", "")
         valid_config = False
         if custom:
-            node = Node()
             try:
                 node.update(Node.from_str(custom))
                 valid_config = True
@@ -249,94 +241,24 @@ class SlurmdCharm(CharmBase):
                 logger.error(e)
 
             if valid_config:
-                if (custom_node := node.dict()) != self._user_supplied_node_parameters:
-                    logger.info("updating unit '%s' node configuration", self.unit.name)
-                    logger.debug("'%s' node configuration:\n%s", self.unit.name, plog(custom_node))
-                    self._user_supplied_node_parameters = custom_node
-                    self._slurmctld.set_node()
-                    logger.info("'%s' node configuration successfully updated", self.unit.name)
+                if (custom_node_config := node.dict()) != self.stored.custom_node_config:
+                    self.stored.custom_node_config = custom_node_config
+                    self.service_needs_restart = True
 
         event.set_results(
             {
-                "node-parameters": " ".join(
-                    [f"{k}={v}" for k, v in self.get_node()["node_parameters"].items()]
-                ),
+                "node-parameters": str(node),
                 "user-supplied-node-parameters-accepted": f"{valid_config}",
             },
         )
 
-    @property
-    def hostname(self) -> str:
-        """Return the hostname."""
-        return self._slurmd.hostname
-
-    @property
-    def _user_supplied_node_parameters(self) -> dict[Any, Any]:
-        """Return the user_supplied_node_parameters from stored state."""
-        return self._stored.user_supplied_node_parameters  # type: ignore[return-value]
-
-    @_user_supplied_node_parameters.setter
-    def _user_supplied_node_parameters(self, node_parameters: dict) -> None:
-        """Set the node_parameters in stored state."""
-        self._stored.user_supplied_node_parameters = node_parameters
-
-    @property
-    def _new_node(self) -> bool:
-        """Get the new_node from stored state."""
-        return True if self._stored.new_node is True else False
-
-    @_new_node.setter
-    def _new_node(self, new_node: bool) -> None:
-        """Set the new_node in stored state."""
-        self._stored.new_node = new_node
-
-    def _check_status(self) -> bool:
-        """Check if we have all needed components.
-
-        - slurmd installed
-        - slurmctld available and working
-        """
-        if self._stored.slurm_installed is not True:
-            self.unit.status = BlockedStatus("Install failed. See `juju debug-log` for details")
-            return False
-
-        if self._slurmctld.is_joined is not True:
-            self.unit.status = BlockedStatus("Need relations: slurmctld")
-            return False
-
-        if self._stored.slurmctld_available is not True:
-            self.unit.status = WaitingStatus("Waiting on: slurmctld")
-            return False
-
-        return True
-
-    def _reboot_if_required(self, now: bool = False) -> None:
-        """Perform a reboot of the unit if required, e.g. following a driver installation."""
-        if Path("/var/run/reboot-required").exists():
-            logger.info("rebooting unit %s", self.unit.name)
-            self.unit.reboot(now)
-
-    def get_node(self) -> Dict[Any, Any]:
-        """Get the node from stored state."""
-        slurmd_info = machine.get_node_info()
-        node = {
-            "node_parameters": {
-                **slurmd_info.dict(),
-                **self._user_supplied_node_parameters,
-            },
-            "new_node": self._new_node,
-        }
-        logger.debug(f"Node Configuration: {node}")
-        return node
-
-    def get_partition(self) -> Dict[Any, Any]:
-        """Return the partition."""
-        partition = {
-            self.app.name: {**{"state": "up"}, **self._stored.user_supplied_partition_parameters}
-        }  # type: ignore[dict-item]
-        logger.debug(f"partition={partition}")
-        return partition
+    def _on_show_nhc_config_action(self, event: ops.ActionEvent) -> None:
+        """Show current nhc.conf."""
+        try:
+            event.set_results({"nhc.conf": nhc.get_config()})
+        except FileNotFoundError:
+            event.set_results({"nhc.conf": "/etc/nhc/nhc.conf not found."})
 
 
 if __name__ == "__main__":  # pragma: nocover
-    main.main(SlurmdCharm)
+    ops.main(SlurmdCharm)
