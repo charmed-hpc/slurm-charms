@@ -42,6 +42,12 @@ def cluster_name_not_set(charm: "SlurmctldCharm") -> ConditionEvaluation:
     return not_set, "Waiting for the cluster name to be set" if not_set else ""
 
 
+def config_not_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:
+    """Check if the `slurm.conf` file is ready to shared with other applications."""
+    not_ready = not charm.slurmctld.config.exists()
+    return not_ready, "Waiting for Slurm configuration to be updated" if not_ready else ""
+
+
 def slurmctld_ready(charm: "SlurmctldCharm") -> bool:
     """Check if the `slurmctld` service is ready to integrate with other applications.
 

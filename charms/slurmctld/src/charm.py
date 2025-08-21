@@ -71,7 +71,7 @@ from slurmutils import (
     NodeSet,
     SlurmConfig,
 )
-from state import check_slurmctld, cluster_name_not_set, slurmctld_not_installed
+from state import check_slurmctld, cluster_name_not_set, config_not_ready, slurmctld_not_installed
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
@@ -342,7 +342,7 @@ class SlurmctldCharm(ops.CharmBase):
             pass
 
     @refresh
-    @wait_when(database_not_ready)
+    @wait_when(database_not_ready, config_not_ready)
     @block_when(slurmctld_not_installed)
     def _on_slurmrestd_connected(self, event: SlurmrestdConnectedEvent) -> None:
         """Handle when a new `slurmrestd` application is connected."""
