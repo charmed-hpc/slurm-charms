@@ -143,6 +143,25 @@ class TestConfigManagers:
         assert f_info.st_uid == FAKE_USER_UID
         assert f_info.st_gid == FAKE_GROUP_GID
 
+        # Create a snapshot of the `acct_gather.conf` file.
+        mock_manager.acct_gather.save()
+        snapshot = mock_manager.acct_gather.snapshots["acct_gather.conf.snapshot"]
+        config = snapshot.load()
+
+        assert snapshot.path.exists()
+        assert config.energy_ipmi_frequency == 2
+        assert config.energy_ipmi_calc_adjustment is False
+        assert config.sysfs_interfaces == ["enp0s2"]
+
+        # Restore the `acct_gather.conf` snapshot.
+        # Modify the snapshot so we can verify that `acct_gather.conf` is the restored snapshot.
+        with snapshot.edit() as config:
+            config.sysfs_interfaces += ["wlp1s0"]
+
+        mock_manager.acct_gather.restore()
+        config = mock_manager.acct_gather.load()
+        assert config.sysfs_interfaces == ["enp0s2", "wlp1s0"]
+
     def test_cgroup_config_manager(self, mock_manager) -> None:
         """Test the `cgroup.conf` configuration manager."""
         with mock_manager.cgroup.edit() as config:
@@ -166,6 +185,26 @@ class TestConfigManagers:
         assert stat.filemode(f_info.st_mode) == "-rw-r--r--"
         assert f_info.st_uid == FAKE_USER_UID
         assert f_info.st_gid == FAKE_GROUP_GID
+
+        # Create a snapshot of the `cgroup.conf` file.
+        mock_manager.cgroup.save()
+        snapshot = mock_manager.cgroup.snapshots["cgroup.conf.snapshot"]
+        config = snapshot.load()
+
+        assert snapshot.path.exists()
+        assert config.constrain_cores is False
+        assert config.constrain_devices is False
+        assert config.constrain_ram_space is False
+        assert config.constrain_swap_space is False
+
+        # Restore the `cgroup.conf` snapshot.
+        # Modify the snapshot so we can verify that `cgroup.conf` is the restored snapshot.
+        with snapshot.edit() as config:
+            config.constrain_swap_space = True
+
+        mock_manager.cgroup.restore()
+        config = mock_manager.cgroup.load()
+        assert config.constrain_swap_space is True
 
     def test_gres_config_manager(self, mock_manager) -> None:
         """Test the `gres.conf` configuration manager."""
@@ -233,6 +272,23 @@ class TestConfigManagers:
         assert f_info.st_uid == FAKE_USER_UID
         assert f_info.st_gid == FAKE_GROUP_GID
 
+        # Create a snapshot of the `gres.conf` file.
+        mock_manager.gres.save()
+        snapshot = mock_manager.gres.snapshots["gres.conf.snapshot"]
+        config = snapshot.load()
+
+        assert snapshot.path.exists()
+        assert config.auto_detect is None
+
+        # Restore the `gres.conf` snapshot.
+        # Modify the snapshot so we can verify that `gres.conf` is the restored snapshot.
+        with snapshot.edit() as config:
+            config.auto_detect = "rsmi"
+
+        mock_manager.gres.restore()
+        config = mock_manager.gres.load()
+        assert config.auto_detect == "rsmi"
+
     def test_oci_config_manager(self, mock_manager) -> None:
         """Test the `oci.conf` configuration manager."""
         with mock_manager.oci.edit() as config:
@@ -251,6 +307,24 @@ class TestConfigManagers:
         assert stat.filemode(f_info.st_mode) == "-rw-r--r--"
         assert f_info.st_uid == FAKE_USER_UID
         assert f_info.st_gid == FAKE_GROUP_GID
+
+        # Create a snapshot of the `oci.conf` file.
+        mock_manager.oci.save()
+        snapshot = mock_manager.oci.snapshots["oci.conf.snapshot"]
+        config = snapshot.load()
+
+        assert snapshot.path.exists()
+        assert config.ignore_file_config_json is False
+        assert config.run_time_run == "apptainer exec --userns %r %@"
+
+        # Restore the `oci.conf` snapshot.
+        # Modify the snapshot so we can verify that `oci.conf` is the restored snapshot.
+        with snapshot.edit() as config:
+            config.ignore_file_config_json = True
+
+        mock_manager.oci.restore()
+        config = mock_manager.oci.load()
+        assert config.ignore_file_config_json is True
 
     def test_slurm_config_manager(self, mock_manager) -> None:
         """Test the `slurm.conf` configuration manager."""
@@ -286,6 +360,11 @@ class TestConfigManagers:
         assert f_info.st_uid == FAKE_USER_UID
         assert f_info.st_gid == FAKE_GROUP_GID
 
+        # Create a fake include file to ensure that it is picked up by the `includes` property.
+        Path("/etc/slurm/slurm.conf.overrides").touch(mode=0o611)
+        assert "slurm.conf.overrides" in mock_manager.slurm.includes
+        assert mock_manager.slurm.includes["slurm.conf.overrides"].path.exists()
+
     def test_slurmdbd_config_manager(self, mock_manager) -> None:
         """Test the `slurmdbd.conf` configuration manager."""
         with mock_manager.slurmdbd.edit() as config:
@@ -307,3 +386,39 @@ class TestConfigManagers:
         assert stat.filemode(f_info.st_mode) == "-rw-------"
         assert f_info.st_uid == FAKE_USER_UID
         assert f_info.st_gid == FAKE_GROUP_GID
+
+        # Create an include that holds custom configuration for `slurmdbd`.
+        include = mock_manager.slurmdbd.includes["slurmdbd.conf.overrides"]
+        assert include.path.exists() is False
+        assert include.path.is_absolute()
+        assert include.path.as_posix() == "/etc/slurm/slurmdbd.conf.overrides"
+
+        # Set a custom configuration in the include file.
+        with include.edit() as overrides:
+            overrides.debug_level = "debug"
+
+        # Check that the include file now exists.
+        assert include.path.exists() is True
+
+        # Check the debug level of the main `slurmdbd.conf` file before merging the includes.
+        config = mock_manager.slurmdbd.load()
+        assert config.debug_level == "info"
+        # Now merge the main `slurmdbd.conf` together with `slurmdbd.conf.overrides`.
+        # `slurmdbd.conf` does not have an 'include'  directive like `slurm.conf`.
+        mock_manager.slurmdbd.merge()
+        config = mock_manager.slurmdbd.load()
+        assert config.debug_level == "debug"
+
+        # Check a snapshot of both the `slurmdbd.conf` and `slurmdbd.conf.overrides` files.
+        mock_manager.slurmdbd.save()
+        assert "slurmdbd.conf.snapshot" in mock_manager.slurmdbd.snapshots
+        assert "slurmdbd.conf.overrides.snapshot" in mock_manager.slurmdbd.snapshots
+
+        # Restore the `slurmdbd.conf` and `slurmdbd.conf.overrides` snapshots.
+        # Modify the `slurmdbd.conf.overrides` to ensure include snapshots are also restored.
+        with mock_manager.slurmdbd.snapshots["slurmdbd.conf.overrides.snapshot"].edit() as config:
+            config.debug_level = "debug5"
+
+        mock_manager.slurmdbd.restore()
+        config = mock_manager.slurmdbd.includes["slurmdbd.conf.overrides"].load()
+        assert config.debug_level == "debug5"
