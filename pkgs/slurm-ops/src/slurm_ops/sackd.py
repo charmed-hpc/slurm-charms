@@ -41,7 +41,7 @@ class SackdManager(SlurmManager):
     @conf_server.deleter
     def conf_server(self) -> None:
         with self._edit_options() as options:
-            del options["--conf-server"]
+            options.pop("--conf-server", None)
 
     @property
     def user(self) -> str:
