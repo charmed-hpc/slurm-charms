@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2025 Omnivector, LLC
 # See LICENSE file for licensing details.
 
@@ -7,6 +6,7 @@
 import json
 import logging
 import secrets
+from typing import TYPE_CHECKING
 
 import influxdb
 import requests
@@ -19,6 +19,9 @@ from ops import (
     RelationBrokenEvent,
     RelationJoinedEvent,
 )
+
+if TYPE_CHECKING:
+    from charm import SlurmctldCharm
 
 logger = logging.getLogger()
 
@@ -78,7 +81,7 @@ class InfluxDB(Object):
 
     _on = InfluxDBEvents()
 
-    def __init__(self, charm, relation_name):
+    def __init__(self, charm: "SlurmctldCharm", relation_name: str) -> None:
         """Observe relation events."""
         super().__init__(charm, relation_name)
         self._charm = charm
@@ -146,11 +149,11 @@ class InfluxDB(Object):
                                 client.create_user(self._INFLUX_USER, influx_slurm_password)
 
                             databases = [db["name"] for db in client.get_list_database()]
-                            database_name = self._charm.cluster_name
+                            database_name = self._charm.slurmctld_peer.cluster_name
 
-                            if self._charm.cluster_name not in databases:
+                            if self._charm.slurmctld_peer.cluster_name not in databases:
                                 logger.debug(
-                                    f"## Creating influxdb db: {self._charm.cluster_name}"
+                                    f"## Creating influxdb db: {self._charm.slurmctld_peer.cluster_name}"
                                 )
                                 client.create_database(database_name)
 
@@ -220,7 +223,7 @@ class InfluxDB(Object):
                         )
 
                         databases = [db["name"] for db in client.get_list_database()]
-                        database_name = self._charm.cluster_name
+                        database_name = self._charm.slurmctld_peer.cluster_name
 
                         if database_name in databases:
                             client.drop_database(database_name)
