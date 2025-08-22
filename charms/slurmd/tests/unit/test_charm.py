@@ -97,7 +97,9 @@ class TestSlurmdCharm:
             pytest.param(
                 lambda: (_ for _ in ()).throw(SlurmOpsError("restart failed")),
                 True,
-                ops.BlockedStatus("Failed to start `slurmd`. See `juju debug-log` for details"),
+                ops.BlockedStatus(
+                    "Failed to apply new `slurmd` configuration. See `juju debug-log` for details"
+                ),
                 id="ready-start fail",
             ),
             pytest.param(
@@ -134,7 +136,12 @@ class TestSlurmdCharm:
                     "nhc_args": json.dumps(EXAMPLE_NHC_ARGS),
                 }
                 if ready
-                else {"controllers": json.dumps(EXAMPLE_CONTROLLERS)}
+                else {
+                    "auth_key": '"***"',
+                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "controllers": json.dumps([]),
+                    "nhc_args": json.dumps(EXAMPLE_NHC_ARGS),
+                }
             ),
         )
 
