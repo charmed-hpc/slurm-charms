@@ -15,8 +15,6 @@
 """Manage the configuration of the `slurmdbd` charmed operator."""
 
 import logging
-from collections.abc import Callable
-from functools import wraps
 from typing import TYPE_CHECKING, Any, cast
 
 import ops
@@ -28,6 +26,7 @@ from constants import (
 )
 from hpc_libs.interfaces import DatabaseData
 from hpc_libs.utils import StopCharm, get_ingress_address, plog
+from slurm_ops import SlurmOpsError
 from slurmutils import ModelError, SlurmdbdConfig
 from state import slurmdbd_ready
 
@@ -37,8 +36,8 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def seed_default_config(charm: "SlurmdbdCharm", /) -> None:
-    """Seed the `slurmdbd` service's configuration.
+def init_config(charm: "SlurmdbdCharm", /) -> None:
+    """Initialize the `slurmdbd` service's configuration.
 
     This function "seeds" the starting point for the `slurmdbd` service's configuration;
     it provides the default configuration values used by the service, but it does not provide
@@ -103,22 +102,25 @@ def update_storage(charm: "SlurmdbdCharm", /, config: dict[str, Any]) -> None:
     _logger.info("`%s` successfully updated", STORAGE_CONFIG_FILE)
 
 
-def reconfigure(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Reconfigure and restart the `slurmdbd` service."""
+def reconfigure_slurmdbd(charm: "SlurmdbdCharm") -> None:
+    """Reconfigure and restart the `slurmdbd` service.
 
-    @wraps(func)
-    def wrapper(charm: "SlurmdbdCharm", *args, **kwargs) -> Any:
-        try:
-            func(charm, *args, **kwargs)
-        except StopCharm:
-            raise
+    Raises:
+        SlurmOpsError: Raised if the `slurmdbd` service fails to start or restart.
+    """
+    if not slurmdbd_ready(charm):
+        return
 
-        if not slurmdbd_ready(charm):
-            return
-
+    try:
         charm.slurmdbd.config.merge()
         charm.slurmdbd.service.enable()
         charm.slurmdbd.service.restart()
-        charm.slurmctld.set_database_data(DatabaseData(hostname=charm.slurmdbd.hostname))
+    except SlurmOpsError as e:
+        _logger.error(e.message)
+        raise StopCharm(
+            ops.BlockedStatus(
+                "Failed to apply new `slurmdbd` configuration. See `juju debug-log` for details"
+            )
+        )
 
-    return wrapper
+    charm.slurmctld.set_database_data(DatabaseData(hostname=charm.slurmdbd.hostname))

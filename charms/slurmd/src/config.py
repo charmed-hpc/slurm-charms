@@ -15,12 +15,10 @@
 """Manage the configuration of the `slurmd` charmed operator."""
 
 import logging
-from collections.abc import Callable
 from enum import Enum
-from functools import wraps
 from pathlib import Path
 from subprocess import CalledProcessError
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import ops
 from gpu import get_all_gpu
@@ -125,53 +123,52 @@ def set_partition(charm: "SlurmdCharm", /, partition: Partition) -> None:
         )
 
 
-def reconfigure(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Reconfigure the `slurmd` service."""
+def reconfigure_slurmd(charm: "SlurmdCharm") -> None:
+    """Reconfigure the `slurmd` service.
 
-    @wraps(func)
-    def wrapper(charm: "SlurmdCharm", *args: Any, **kwargs: Any) -> Any:
-        func(charm, *args, **kwargs)
+    Raises:
+        SlurmOpsError: Raised if the `slurmd` service fails to start or restart.
+    """
+    if not slurmd_ready(charm) or not charm.service_needs_restart:
+        return
 
-        if not slurmd_ready(charm) or not charm.service_needs_restart:
-            return
+    _logger.info("updating unit '%s' node configuration", charm.unit.name)
+    node = get_node_info()
+    del node.node_name  # `NodeName` cannot be set in the `--conf` flag.
+    node.features = [charm.app.name]
+    node.update(Node(charm.stored.custom_node_config))
 
-        _logger.info("updating unit '%s' node configuration", charm.unit.name)
-        node = get_node_info()
-        del node.node_name  # `NodeName` cannot be set in the `--conf` flag.
-        node.features = [charm.app.name]
-        node.update(Node(charm.stored.custom_node_config))
-
-        # Reset state if the `slurmd` service is "cold booting". E.g. the `slurmd` service is being
-        # restarted after an arbitrary period of downtime for maintenance.
-        if not charm.slurmd.service.is_active():
-            state = charm.stored.default_state
-            if state not in (states := [member.value for member in State]):
-                raise SlurmOpsError(
-                    f"invalid default state `{charm}` provided. "
-                    + f"valid states are {[', '.join(states)]}"
-                )
-
-            if state != "idle":
-                # `idle` is not a valid state configuration for the `--conf` flag,
-                # but is a valid state within `slurmctld`.
-                #
-                # For details see: https://slurm.schedmd.com/slurm.conf.html#OPT_State
-                node.state = state
-                node.reason = charm.stored.default_reason
-
-            _logger.info("setting the default state of node '%s' to '%s'", charm.unit.name, state)
-
-        _logger.debug("'%s' node configuration:\n%s", charm.unit.name, plog(node.dict()))
-        charm.slurmd.conf = node
-        _logger.info("'%s' node configuration successfully updated", charm.unit.name)
-
-        try:
-            charm.slurmd.service.enable()
-            charm.slurmd.service.restart()
-        except SlurmOpsError as e:
-            _logger.error(e.message)
-            raise StopCharm(
-                ops.BlockedStatus("Failed to start `slurmd`. See `juju debug-log` for details")
+    # Reset state if the `slurmd` service is "cold booting". E.g. the `slurmd` service is being
+    # restarted after an arbitrary period of downtime for maintenance.
+    if not charm.slurmd.service.is_active():
+        state = charm.stored.default_state
+        if state not in (states := [member.value for member in State]):
+            raise SlurmOpsError(
+                f"invalid default state `{charm}` provided. "
+                + f"valid states are {[', '.join(states)]}"
             )
 
-    return wrapper
+        if state != "idle":
+            # `idle` is not a valid state configuration for the `--conf` flag,
+            # but is a valid state within `slurmctld`.
+            #
+            # For details see: https://slurm.schedmd.com/slurm.conf.html#OPT_State
+            node.state = state
+            node.reason = charm.stored.default_reason
+
+        _logger.info("setting the default state of node '%s' to '%s'", charm.unit.name, state)
+
+    _logger.debug("'%s' node configuration:\n%s", charm.unit.name, plog(node.dict()))
+    charm.slurmd.conf = node
+    _logger.info("'%s' node configuration successfully updated", charm.unit.name)
+
+    try:
+        charm.slurmd.service.enable()
+        charm.slurmd.service.restart()
+    except SlurmOpsError as e:
+        _logger.error(e.message)
+        raise StopCharm(
+            ops.BlockedStatus(
+                "Failed to apply new `slurmd` configuration. See `juju debug-log` for details"
+            )
+        )

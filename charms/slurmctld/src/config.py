@@ -15,9 +15,7 @@
 """Manage the configuration of the `slurmctld` charmed operator."""
 
 import logging
-from collections.abc import Callable
-from functools import wraps
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import ops
 from constants import (
@@ -29,7 +27,7 @@ from constants import (
 from hpc_libs.interfaces import ControllerData
 from hpc_libs.is_container import is_container
 from hpc_libs.utils import StopCharm, get_ingress_address, plog
-from slurm_ops import scontrol
+from slurm_ops import SlurmOpsError, scontrol
 from slurmutils import CGroupConfig, ModelError, SlurmConfig
 from state import slurmctld_ready
 
@@ -39,8 +37,8 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def seed_default_config(charm: "SlurmctldCharm") -> None:
-    """Seed the `slurmctld` service's configuration.
+def init_config(charm: "SlurmctldCharm") -> None:
+    """Initialize the `slurmctld` service's configuration.
 
     This function "seeds" the starting point for the `slurmctld` service's configuration;
     it provides the configuration values required for the `slurmctld` service to start
@@ -159,25 +157,31 @@ def update_overrides(charm: "SlurmctldCharm") -> None:
     _logger.info("`%s` successfully updated", OVERRIDES_CONFIG_FILE)
 
 
-def reconfigure(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Reconfigure the `slurmctld` service."""
+def reconfigure_slurmctld(charm: "SlurmctldCharm") -> None:
+    """Reconfigure the `slurmctld` service.
 
-    @wraps(func)
-    def wrapper(charm: "SlurmctldCharm", *args: Any, **kwargs: Any) -> Any:
-        func(charm, *args, **kwargs)
+    Raises:
+        SlurmOpsError: Raised if the `scontrol reconfigure` command fails.
+    """
+    if not slurmctld_ready(charm):
+        return
 
-        if not slurmctld_ready(charm):
-            return
-
+    try:
         scontrol("reconfigure")
-        if charm.slurmrestd.is_joined():
-            charm.slurmrestd.set_controller_data(
-                ControllerData(
-                    slurmconfig={
-                        "slurm.conf": charm.slurmctld.config.load(),
-                        **{k: v.load() for k, v in charm.slurmctld.config.includes.items()},
-                    }
-                )
+    except SlurmOpsError as e:
+        _logger.error(e.message)
+        raise StopCharm(
+            ops.BlockedStatus(
+                "Failed to apply new Slurm configuration. See `juju debug-log` for details"
             )
+        )
 
-    return wrapper
+    if charm.slurmrestd.is_joined():
+        charm.slurmrestd.set_controller_data(
+            ControllerData(
+                slurmconfig={
+                    "slurm.conf": charm.slurmctld.config.load(),
+                    **{k: v.load() for k, v in charm.slurmctld.config.includes.items()},
+                }
+            )
+        )
