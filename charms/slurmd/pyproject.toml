@@ -15,7 +15,6 @@ dependencies = [
 [tool.repository]
 libraries = [
     "operator-libs-linux.apt",
-    "operator-libs-linux.juju_systemd_notices",
     "operator-libs-linux.systemd",
     "grafana-agent.cos_agent",
 ]

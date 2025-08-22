@@ -70,7 +70,7 @@ members = [
 [tool.uv.sources]
 slurm-ops = { workspace = true }
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
-hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "0ab6f7124216b6b3672e49d0a2eb98333c0f440d" }
+hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "1e44e39bbf8d4aa4fd1a0aaff913d13b38052bf4" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
@@ -79,7 +79,6 @@ dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
 external-libraries = [
     { lib = "operator-libs-linux.apt", version = "0.16" },
     { lib = "operator-libs-linux.systemd", version = "1.4" },
-    { lib = "operator-libs-linux.juju_systemd_notices", version = "0.2" },
     { lib = "data-platform-libs.data_interfaces", version = "0.41" },
     { lib = "grafana-agent.cos_agent", version = "0.20" },
 ]
