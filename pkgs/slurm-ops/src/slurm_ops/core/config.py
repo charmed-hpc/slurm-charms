@@ -26,6 +26,17 @@ from slurmutils import BaseEditor
 
 
 class IncludeMapping[T: type[BaseEditor]](Mapping):
+    """Map of include file names to `SlurmConfigManager` instances.
+
+    Notes:
+        - If an include file does not exist within the mapping, a `SlurmConfigManager`
+          object will be created. This behavior is to reduce the amount of unnecessary
+          "look before you leap" branches when editing include files.
+
+          To determine if an include file exists, call the `exists` method on the
+          created `SlurmConfigManager` object.
+    """
+
     def __init__(
         self,
         includes: Iterable[Path],
