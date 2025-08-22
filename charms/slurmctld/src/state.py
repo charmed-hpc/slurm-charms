@@ -23,29 +23,33 @@ if TYPE_CHECKING:
     from charm import SlurmctldCharm
 
 
-def slurmctld_not_installed(charm: "SlurmctldCharm") -> ConditionEvaluation:
+def slurmctld_installed(charm: "SlurmctldCharm") -> ConditionEvaluation:
     """Check if `slurmctld` is installed on the unit."""
-    not_installed = not charm.slurmctld.is_installed()
-    return (
-        not_installed,
-        "`slurmctld` is not installed. See `juju debug-log` for details" if not_installed else "",
+    installed = charm.slurmctld.is_installed()
+    return ConditionEvaluation(
+        installed,
+        "`slurmctld` is not installed. See `juju debug-log` for details" if not installed else "",
     )
 
 
-def cluster_name_not_set(charm: "SlurmctldCharm") -> ConditionEvaluation:
+def cluster_name_set(charm: "SlurmctldCharm") -> ConditionEvaluation:
     """Check if the cluster name has been set."""
     try:
-        not_set = not charm.slurmctld_peer.cluster_name
+        name_set = charm.slurmctld_peer.cluster_name != ""
     except ops.RelationNotFoundError:
-        not_set = True
+        name_set = False
 
-    return not_set, "Waiting for the cluster name to be set" if not_set else ""
+    return ConditionEvaluation(
+        name_set, "Waiting for the cluster name to be set" if not name_set else ""
+    )
 
 
-def config_not_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:
+def config_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:
     """Check if the `slurm.conf` file is ready to shared with other applications."""
-    not_ready = not charm.slurmctld.config.exists()
-    return not_ready, "Waiting for Slurm configuration to be updated" if not_ready else ""
+    ready = charm.slurmctld.config.exists()
+    return ConditionEvaluation(
+        ready, "Waiting for Slurm configuration to be updated" if not ready else ""
+    )
 
 
 def slurmctld_ready(charm: "SlurmctldCharm") -> bool:
@@ -58,8 +62,8 @@ def slurmctld_ready(charm: "SlurmctldCharm") -> bool:
     """
     return all(
         (
-            not slurmctld_not_installed(charm)[0],
-            not cluster_name_not_set(charm)[0],
+            slurmctld_installed(charm).ok,
+            cluster_name_set(charm).ok,
             charm.slurmctld.service.is_active(),
         )
     )
@@ -67,13 +71,13 @@ def slurmctld_ready(charm: "SlurmctldCharm") -> bool:
 
 def check_slurmctld(charm: "SlurmctldCharm") -> ops.StatusBase:
     """Determine the state of the `slurmctld` application/unit based on satisfied conditions."""
-    condition, msg = slurmctld_not_installed(charm)
-    if condition:
-        return ops.BlockedStatus(msg)
+    ok, message = slurmctld_installed(charm)
+    if not ok:
+        return ops.BlockedStatus(message)
 
-    condition, msg = cluster_name_not_set(charm)
-    if condition:
-        return ops.WaitingStatus(msg)
+    ok, message = cluster_name_set(charm)
+    if not ok:
+        return ops.WaitingStatus(message)
 
     if not charm.slurmctld.service.is_active():
         return ops.WaitingStatus("Waiting for `slurmctld` to start")

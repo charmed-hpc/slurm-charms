@@ -23,26 +23,29 @@ import gpu
 import nhc
 import ops
 import rdma
-from config import State, get_partition, reboot_if_required, reconfigure, set_partition
+from config import State, get_partition, reboot_if_required, reconfigure_slurmd, set_partition
 from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
 from hpc_libs.interfaces import (
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
     SlurmdProvider,
-    block_when,
-    controller_not_ready,
-    wait_when,
+    block_unless,
+    controller_ready,
+    wait_unless,
 )
-from hpc_libs.utils import StopCharm, refresh
+from hpc_libs.utils import StopCharm, reconfigure, refresh
 from slurm_ops import SlurmdManager, SlurmOpsError, scontrol
 from slurmutils import ModelError, Node
-from state import check_slurmd, slurmd_not_installed
+from state import check_slurmd, slurmd_installed
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 logger = logging.getLogger(__name__)
-refresh = refresh(check=check_slurmd)
+reconfigure = reconfigure(hook=reconfigure_slurmd)
+reconfigure.__doc__ = """Reconfigure the `slurmd` service after an event handler completes."""
+refresh = refresh(hook=check_slurmd)
+refresh.__doc__ = """Refresh status of the `slurmd` unit after an event handler completes."""
 
 
 class SlurmdCharm(ops.CharmBase):
@@ -160,7 +163,7 @@ class SlurmdCharm(ops.CharmBase):
         """Handle update status."""
 
     @refresh
-    @block_when(slurmd_not_installed)
+    @block_unless(slurmd_installed)
     def _on_slurmctld_connected(self, event: SlurmctldConnectedEvent) -> None:
         """Handle when the `slurmd` application is connected to `slurmctld`."""
         try:
@@ -177,8 +180,8 @@ class SlurmdCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    @wait_when(controller_not_ready)
-    @block_when(slurmd_not_installed)
+    @wait_unless(controller_ready)
+    @block_unless(slurmd_installed)
     def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
         """Handle when controller data is ready from the `slurmctld` application."""
         data = self.slurmctld.get_controller_data(event.relation.id)
@@ -189,7 +192,7 @@ class SlurmdCharm(ops.CharmBase):
         self.service_needs_restart = True
 
     @refresh
-    @block_when(slurmd_not_installed)
+    @block_unless(slurmd_installed)
     def _on_slurmctld_disconnected(self, event: SlurmctldDisconnectedEvent) -> None:
         """Handle when the unit is disconnected from `slurmctld`."""
         try:

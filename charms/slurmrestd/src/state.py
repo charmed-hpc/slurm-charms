@@ -24,20 +24,20 @@ if TYPE_CHECKING:
     from charm import SlurmrestdCharm
 
 
-def slurmrestd_not_installed(charm: "SlurmrestdCharm") -> ConditionEvaluation:
+def slurmrestd_installed(charm: "SlurmrestdCharm") -> ConditionEvaluation:
     """Check if `slurmrestd` is installed on the unit."""
-    not_installed = not charm.slurmrestd.is_installed()
-    return (
-        not_installed,
-        "`slurmrestd` is not installed. See `juju debug-log` for details" if not_installed else "",
+    installed = charm.slurmrestd.is_installed()
+    return ConditionEvaluation(
+        installed,
+        "`slurmrestd` is not installed. See `juju debug-log` for details" if not installed else "",
     )
 
 
 def check_slurmrestd(charm: "SlurmrestdCharm") -> ops.StatusBase:
     """Determine the state of the `slurmrestd` application/unit based on satisfied conditions."""
-    condition, msg = slurmrestd_not_installed(charm)
-    if condition:
-        return ops.BlockedStatus(msg)
+    ok, message = slurmrestd_installed(charm)
+    if not ok:
+        return ops.BlockedStatus(message)
 
     if not charm.slurmctld.is_joined():
         return ops.BlockedStatus(f"Waiting for integrations: [`{SLURMRESTD_INTEGRATION_NAME}`]")

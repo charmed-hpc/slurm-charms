@@ -23,16 +23,17 @@ from hpc_libs.interfaces import (
     SackdProvider,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
-    block_when,
-    controller_not_ready,
-    wait_when,
+    block_unless,
+    controller_ready,
+    wait_unless,
 )
 from hpc_libs.utils import StopCharm, refresh
 from slurm_ops import SackdManager, SlurmOpsError
-from state import check_sackd, sackd_not_installed
+from state import check_sackd, sackd_installed
 
 logger = logging.getLogger(__name__)
-refresh = refresh(check=check_sackd)
+refresh = refresh(hook=check_sackd)
+refresh.__doc__ = """Refresh the status of the `sackd` unit after an event handler completes."""
 
 
 class SackdCharm(ops.CharmBase):
@@ -84,8 +85,8 @@ class SackdCharm(ops.CharmBase):
         """Check status of the `sackd` application/unit."""
 
     @refresh
-    @wait_when(controller_not_ready)
-    @block_when(sackd_not_installed)
+    @wait_unless(controller_ready)
+    @block_unless(sackd_installed)
     def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
         """Handle when controller data is ready from `slurmctld`."""
         data = self.slurmctld.get_controller_data(event.relation.id)
@@ -103,7 +104,7 @@ class SackdCharm(ops.CharmBase):
             )
 
     @refresh
-    @block_when(sackd_not_installed)
+    @block_unless(sackd_installed)
     def _on_slurmctld_disconnected(self, event: SlurmctldDisconnectedEvent) -> None:
         """Handle when unit is disconnected from `slurmctld`."""
         try:

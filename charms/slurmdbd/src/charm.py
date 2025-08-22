@@ -24,8 +24,8 @@ from urllib.parse import urlparse
 
 import ops
 from config import (
-    reconfigure,
-    seed_default_config,
+    init_config,
+    reconfigure_slurmdbd,
     update_overrides,
     update_storage,
 )
@@ -38,19 +38,23 @@ from constants import (
 from hpc_libs.interfaces import (
     SlurmctldReadyEvent,
     SlurmdbdProvider,
-    block_when,
-    controller_not_ready,
-    wait_when,
+    block_unless,
+    controller_ready,
+    wait_unless,
 )
-from hpc_libs.utils import StopCharm, leader, refresh
+from hpc_libs.utils import StopCharm, leader, reconfigure, refresh
 from slurm_ops import SlurmdbdManager, SlurmOpsError
-from state import check_slurmdbd, slurmdbd_not_installed
+from state import check_slurmdbd, slurmdbd_installed
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 logger = logging.getLogger(__name__)
-refresh = refresh(check=check_slurmdbd)
+#
+reconfigure = reconfigure(hook=reconfigure_slurmdbd)
+reconfigure.__doc__ = """Reconfigure the `slurmdbd` service after an event handler completes."""
+refresh = refresh(hook=check_slurmdbd)
+refresh.__doc__ = """Refresh status of the `slurmdbd` unit after an event handler completes."""
 
 
 class SlurmdbdCharm(ops.CharmBase):
@@ -128,7 +132,7 @@ class SlurmdbdCharm(ops.CharmBase):
                 )
             )
 
-        seed_default_config(self)
+        init_config(self)
 
     @leader
     @refresh
@@ -145,8 +149,8 @@ class SlurmdbdCharm(ops.CharmBase):
     @leader
     @refresh
     @reconfigure
-    @wait_when(controller_not_ready)
-    @block_when(slurmdbd_not_installed)
+    @wait_unless(controller_ready)
+    @block_unless(slurmdbd_installed)
     def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
         """Handle when controller data is ready from `slurmctld`."""
         data = self.slurmctld.get_controller_data(event.relation.id)

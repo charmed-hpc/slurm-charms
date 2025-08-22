@@ -24,16 +24,17 @@ from hpc_libs.interfaces import (
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
     SlurmrestdProvider,
-    block_when,
-    controller_not_ready,
-    wait_when,
+    block_unless,
+    controller_ready,
+    wait_unless,
 )
 from hpc_libs.utils import StopCharm, refresh
 from slurm_ops import SlurmOpsError, SlurmrestdManager
-from state import check_slurmrestd, slurmrestd_not_installed
+from state import check_slurmrestd, slurmrestd_installed
 
 logger = logging.getLogger(__name__)
-refresh = refresh(check=check_slurmrestd)
+refresh = refresh(hook=check_slurmrestd)
+refresh.__doc__ = """Refresh status of the `slurmrestd` unit after an event handler completes."""
 
 
 class SlurmrestdCharm(ops.CharmBase):
@@ -87,8 +88,8 @@ class SlurmrestdCharm(ops.CharmBase):
         """Check status of the `slurmrestd` application/unit."""
 
     @refresh
-    @wait_when(controller_not_ready)
-    @block_when(slurmrestd_not_installed)
+    @wait_unless(controller_ready)
+    @block_unless(slurmrestd_installed)
     def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
         """Handle when controller data is ready from `slurmctld`."""
         data = self.slurmctld.get_controller_data(event.relation.id)

@@ -22,8 +22,8 @@ from typing import cast
 
 import ops
 from config import (
-    reconfigure,
-    seed_default_config,
+    init_config,
+    reconfigure_slurmctld,
     update_cgroup_config,
     update_default_partition,
     update_nhc_args,
@@ -55,12 +55,12 @@ from hpc_libs.interfaces import (
     SlurmdRequirer,
     SlurmrestdConnectedEvent,
     SlurmrestdRequirer,
-    block_when,
-    database_not_ready,
-    partition_not_ready,
-    wait_when,
+    block_unless,
+    database_ready,
+    partition_ready,
+    wait_unless,
 )
-from hpc_libs.utils import StopCharm, leader, plog, refresh
+from hpc_libs.utils import StopCharm, leader, plog, reconfigure, refresh
 from integrations import SlurmctldPeer, SlurmctldPeerConnectedEvent
 from interface_influxdb import InfluxDB, InfluxDBAvailableEvent, InfluxDBUnavailableEvent
 from netifaces import interfaces
@@ -71,12 +71,15 @@ from slurmutils import (
     NodeSet,
     SlurmConfig,
 )
-from state import check_slurmctld, cluster_name_not_set, config_not_ready, slurmctld_not_installed
+from state import check_slurmctld, cluster_name_set, config_ready, slurmctld_installed
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
 logger = logging.getLogger(__name__)
-refresh = refresh(check=check_slurmctld)
+reconfigure = reconfigure(hook=reconfigure_slurmctld)
+reconfigure.__doc__ = """Reconfigure the `slurmctld` service after an event handler completes."""
+refresh = refresh(hook=check_slurmctld)
+refresh.__doc__ = """Refresh status of the `slurmctld` unit after an event handler completes."""
 
 
 class SlurmctldCharm(ops.CharmBase):
@@ -168,8 +171,8 @@ class SlurmctldCharm(ops.CharmBase):
         self.unit.open_port("tcp", PROMETHEUS_EXPORTER_PORT)
 
     @refresh
-    @wait_when(cluster_name_not_set)
-    @block_when(slurmctld_not_installed)
+    @wait_unless(cluster_name_set)
+    @block_unless(slurmctld_installed)
     def _on_start(self, event: ops.StartEvent) -> None:
         """Write slurm.conf and start `slurmctld` service.
 
@@ -185,7 +188,7 @@ class SlurmctldCharm(ops.CharmBase):
             )
 
         try:
-            seed_default_config(self)
+            init_config(self)
 
             self.slurmctld.service.enable()
             self.slurmctld.service.restart()
@@ -227,7 +230,7 @@ class SlurmctldCharm(ops.CharmBase):
         )
 
     @refresh
-    @block_when(slurmctld_not_installed)
+    @block_unless(slurmctld_installed)
     def _on_sackd_connected(self, event: SackdConnectedEvent) -> None:
         """Handle when a new `sackd` application is connected."""
         self.sackd.set_controller_data(
@@ -240,8 +243,8 @@ class SlurmctldCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    @wait_when(cluster_name_not_set, partition_not_ready)
-    @block_when(slurmctld_not_installed)
+    @wait_unless(cluster_name_set, partition_ready)
+    @block_unless(slurmctld_installed)
     def _on_slurmd_ready(self, event: SlurmdReadyEvent) -> None:
         """Handle when partition data is ready from a `slurmd` application."""
         data = self.slurmd.get_compute_data(event.relation.id)
@@ -273,7 +276,7 @@ class SlurmctldCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    @block_when(slurmctld_not_installed)
+    @block_unless(slurmctld_installed)
     def _on_slurmd_disconnected(self, event: SlurmdDisconnectedEvent) -> None:
         """Handle when a `slurmd` application is disconnected."""
         data = self.slurmd.get_compute_data(event.relation.id)
@@ -288,7 +291,7 @@ class SlurmctldCharm(ops.CharmBase):
         self.slurmctld.config.includes[include].delete()
 
     @refresh
-    @block_when(slurmctld_not_installed)
+    @block_unless(slurmctld_installed)
     def _on_slurmdbd_connected(self, event: SlurmdbdConnectedEvent) -> None:
         """Handle when a new `slurmdbd` application is connected."""
         self.slurmdbd.set_controller_data(
@@ -301,8 +304,8 @@ class SlurmctldCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    @wait_when(database_not_ready)
-    @block_when(slurmctld_not_installed)
+    @wait_unless(database_ready)
+    @block_unless(slurmctld_installed)
     def _on_slurmdbd_ready(self, event: SlurmdbdReadyEvent) -> None:
         """Handle when database data is ready from a `slurmdbd` application."""
         data = self.slurmdbd.get_database_data(event.relation.id)
@@ -322,7 +325,7 @@ class SlurmctldCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    @block_when(slurmctld_not_installed)
+    @block_unless(slurmctld_installed)
     def _on_slurmdbd_disconnected(self, _: SlurmdbdDisconnectedEvent) -> None:
         """Handle when a `slurmdbd` application is disconnected."""
         with self.slurmctld.config.includes[ACCOUNTING_CONFIG_FILE].edit() as config:
@@ -342,8 +345,8 @@ class SlurmctldCharm(ops.CharmBase):
             pass
 
     @refresh
-    @wait_when(database_not_ready, config_not_ready)
-    @block_when(slurmctld_not_installed)
+    @wait_unless(database_ready, config_ready)
+    @block_unless(slurmctld_installed)
     def _on_slurmrestd_connected(self, event: SlurmrestdConnectedEvent) -> None:
         """Handle when a new `slurmrestd` application is connected."""
         self.slurmrestd.set_controller_data(
@@ -360,8 +363,8 @@ class SlurmctldCharm(ops.CharmBase):
     @leader
     @refresh
     @reconfigure
-    @wait_when(database_not_ready)
-    @block_when(slurmctld_not_installed)
+    @wait_unless(database_ready)
+    @block_unless(slurmctld_installed)
     def _on_influxdb_available(self, event: InfluxDBAvailableEvent) -> None:
         """Assemble the influxdb acct_gather.conf options."""
         logger.info("`influxdb` database is available. enabling job profiling")
@@ -403,7 +406,7 @@ class SlurmctldCharm(ops.CharmBase):
 
     @leader
     @reconfigure
-    @block_when(slurmctld_not_installed)
+    @block_unless(slurmctld_installed)
     def _on_influxdb_unavailable(self, _: InfluxDBUnavailableEvent) -> None:
         """Clear the `acct_gather.conf` options on departed relation."""
         logger.info("`influxdb` database is no longer available. disabling job profiling")

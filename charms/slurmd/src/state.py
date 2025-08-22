@@ -18,18 +18,18 @@ from typing import TYPE_CHECKING
 
 import ops
 from constants import SLURMD_INTEGRATION_NAME
-from hpc_libs.interfaces import ConditionEvaluation, controller_not_ready
+from hpc_libs.interfaces import ConditionEvaluation, controller_ready
 
 if TYPE_CHECKING:
     from charm import SlurmdCharm
 
 
-def slurmd_not_installed(charm: "SlurmdCharm") -> ConditionEvaluation:
+def slurmd_installed(charm: "SlurmdCharm") -> ConditionEvaluation:
     """Check if `slurmd` is installed on the unit."""
-    not_installed = not charm.slurmd.is_installed()
-    return (
-        not_installed,
-        "`slurmd` is not installed. See `juju debug-log` for details" if not_installed else "",
+    installed = charm.slurmd.is_installed()
+    return ConditionEvaluation(
+        installed,
+        "`slurmd` is not installed. See `juju debug-log` for details" if not installed else "",
     )
 
 
@@ -42,7 +42,7 @@ def slurmd_ready(charm: "SlurmdCharm") -> bool:
     """
     return all(
         (
-            not controller_not_ready(charm)[0],
+            controller_ready(charm).ok,
             charm.slurmd.key.path.exists(),
         )
     )
@@ -50,9 +50,9 @@ def slurmd_ready(charm: "SlurmdCharm") -> bool:
 
 def check_slurmd(charm: "SlurmdCharm") -> ops.StatusBase:
     """Determine the state of the `slurmd` application/unit based on satisfied conditions."""
-    condition, msg = slurmd_not_installed(charm)
-    if condition:
-        return ops.BlockedStatus(msg)
+    ok, message = slurmd_installed(charm)
+    if not ok:
+        return ops.BlockedStatus(message)
 
     if not charm.slurmctld.is_joined():
         return ops.BlockedStatus(f"Waiting for integrations: [`{SLURMD_INTEGRATION_NAME}`]")

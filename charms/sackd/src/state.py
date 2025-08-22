@@ -24,20 +24,20 @@ if TYPE_CHECKING:
     from charm import SackdCharm
 
 
-def sackd_not_installed(charm: "SackdCharm") -> ConditionEvaluation:
+def sackd_installed(charm: "SackdCharm") -> ConditionEvaluation:
     """Check if `sackd` is installed on the unit."""
-    not_installed = not charm.sackd.is_installed()
-    return (
-        not_installed,
-        "`sackd` is not installed. See `juju debug-log` for details" if not_installed else "",
+    installed = charm.sackd.is_installed()
+    return ConditionEvaluation(
+        installed,
+        "`sackd` is not installed. See `juju debug-log` for details" if not installed else "",
     )
 
 
 def check_sackd(charm: "SackdCharm") -> ops.StatusBase:
     """Determine the state of the `sackd` application/unit based on satisfied conditions."""
-    condition, msg = sackd_not_installed(charm)
-    if condition:
-        return ops.BlockedStatus(msg)
+    ok, message = sackd_installed(charm)
+    if not ok:
+        return ops.BlockedStatus(message)
 
     if not charm.slurmctld.is_joined():
         return ops.BlockedStatus(f"Waiting for integrations: [`{SACKD_INTEGRATION_NAME}`]")
