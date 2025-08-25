@@ -96,7 +96,7 @@ class SlurmdCharm(ops.CharmBase):
             - The machine will be rebooted before the installation hook runs if the base image
               has been upgraded by Juju and a reboot is required. The installation hook will be
               restarted after the reboot completes. This preemptive reboot is performed to
-              Prevents issues such as device drivers or kernel modules being installed for a
+              prevent issues such as device drivers or kernel modules being installed for a
               running kernel pending replacement by a kernel version on reboot.
         """
         reboot_if_required(self, now=True)
