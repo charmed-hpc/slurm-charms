@@ -31,3 +31,4 @@ SLURM_APPS = {
 
 MYSQL_APP_NAME = "mysql"
 INFLUXDB_APP_NAME = "influxdb"
+APPTAINER_APP_NAME = "apptainer"

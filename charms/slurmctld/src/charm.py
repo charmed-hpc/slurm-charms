@@ -33,6 +33,7 @@ from constants import (
     ACCOUNTING_CONFIG_FILE,
     CLUSTER_NAME_PREFIX,
     DEFAULT_PROFILING_CONFIG,
+    OCI_RUNTIME_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
     PROFILING_CONFIG_FILE,
     PROMETHEUS_EXPORTER_PORT,
@@ -44,6 +45,9 @@ from constants import (
 )
 from hpc_libs.interfaces import (
     ControllerData,
+    OCIRuntimeDisconnectedEvent,
+    OCIRuntimeReadyEvent,
+    OCIRuntimeRequirer,
     SackdConnectedEvent,
     SackdRequirer,
     SlurmdbdConnectedEvent,
@@ -121,6 +125,13 @@ class SlurmctldCharm(ops.CharmBase):
         self._influxdb = InfluxDB(self, "influxdb")
         framework.observe(self._influxdb._on.influxdb_available, self._on_influxdb_available)
         framework.observe(self._influxdb._on.influxdb_unavailable, self._on_influxdb_unavailable)
+
+        self.oci_runtime = OCIRuntimeRequirer(self, OCI_RUNTIME_INTEGRATION_NAME)
+        framework.observe(self.oci_runtime.on.oci_runtime_ready, self._on_oci_runtime_ready)
+        framework.observe(
+            self.oci_runtime.on.oci_runtime_disconnected,
+            self._on_oci_runtime_disconnected,
+        )
 
         self._grafana_agent = COSAgentProvider(
             self,
@@ -425,6 +436,27 @@ class SlurmctldCharm(ops.CharmBase):
             del profiling.job_acct_gather_type
 
         logger.info("`%s` successfully cleared", PROFILING_CONFIG_FILE)
+
+    @reconfigure
+    @block_unless(slurmctld_installed)
+    def _on_oci_runtime_ready(self, event: OCIRuntimeReadyEvent) -> None:
+        """Handle when OCI runtime data is ready from a Slurm OCI runtime provider."""
+        data = self.oci_runtime.get_oci_runtime_data(event.relation.id)
+
+        logger.info("updating `oci.conf`")
+        logger.debug("`oci.conf`:\n%s", plog(data.ociconfig.dict()))
+        self.slurmctld.oci.dump(data.ociconfig)
+        logger.info("`oci.conf` successfully updated")
+
+    @reconfigure
+    @block_unless(slurmctld_installed)
+    def _on_oci_runtime_disconnected(self, _: OCIRuntimeDisconnectedEvent) -> None:
+        """Handle when a Slurm OCI runtime is disconnected."""
+        logger.info("oci runtime has been disconnected. disabling oci support")
+
+        logger.info("deleting `oci.conf`")
+        self.slurmctld.oci.delete()
+        logger.info("`oci.conf` successfully deleted")
 
     def _on_show_current_config_action(self, event: ops.ActionEvent) -> None:
         """Show current slurm.conf."""

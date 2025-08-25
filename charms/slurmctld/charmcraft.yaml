@@ -34,6 +34,8 @@ requires:
     interface: sackd
   influxdb:
     interface: influxdb-api
+  oci-runtime:
+    interface: slurm-oci-runtime
 
 provides:
   cos-agent:
