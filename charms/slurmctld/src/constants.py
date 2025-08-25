@@ -17,6 +17,7 @@
 
 from hpc_libs.is_container import is_container
 
+OCI_RUNTIME_INTEGRATION_NAME = "oci-runtime"
 PEER_INTEGRATION_NAME = "slurmctld-peer"
 SACKD_INTEGRATION_NAME = "login-node"
 SLURMD_INTEGRATION_NAME = "slurmd"

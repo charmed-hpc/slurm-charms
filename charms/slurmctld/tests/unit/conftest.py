@@ -12,14 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configure unit tests for the `slurmctld` charm."""
+"""Configure unit tests for the `slurmctld` charmed operator."""
 
 import pytest
 from charm import SlurmctldCharm
 from ops import testing
+from pyfakefs.fake_filesystem import FakeFilesystem
+from pytest_mock import MockerFixture
 
 
 @pytest.fixture(scope="function")
-def mock_charm() -> testing.Context[SlurmctldCharm]:
-    """Mock `SlurmctldCharm`."""
+def mock_ctx() -> testing.Context[SlurmctldCharm]:
+    """Mock `SlurmctldCharm` context."""
     return testing.Context(SlurmctldCharm)
+
+
+@pytest.fixture(scope="function")
+def mock_charm(
+    mock_ctx, fs: FakeFilesystem, mocker: MockerFixture
+) -> testing.Context[SlurmctldCharm]:
+    """Mock `SlurmctldCharm` context with fake filesystem."""
+    fs.create_file("/etc/slurm/slurm.key", create_missing_dirs=True)
+    mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
+    mocker.patch("subprocess.run")
+    return mock_ctx
