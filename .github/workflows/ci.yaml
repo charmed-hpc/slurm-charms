@@ -117,8 +117,20 @@ jobs:
     steps:
       - name: Remove unnecessary files
         run: |
-          sudo rm -rf /usr/share/dotnet
+          # Remove Java SDKs
+          sudo rm -rf /usr/lib/jvm
+
+          # Remove Haskell toolchain
           sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+
+          # Remove .NET SDKs
+          sudo rm -rf /usr/share/dotnet
+
+          # Remove Swift toolchain
+          sudo rm -rf /usr/share/swift
+
+          # Remove unnecessary runner tools
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout
