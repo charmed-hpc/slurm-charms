@@ -46,6 +46,17 @@ def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
             print(log, end="")
 
 
+@pytest.fixture(scope="function")
+def fast_forward(juju: jubilant.Juju) -> Iterator[None]:
+    """Temporarily increase the rate of `update-status` event fires to 10s."""
+    old_interval = juju.model_config()["update-status-hook-interval"]
+    juju.model_config({"update-status-hook-interval": "10s"})
+
+    yield
+
+    juju.model_config({"update-status-hook-interval": old_interval})
+
+
 @pytest.fixture(scope="module")
 def base(request: pytest.FixtureRequest) -> str:
     """Get the base to deploy the Slurm charms on."""
