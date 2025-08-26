@@ -71,7 +71,13 @@ from slurmutils import (
     NodeSet,
     SlurmConfig,
 )
-from state import check_slurmctld, cluster_name_set, config_ready, slurmctld_installed
+from state import (
+    check_slurmctld,
+    cluster_name_set,
+    config_ready,
+    slurmctld_installed,
+    slurmctld_is_active,
+)
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 
@@ -230,6 +236,7 @@ class SlurmctldCharm(ops.CharmBase):
         )
 
     @refresh
+    @wait_unless(slurmctld_is_active)
     @block_unless(slurmctld_installed)
     def _on_sackd_connected(self, event: SackdConnectedEvent) -> None:
         """Handle when a new `sackd` application is connected."""
@@ -243,7 +250,7 @@ class SlurmctldCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    @wait_unless(cluster_name_set, partition_ready)
+    @wait_unless(partition_ready, slurmctld_is_active)
     @block_unless(slurmctld_installed)
     def _on_slurmd_ready(self, event: SlurmdReadyEvent) -> None:
         """Handle when partition data is ready from a `slurmd` application."""
@@ -345,7 +352,7 @@ class SlurmctldCharm(ops.CharmBase):
             pass
 
     @refresh
-    @wait_unless(database_ready, config_ready)
+    @wait_unless(config_ready, database_ready, slurmctld_is_active)
     @block_unless(slurmctld_installed)
     def _on_slurmrestd_connected(self, event: SlurmrestdConnectedEvent) -> None:
         """Handle when a new `slurmrestd` application is connected."""

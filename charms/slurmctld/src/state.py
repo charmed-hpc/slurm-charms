@@ -44,6 +44,12 @@ def cluster_name_set(charm: "SlurmctldCharm") -> ConditionEvaluation:
     )
 
 
+def slurmctld_is_active(charm: "SlurmctldCharm") -> ConditionEvaluation:
+    """Check if the `slurmctld` is active."""
+    active = charm.slurmctld.service.is_active()
+    return ConditionEvaluation(active, "Waiting for `slurmctld` to start" if not active else "")
+
+
 def config_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:
     """Check if the `slurm.conf` file is ready to shared with other applications."""
     ready = charm.slurmctld.config.exists()
@@ -64,7 +70,7 @@ def slurmctld_ready(charm: "SlurmctldCharm") -> bool:
         (
             slurmctld_installed(charm).ok,
             cluster_name_set(charm).ok,
-            charm.slurmctld.service.is_active(),
+            slurmctld_is_active(charm).ok,
         )
     )
 
@@ -79,7 +85,8 @@ def check_slurmctld(charm: "SlurmctldCharm") -> ops.StatusBase:
     if not ok:
         return ops.WaitingStatus(message)
 
-    if not charm.slurmctld.service.is_active():
-        return ops.WaitingStatus("Waiting for `slurmctld` to start")
+    ok, message = slurmctld_is_active(charm)
+    if not ok:
+        return ops.WaitingStatus(message)
 
     return ops.ActiveStatus()
