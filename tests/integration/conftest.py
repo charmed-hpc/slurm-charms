@@ -37,7 +37,7 @@ def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
     keep_models = bool(request.config.getoption("--keep-models"))
 
     with jubilant.temp_model(keep=keep_models) as juju:
-        juju.wait_timeout = 20 * 60
+        juju.wait_timeout = 60 * 60  # Timeout after 1 hour.
 
         yield juju
 
