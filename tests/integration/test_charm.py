@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.order(1)
-def test_deploy(juju: jubilant.Juju, base, sackd, slurmctld, slurmd, slurmdbd, slurmrestd) -> None:
+def test_deploy(
+    juju: jubilant.Juju, base, sackd, slurmctld, slurmd, slurmdbd, slurmrestd, fast_forward
+) -> None:
     """Test if the Slurm charms can successfully reach active status."""
     # Deploy Slurm and auxiliary services.
     juju.deploy(
@@ -78,7 +80,7 @@ def test_deploy(juju: jubilant.Juju, base, sackd, slurmctld, slurmd, slurmdbd, s
     juju.integrate(MYSQL_APP_NAME, SLURMDBD_APP_NAME)
 
     # Wait for Slurm applications to reach active status.
-    juju.wait(lambda status: jubilant.all_active(status, *SLURM_APPS))
+    juju.wait(lambda status: jubilant.all_active(status, *SLURM_APPS), error=jubilant.any_error)
 
 
 @pytest.mark.order(2)
