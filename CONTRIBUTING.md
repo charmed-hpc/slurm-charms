@@ -77,6 +77,23 @@ just repo unit
 just repo integration
 ```
 
+## Maintenance information
+
+This repository uses Github Actions to handle some tasks related to the maintenance of the repository.
+
+### Backporting commits
+
+You can backport the commits of a PR into our list of maintained branches by adding the `backport`
+label to a currently opened or already merged PR. This will automatically try to rebase the commits
+into the branches by opening a PR against every maintained branch. Only merged PRs can be backported,
+which means adding the `backport` label to an open PR will only trigger the backport when the PR
+gets merged. The action will also make a comment on the original PR if the backport failed to be
+applied, which will require manual intervention to resolve the merge conflict.
+
+The list of maintained branches is defined in the [backport action][action].
+
+[action]: .github/workflows/backport.yaml
+
 ## License information
 
 By contributing to `slurm-charms`, you agree to license your contribution under
@@ -118,4 +135,3 @@ and you make changes to that file in 2025, update the copyright year in the file
 ```text
 Copyright 2023-2025 Canonical Ltd.
 ```
-
