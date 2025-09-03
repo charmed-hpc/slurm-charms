@@ -34,6 +34,7 @@ DEFAULT_CGROUP_CONFIG = {
     "constraindevices": True,
     "constrainramspace": True,
     "constrainswapspace": True,
+    "signalchildrenprocesses": True,
 }
 
 ACCOUNTING_CONFIG_FILE = "slurm.conf.accounting"
