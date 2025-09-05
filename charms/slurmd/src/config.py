@@ -22,10 +22,11 @@ from typing import TYPE_CHECKING, cast
 
 import ops
 from gpu import get_all_gpu
+from hpc_libs.errors import SystemdError
 from hpc_libs.interfaces import ComputeData
 from hpc_libs.machine import call
 from hpc_libs.utils import StopCharm, plog
-from slurm_ops import SlurmOpsError
+from slurm_ops import SlurmOpsError, scontrol
 from slurmutils import ModelError, Node, Partition
 from state import slurmd_ready
 
@@ -136,36 +137,26 @@ def reconfigure_slurmd(charm: "SlurmdCharm") -> None:
     node = get_node_info()
     del node.node_name  # `NodeName` cannot be set in the `--conf` flag.
     node.features = [charm.app.name]
-    node.update(Node(charm.stored.custom_node_config))
-
-    # Reset state if the `slurmd` service is "cold booting". E.g. the `slurmd` service is being
-    # restarted after an arbitrary period of downtime for maintenance.
-    if not charm.slurmd.service.is_active():
-        state = charm.stored.default_state
-        if state not in (states := [member.value for member in State]):
-            raise SlurmOpsError(
-                f"invalid default state `{charm}` provided. "
-                + f"valid states are {[', '.join(states)]}"
-            )
-
-        if state != "idle":
-            # `idle` is not a valid state configuration for the `--conf` flag,
-            # but is a valid state within `slurmctld`.
-            #
-            # For details see: https://slurm.schedmd.com/slurm.conf.html#OPT_State
-            node.state = state
-            node.reason = charm.stored.default_reason
-
-        _logger.info("setting the default state of node '%s' to '%s'", charm.unit.name, state)
+    node.update(Node.from_str(charm.stored.custom_node_config))
+    if (state := charm.stored.default_state) != "idle":
+        _logger.info("setting the state of node '%s' to '%s'", charm.unit.name, state)
+        node.state = state
+    if reason := charm.stored.default_reason:
+        node.reason = reason
 
     _logger.debug("'%s' node configuration:\n%s", charm.unit.name, plog(node.dict()))
     charm.slurmd.conf = node
     _logger.info("'%s' node configuration successfully updated", charm.unit.name)
 
+    # FIXME: We need a better mechanism for guarding against situations where
+    #   the `slurmd` units still have running jobs, but the cluster administrator
+    #   is applying updates to the node configuration, or removing the node from the
+    #   Charmed HPC cluster. Is it a documentation or technical issue?
+    scontrol("delete", f"nodename={charm.slurmd.hostname}", check=False)
     try:
         charm.slurmd.service.enable()
         charm.slurmd.service.restart()
-    except SlurmOpsError as e:
+    except SystemdError as e:
         _logger.error(e.message)
         raise StopCharm(
             ops.BlockedStatus(

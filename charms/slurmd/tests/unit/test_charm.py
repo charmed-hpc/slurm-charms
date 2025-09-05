@@ -20,6 +20,7 @@ import json
 import ops
 import pytest
 from constants import SLURMD_INTEGRATION_NAME
+from hpc_libs.errors import SystemdError
 from ops import testing
 from pytest_mock import MockerFixture
 from slurm_ops import SlurmOpsError
@@ -95,7 +96,7 @@ class TestSlurmdCharm:
                 id="ready-start success",
             ),
             pytest.param(
-                lambda: (_ for _ in ()).throw(SlurmOpsError("restart failed")),
+                lambda: (_ for _ in ()).throw(SystemdError("restart failed")),
                 True,
                 ops.BlockedStatus(
                     "Failed to apply new `slurmd` configuration. See `juju debug-log` for details"
@@ -109,7 +110,7 @@ class TestSlurmdCharm:
                 id="not ready-start success",
             ),
             pytest.param(
-                lambda: (_ for _ in ()).throw(SlurmOpsError("restart failed")),
+                lambda: (_ for _ in ()).throw(SystemdError("restart failed")),
                 False,
                 ops.WaitingStatus("Waiting for controller data"),
                 id="not ready-start fail",
@@ -173,7 +174,7 @@ class TestSlurmdCharm:
                 id="stop success",
             ),
             pytest.param(
-                lambda: (_ for _ in ()).throw(SlurmOpsError("install failed")),
+                lambda: (_ for _ in ()).throw(SystemdError("stop failed")),
                 ops.BlockedStatus("Failed to stop `slurmd`. See `juju debug-log` for details"),
                 id="stop fail",
             ),

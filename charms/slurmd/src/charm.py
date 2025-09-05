@@ -23,8 +23,16 @@ import gpu
 import nhc
 import ops
 import rdma
-from config import State, get_partition, reboot_if_required, reconfigure_slurmd, set_partition
+from config import (
+    State,
+    get_node_info,
+    get_partition,
+    reboot_if_required,
+    reconfigure_slurmd,
+    set_partition,
+)
 from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
+from hpc_libs.errors import SystemdError
 from hpc_libs.interfaces import (
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
@@ -61,7 +69,7 @@ class SlurmdCharm(ops.CharmBase):
         self.stored.set_default(
             default_state=State.DOWN.value,
             default_reason="New node.",
-            custom_node_config={},
+            custom_node_config="",
             custom_nhc_config="",
             custom_partition_config="",
         )
@@ -200,7 +208,7 @@ class SlurmdCharm(ops.CharmBase):
             self.slurmd.service.stop()
             self.slurmd.service.disable()
             del self.slurmd.conf_server
-        except SlurmOpsError as e:
+        except (SlurmOpsError, SystemdError) as e:
             logger.error(e.message)
             event.defer()
             raise StopCharm(
@@ -233,24 +241,36 @@ class SlurmdCharm(ops.CharmBase):
         parse, validate, and store the input of the `node-config` parameter in stored state.
         Lastly, update slurmctld if there are updates to the node config.
         """
-        node = self.slurmd.conf
+        # Reassemble the node configuration here rather than read `/etc/default/slurmd` directly.
+        # If we don't do this, `node-config` will return a node configuration that may defer
+        # from what's actually set in Slurm since `node-config` will overwrite rather than
+        # update the existing custom node configuration.
+        base = get_node_info()
         custom = event.params.get("parameters", "")
+        if (state := self.stored.default_state) != "idle":
+            base.state = state
+        if reason := self.stored.default_reason:
+            base.reason = reason
+
         valid_config = False
         if custom:
             try:
-                node.update(Node.from_str(custom))
+                custom_config = Node.from_str(custom)
                 valid_config = True
             except (ModelError, ValueError) as e:
                 logger.error(e)
 
             if valid_config:
-                if (custom_node_config := node.dict()) != self.stored.custom_node_config:
+                if (
+                    custom_node_config := str(custom_config)  # type: ignore
+                ) != self.stored.custom_node_config:
                     self.stored.custom_node_config = custom_node_config
                     self.service_needs_restart = True
 
+        base.update(Node.from_str(self.stored.custom_node_config))
         event.set_results(
             {
-                "node-parameters": str(node),
+                "node-parameters": str(base),
                 "user-supplied-node-parameters-accepted": f"{valid_config}",
             },
         )
