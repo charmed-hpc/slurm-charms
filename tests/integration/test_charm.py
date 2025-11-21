@@ -16,6 +16,7 @@
 """Slurm charm integration tests."""
 
 import logging
+import textwrap
 
 import jubilant
 import pytest
@@ -201,3 +202,95 @@ def test_job_submission_works(juju: jubilant.Juju) -> None:
     # Get the hostname of the compute node from a Slurm job.
     sackd_result = juju.exec(f"srun --partition {SLURMD_APP_NAME} hostname -s", unit=sackd_unit)
     assert sackd_result.stdout == slurmd_result.stdout
+
+
+@pytest.mark.order(10)
+def test_gpu_job_submission_works(juju: jubilant.Juju) -> None:
+    """Test that a job requesting a GPU can be successfully submitted to the Slurm cluster."""
+    sackd_unit = f"{SACKD_APP_NAME}/0"
+    slurmd_unit = f"{SLURMD_APP_NAME}/0"
+
+    # Set up a mock GPU device on the slurmd unit by mounting over relevant files in /sys and /proc
+    # WARNING: This is tightly coupled to the method the Slurm "Autodetect=nvidia" plugin uses to
+    # detect GPUs. Changes to that method may break this test.
+    # Mock NUMA region info in /sys
+    juju.exec("mkdir -p /tmp/sys/bus/pci/drivers/nvidia/0000:01:00.0/", unit=slurmd_unit)
+    juju.exec(
+        "cp /sys/devices/system/node/node0/cpulist /tmp/sys/bus/pci/drivers/nvidia/0000:01:00.0/local_cpulist",
+        unit=slurmd_unit,
+    )
+    juju.exec(
+        "sudo mount -t overlay overlay -o lowerdir=/sys/bus/pci/drivers:/tmp/sys/bus/pci/drivers /sys/bus/pci/drivers",
+        unit=slurmd_unit,
+    )
+
+    # Mock GPU info in /proc
+    gpu_information = textwrap.dedent(
+        """\
+    Model: 		 Mock GPU
+    IRQ:   		 185
+    GPU UUID: 	 GPU-12345678-90ab-cdef-1234-567890abcdef
+    Video BIOS: 	 12.34.56.78.aa
+    Bus Type: 	 PCIe
+    DMA Size: 	 47 bits
+    DMA Mask: 	 0x7fffffffffff
+    Bus Location: 	 0000:01:00.0
+    Device Minor: 	 0
+    GPU Firmware: 	 123.456.78
+    GPU Excluded:	 No
+    """
+    )
+    juju.exec("mkdir -p /tmp/proc/driver/nvidia/gpus/0000:01:00.0/", unit=slurmd_unit)
+    juju.exec(
+        f"echo '{gpu_information}' > /tmp/proc/driver/nvidia/gpus/0000:01:00.0/information",
+        unit=slurmd_unit,
+    )
+    # Can't Overlay mount with /proc. Attempts fail with error:
+    #   "wrong fs type, bad option, bad superblock on overlay, missing codepage or helper program, or other error"
+    # Bind mount over the top instead. This should only block `/proc/driver/rtc` briefly
+    juju.exec("sudo mount --bind /tmp/proc/driver /proc/driver", unit=slurmd_unit)
+
+    # Slurm needs a GPU device file - use /dev/zero as a mock
+    juju.exec("sudo touch /dev/nvidia0", unit=slurmd_unit)  # mount point must exist
+    juju.exec("sudo mount --bind /dev/zero /dev/nvidia0", unit=slurmd_unit)
+
+    # Manually add Gres line to dynamic node config. Necessary as the mock GPU was not present at
+    # charm install time so was not auto-detected.
+    juju.exec("sudo sed -i \"s/'$/ gres=gpu:mock_gpu:1'/\" /etc/default/slurmd", unit=slurmd_unit)
+
+    # Temporarily disable constrained devices to avoid cgroup errors in the test LXD containers
+    juju.config(SLURMCTLD_APP_NAME, values={"cgroup-parameters": "constraindevices=no"})
+
+    # Re-register the node to pick up the new GPU
+    slurmd_result = juju.exec("hostname -s", unit=slurmd_unit)
+    slurmd_nodename = slurmd_result.stdout.strip()
+    logger.info("re-registering slurmd node '%s' to set up mock GPU", slurmd_nodename)
+    juju.exec(f"sudo scontrol delete NodeName={slurmd_nodename}", unit=sackd_unit)
+    juju.exec("sudo systemctl restart slurmd", unit=slurmd_unit)
+
+    logger.info("testing that a GPU job can be submitted to slurm and successfully run")
+
+    # Retry on failure as it may take a moment for the node to re-register
+    @tenacity.retry(
+        wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
+        stop=tenacity.stop_after_attempt(3),
+        reraise=True,
+    )
+    def retry_submit():
+        sackd_result = juju.exec(
+            f"srun --partition {SLURMD_APP_NAME} --gres gpu:1 hostname -s", unit=sackd_unit
+        )
+        assert sackd_result.stdout == slurmd_result.stdout
+    retry_submit()
+
+    logger.info("cleaning up mock GPU setup")
+    juju.exec("sudo umount /sys/bus/pci/drivers", unit=slurmd_unit)
+    juju.exec("sudo umount /proc/driver", unit=slurmd_unit)
+    juju.exec("sudo umount /dev/nvidia0", unit=slurmd_unit)
+    juju.exec("sudo rm -rf /tmp/sys", unit=slurmd_unit)
+    juju.exec("sudo rm -rf /tmp/proc", unit=slurmd_unit)
+    juju.exec("sudo rm -f /dev/nvidia0", unit=slurmd_unit)
+    juju.exec("sudo sed -i \"s/ gres=gpu:mock_gpu:1'/'/\" /etc/default/slurmd", unit=slurmd_unit)
+    juju.config(SLURMCTLD_APP_NAME, reset="cgroup-parameters")
+    juju.exec(f"sudo scontrol delete NodeName={slurmd_nodename}", unit=sackd_unit)
+    juju.exec("sudo systemctl restart slurmd", unit=slurmd_unit)
