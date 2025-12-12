@@ -103,7 +103,7 @@ def _get_slurm_controllers(juju: jubilant.Juju, query_unit: str = f"{SACKD_APP_N
     return slurm_controllers
 
 
-@pytest.mark.order(13)
+@pytest.mark.order(14)
 def test_slurmctld_ha_deploy(juju: jubilant.Juju) -> None:
     """Test deployment of high availability file system and migration of StateSaveLocation data."""
     # Ceph shared storage necessary for all controller instances to share StateSaveLocation data
@@ -173,7 +173,7 @@ def test_slurmctld_ha_deploy(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(14)
+@pytest.mark.order(15)
 def test_slurmctld_scale_up(juju: jubilant.Juju) -> None:
     """Test scaling up slurmctld by two units."""
     controllers = _get_slurm_controllers(juju)
@@ -207,7 +207,7 @@ def test_slurmctld_scale_up(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(15)
+@pytest.mark.order(16)
 def test_slurmctld_scale_down(juju: jubilant.Juju) -> None:
     """Test scaling down slurmctld by one unit."""
     controllers = _get_slurm_controllers(juju)
@@ -258,7 +258,7 @@ def test_slurmctld_scale_down(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(16)
+@pytest.mark.order(17)
 def test_slurmctld_service_failover(juju: jubilant.Juju) -> None:
     """Test failover to backup slurmctld after stopping primary service."""
     login_unit = f"{SACKD_APP_NAME}/0"
@@ -296,7 +296,7 @@ def test_slurmctld_service_failover(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(17)
+@pytest.mark.order(18)
 def test_slurmctld_service_recover(juju: jubilant.Juju) -> None:
     """Test primary resumes control after restarting service."""
     login_unit = f"{SACKD_APP_NAME}/0"
@@ -339,7 +339,7 @@ def test_slurmctld_service_recover(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(18)
+@pytest.mark.order(19)
 def test_slurmctld_unit_failover(juju: jubilant.Juju) -> None:
     """Test backup takeover after powering off primary machine."""
     login_unit = f"{SACKD_APP_NAME}/0"
@@ -389,7 +389,7 @@ def test_slurmctld_unit_failover(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(19)
+@pytest.mark.order(20)
 def test_slurmctld_unit_recover(juju: jubilant.Juju) -> None:
     """Test primary resumes control after restarting powered-off machine."""
     login_unit = f"{SACKD_APP_NAME}/0"
@@ -434,7 +434,7 @@ def test_slurmctld_unit_recover(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(20)
+@pytest.mark.order(21)
 def test_slurmctld_scale_up_degraded(juju: jubilant.Juju) -> None:
     """Test scaling up slurmctld by one unit while primary unit failed."""
     controllers = _get_slurm_controllers(juju)
@@ -501,7 +501,7 @@ def test_slurmctld_scale_up_degraded(juju: jubilant.Juju) -> None:
     retry_asserts()
 
 
-@pytest.mark.order(21)
+@pytest.mark.order(22)
 def test_slurmctld_remove_failed_controller(juju: jubilant.Juju) -> None:
     """Test removing failed controller slurmctld unit."""
     status = juju.status()

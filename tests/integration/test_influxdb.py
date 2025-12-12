@@ -42,7 +42,7 @@ def setup_influxdb(juju: jubilant.Juju) -> None:
     sleep(5)
 
 
-@pytest.mark.order(11)
+@pytest.mark.order(12)
 def test_task_accounting_works(juju: jubilant.Juju) -> None:
     """Test that `influxdb` is recording task level info."""
     if INFLUXDB_APP_NAME not in juju.status().apps:

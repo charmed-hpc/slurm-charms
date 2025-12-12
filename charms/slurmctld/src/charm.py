@@ -111,8 +111,7 @@ class SlurmctldCharm(ops.CharmBase):
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.update_status, self._on_update_status)
         framework.observe(self.on.show_current_config_action, self._on_show_current_config_action)
-        framework.observe(self.on.drain_action, self._on_drain_nodes_action)
-        framework.observe(self.on.resume_action, self._on_resume_nodes_action)
+        framework.observe(self.on.set_node_state_action, self._on_set_node_state_action)
 
         self.slurmctld_peer = SlurmctldPeer(self, PEER_INTEGRATION_NAME)
         framework.observe(
@@ -503,34 +502,27 @@ class SlurmctldCharm(ops.CharmBase):
         """Show current slurm.conf."""
         event.set_results({"slurm.conf": str(self.slurmctld.config.load())})
 
-    def _on_drain_nodes_action(self, event: ops.ActionEvent) -> None:
-        """Drain specified nodes."""
-        nodes = event.params["nodename"]
-        reason = event.params["reason"]
+    def _on_set_node_state_action(self, event: ops.ActionEvent) -> None:
+        """Set the state of the provided compute nodes with `scontrol`."""
+        nodes = event.params.get("nodes")
+        state = event.params.get("state")
+        reason = event.params.get("reason")
 
-        logger.debug(f"#### Draining {nodes} because {reason}.")
-        event.log(f"Draining {nodes} because {reason}.")
+        cmd = ["update", f"nodename={nodes}", f"state={state}"]
+        if state != "idle":
+            cmd.append(f"reason='{reason if reason else 'n/a'}'")
 
+        logger.info("setting state of node(s) %s to state '%s'", nodes, state)
         try:
-            scontrol("update", f"nodename={nodes}", "state=drain", f'reason="{reason}"')
+            scontrol(*cmd)
         except SlurmOpsError as e:
-            event.fail(message=f"Error draining {nodes}: {e.message}")
+            err = (
+                f"failed to set state of node(s) {nodes} to state '{state}'. reason:\n{e.message}"
+            )
+            logger.error(err)
+            event.fail(err.capitalize())
 
-        event.set_results({"status": "draining", "nodes": nodes})
-
-    def _on_resume_nodes_action(self, event: ops.ActionEvent) -> None:
-        """Resume specified nodes."""
-        nodes = event.params["nodename"]
-
-        logger.debug(f"#### Resuming {nodes}.")
-        event.log(f"Resuming {nodes}.")
-
-        try:
-            scontrol("update", f"nodename={nodes}", "state=idle")
-        except SlurmOpsError as e:
-            event.fail(message=f"Error resuming {nodes}: {e.message}")
-
-        event.set_results({"status": "resuming", "nodes": nodes})
+        logger.info("successfully updated state of node(s) %s to '%s'", nodes, state)
 
     def _merge_controller_data(self, app: SackdRequirer | SlurmdRequirer, new_endpoints) -> None:
         """Merge new controller endpoints with existing controller data."""
@@ -578,5 +570,5 @@ class SlurmctldCharm(ops.CharmBase):
         self._merge_controller_data(self.slurmd, new_endpoints)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa
     ops.main(SlurmctldCharm)

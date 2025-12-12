@@ -14,11 +14,19 @@
 
 """Configure unit tests for the `slurmctld` charmed operator."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from charm import SlurmctldCharm
 from ops import testing
 from pyfakefs.fake_filesystem import FakeFilesystem
 from pytest_mock import MockerFixture
+
+
+@pytest.fixture(scope="function")
+def mock_scontrol(mocker: MockerFixture) -> MagicMock:
+    """Mock the `scontrol` function from `slurm-ops`."""
+    return mocker.patch("charm.scontrol")
 
 
 @pytest.fixture(scope="function")
@@ -29,10 +37,16 @@ def mock_ctx() -> testing.Context[SlurmctldCharm]:
 
 @pytest.fixture(scope="function")
 def mock_charm(
-    mock_ctx, fs: FakeFilesystem, mocker: MockerFixture
+    mock_ctx, fs: FakeFilesystem, mocker: MockerFixture, mock_scontrol
 ) -> testing.Context[SlurmctldCharm]:
     """Mock `SlurmctldCharm` context with fake filesystem."""
     fs.create_file("/etc/slurm/slurm.key", create_missing_dirs=True)
     mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
     mocker.patch("subprocess.run")
     return mock_ctx
+
+
+@pytest.fixture(scope="function", params=(True, False), ids=("success", "failure"))
+def succeed(request: pytest.FixtureRequest) -> bool:
+    """Parameterize a test to succeed and fail."""
+    return request.param

@@ -54,7 +54,7 @@ def setup_apptainer(juju: jubilant.Juju) -> None:
     sleep(5)
 
 
-@pytest.mark.order(12)
+@pytest.mark.order(13)
 def test_apptainer_oci_scheduling(juju: jubilant.Juju) -> None:
     """Test that Slurm can schedule jobs using Apptainer."""
     if APPTAINER_APP_NAME not in juju.status().apps:

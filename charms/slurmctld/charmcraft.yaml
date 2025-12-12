@@ -1,5 +1,17 @@
-# Copyright 2020-2024 Omnivector Solutions, LLC
-# See LICENSE file for licensing details.
+# Copyright 2025 Vantage Compute Corporation
+# Copyright 2020-2024 Omnivector, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 name: slurmctld
 summary: |
@@ -16,10 +28,8 @@ description: |
 
 links:
   contact: https://matrix.to/#/#hpc:ubuntu.com
-
   issues:
     - https://github.com/charmed-hpc/slurm-charms/issues
-
   source:
     - https://github.com/charmed-hpc/slurm-charms
 
@@ -127,34 +137,46 @@ actions:
           --quiet --format=json  | jq .[].results.slurm.conf | xargs -I % -0 python3 -c 'print(%)'
       ```
 
-  drain:
+  set-node-state:
     description: |
-      Drain specified nodes.
+      Set the state of the provided nodes so that new jobs can be scheduled..
 
-      Example usage:
-      $ juju run slurmctld/leader drain nodename="node-[1,2]" reason="Updating kernel"
+      **Examples:**
+
+      Set the state of nodes 0 to 19 to idle:
+
+      ```shell
+      $ juju run slurmctld/leader set-node-state nodes='node-[0-19]' state=idle
+      ```
+
+      Drain nodes 20 to 24 to prevent new jobs from being scheduled while
+      performing routine maintenance:
+
+      ```shell
+      $ juju run slurmctld/leader set-node-state nodes='node[20-24]' state=drain reason="Maintenance"
+      ```
     params:
-      nodename:
-        type: string
-        description: The nodes to drain, using the Slurm format. For example, `"node-[1,2]"`.
-      reason:
-        type: string
-        description: Reason to drain the nodes.
-    required:
-      - nodename
-      - reason
-  resume:
-    description: |
-      Resume specified nodes.
-
-      Note: Newly added nodes will remain in the `down` state until configured,
-      with the `node-configured` action.
-
-      Example usage: $ juju run slurmctld/leader resume nodename="node-[1,2]"
-    params:
-      nodename:
+      nodes:
         type: string
         description: |
-          The nodes to resume, using the Slurm format. For example, `"node-[1,2]"`.
+          Node(s) to update the state of, using the Slurm node name format.
+          For example, `'node-[1,2]'`.
+      state:
+        type: string
+        description: State to set for the node(s).
+        enum:
+          - idle
+          - down
+          - drain
+          - fail
+          - failing
+      reason:
+        type: string
+        description: |
+          The reason for the node(s) to be in state "down", "drain", "fail", or "failing".
+
+          This parameter is not required if setting the node(s) state to "idle"
+        default: ""
     required:
-      - nodename
+      - nodes
+      - state

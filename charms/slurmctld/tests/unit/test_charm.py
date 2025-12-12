@@ -20,6 +20,7 @@ from constants import CLUSTER_NAME_PREFIX, OCI_RUNTIME_INTEGRATION_NAME, PEER_IN
 from hpc_libs.interfaces import OCIRuntimeDisconnectedEvent, OCIRuntimeReadyEvent
 from ops import testing
 from pytest_mock import MockerFixture
+from slurm_ops import SlurmOpsError
 from slurmutils import OCIConfig
 
 EXAMPLE_OCI_CONFIG = OCIConfig(
@@ -147,4 +148,43 @@ class TestSlurmctldCharm:
             assert not any(
                 isinstance(event, OCIRuntimeDisconnectedEvent)
                 for event in mock_charm.emitted_events
+            )
+
+    @pytest.mark.parametrize(
+        "params,expected",
+        (
+            pytest.param(
+                {"nodes": "slurmd-[0-19]", "state": "idle"},
+                ("update", "nodename=slurmd-[0-19]", "state=idle"),
+                id="idle",
+            ),
+            pytest.param(
+                {"nodes": "slurmd-[20-24]", "state": "draining"},
+                ("update", "nodename=slurmd-[20-24]", "state=draining", "reason='n/a'"),
+                id="draining",
+            ),
+            pytest.param(
+                {"nodes": "slurmd-[25-29]", "state": "down", "reason": "maintenance"},
+                ("update", "nodename=slurmd-[25-29]", "state=down", "reason='maintenance'"),
+                id="down",
+            ),
+        ),
+    )
+    def test_on_set_node_state_action(
+        self, mock_charm, mock_scontrol, succeed, params, expected, leader
+    ) -> None:
+        """Test the `_on_set_node_state_action` action event handler."""
+        if succeed:
+            mock_charm.run(mock_charm.on.action("set-node-state", params=params), testing.State())
+            mock_scontrol.assert_called_with(*expected)
+        else:
+            mock_scontrol.side_effect = [SlurmOpsError("scontrol failed")]
+            with pytest.raises(testing.ActionFailed) as exec_info:
+                mock_charm.run(
+                    mock_charm.on.action("set-node-state", params=params), testing.State()
+                )
+
+            assert exec_info.value.message == (
+                f"Failed to set state of node(s) {params['nodes']} to state '{params['state']}'. "
+                f"reason:\nscontrol failed"
             )
