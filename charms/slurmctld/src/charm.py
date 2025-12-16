@@ -511,6 +511,11 @@ class SlurmctldCharm(ops.CharmBase):
         cmd = ["update", f"nodename={nodes}", f"state={state}"]
         if state != "idle":
             cmd.append(f"reason='{reason if reason else 'n/a'}'")
+        elif state == "idle" and reason:
+            event.log(
+                "Warning: The 'idle' state does not require a reason to be set. "
+                f"Not updating to node(s) {nodes} 'reason' field to '{reason}'."
+            )
 
         logger.info("setting state of node(s) %s to state '%s'", nodes, state)
         try:
