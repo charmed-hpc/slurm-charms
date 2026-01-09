@@ -1,4 +1,4 @@
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@
 # limitations under the License.
 
 resource "juju_application" "slurmd" {
-  name  = var.app_name
-  model = var.model_name
+  name       = var.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "slurmd"

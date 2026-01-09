@@ -1,4 +1,4 @@
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,11 +39,11 @@ variable "config" {
 variable "constraints" {
   description = "Deployment constraints"
   type        = string
-  default     = "arch=amd64"
+  default     = ""
 }
 
-variable "model_name" {
-  description = "Model name"
+variable "model_uuid" {
+  description = "Model UUID"
   type        = string
 }
 

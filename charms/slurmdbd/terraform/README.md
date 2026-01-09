@@ -23,7 +23,7 @@ This module offers the following configurable units:
 | `base`        | string      | Base version to use for deployed machine                 | ubuntu@24.04 |          |
 | `channel`     | string      | Channel that charm is deployed from                      | latest/edge  |          |
 | `config`      | map(string) | Map of charm configuration options to pass at deployment | {}           |          |
-| `constraints` | string      | Constraints for the charm deployment                     | "arch=amd64" |          |
+| `constraints` | string      | Constraints for the charm deployment                     | ""           |          |
 | `model_name`  | string      | Name of the model to deploy the charm to                 |              |    Y     |
 | `revision`    | number      | Revision number of charm to deploy                       | null         |          |
 | `units`       | number      | Number of units to deploy                                | 1            |          |
@@ -47,5 +47,5 @@ To deploy this module with its required dependency, you can run
 the following command:
 
 ```shell
-terraform apply -var="model_name=<MODEL_NAME>" -auto-approve
+terraform apply -var="model_uuid=<MODEL_UUID>" -auto-approve
 ```
