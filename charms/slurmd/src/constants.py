@@ -1,4 +1,4 @@
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,9 +17,3 @@
 SLURMD_INTEGRATION_NAME = "slurmctld"
 
 SLURMD_PORT = 6818
-
-NHC_CONFIG = """
-# Enforce short hostnames to match the node names as tracked by slurm.
-* || HOSTNAME="$HOSTNAME_S"
-
-"""

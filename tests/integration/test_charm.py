@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023-2025 Canonical Ltd.
+# Copyright 2023-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -209,17 +209,6 @@ def test_set_node_state(juju: jubilant.Juju) -> None:
     )
     assert "IDLE" in result["nodes"][0]["state"]
     assert result["nodes"][0]["reason"] == ""
-
-
-@pytest.mark.order(9)
-def test_health_check_program(juju: jubilant.Juju) -> None:
-    """Test that running the `healthcheckprogram` doesn't put the node in a drain state."""
-    unit = f"{SLURMD_APP_NAME}/0"
-
-    logger.info("testing that running node health check program doesn't drain node")
-    juju.exec("/usr/sbin/charmed-hpc-nhc-wrapper", unit=unit)
-    state = juju.exec("sinfo | awk '{print $5}' | sed 1d | tr -d '\n'", unit=unit)
-    assert state.stdout == "idle"
 
 
 @pytest.mark.order(10)

@@ -1,4 +1,4 @@
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 # Copyright 2024 Omnivector, LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,9 +49,6 @@ DEFAULT_SLURM_CONFIG = {
     "authtype": "auth/slurm",
     "credtype": "cred/slurm",
     "grestypes": ["gpu"],
-    "healthcheckinterval": 600,
-    "healthchecknodestate": ["any", "cycle"],
-    "healthcheckprogram": "/usr/sbin/charmed-hpc-nhc-wrapper",
     "mailprog": "/usr/bin/mail.mailutils",
     "maxnodecount": 65533,
     "plugindir": ["/usr/lib/x86_64-linux-gnu/slurm-wlm"],

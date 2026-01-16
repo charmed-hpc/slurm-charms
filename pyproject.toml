@@ -70,7 +70,7 @@ members = [
 [tool.uv.sources]
 slurm-ops = { workspace = true }
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
-hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "0363b8b56985dd527892f4edda152c9cfa4085ee" }
+hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "fd80bea35bd0fbab5518744a86c472aa5d73ffef" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]

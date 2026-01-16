@@ -27,7 +27,6 @@ from config import (
     reconfigure_slurmctld,
     update_cgroup_config,
     update_default_partition,
-    update_nhc_args,
     update_overrides,
 )
 from constants import (
@@ -246,7 +245,6 @@ class SlurmctldCharm(ops.CharmBase):
         """
         update_cgroup_config(self)
         update_default_partition(self)
-        update_nhc_args(self)
         update_overrides(self)
 
     @refresh
@@ -320,7 +318,6 @@ class SlurmctldCharm(ops.CharmBase):
             ControllerData(
                 auth_key=self.slurmctld.key.get(),
                 controllers=new_endpoints,
-                nhc_args=cast(str, self.config.get("health-check-params", "")),
             ),
             integration_id=event.relation.id,
         )
@@ -546,7 +543,6 @@ class SlurmctldCharm(ops.CharmBase):
                 controllers=new_endpoints,  # Update only the controllers
                 jwt_key="",
                 jwt_key_id=current.jwt_key_id,
-                nhc_args=current.nhc_args,
                 slurmconfig=current.slurmconfig,
             )
 

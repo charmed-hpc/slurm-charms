@@ -1,4 +1,4 @@
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 # Copyright 2020-2024 Omnivector, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,26 +104,6 @@ config:
       default: ""
       description: |
         User supplied configuration for `cgroup.conf`.
-
-    health-check-params:
-      default: ""
-      type: string
-      description: |
-        Extra parameters for NHC command.
-
-        This option can be used to customize how NHC is called. For example,
-        to send an e-mail to an admin when NHC detects an error, set this
-        value to `-M admin@domain.com`.
-
-    health-check-interval:
-      default: 600
-      type: int
-      description: Interval in seconds between executions of the Health Check.
-
-    health-check-state:
-      default: "ANY,CYCLE"
-      type: string
-      description: Only run the Health Check on nodes in this state.
 
 actions:
   show-current-config:

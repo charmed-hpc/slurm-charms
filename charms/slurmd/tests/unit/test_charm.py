@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023-2025 Canonical Ltd.
+# Copyright 2023-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ from slurmutils import Node
 
 EXAMPLE_AUTH_KEY = "xyz123=="
 EXAMPLE_CONTROLLERS = ["juju-988225-0:6817", "juju-988225-1:6817"]
-EXAMPLE_NHC_ARGS = "-X -v"
 
 
 @pytest.mark.parametrize(
@@ -134,14 +133,12 @@ class TestSlurmdCharm:
                     "auth_key": '"***"',
                     "auth_key_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps(EXAMPLE_CONTROLLERS),
-                    "nhc_args": json.dumps(EXAMPLE_NHC_ARGS),
                 }
                 if ready
                 else {
                     "auth_key": '"***"',
                     "auth_key_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps([]),
-                    "nhc_args": json.dumps(EXAMPLE_NHC_ARGS),
                 }
             ),
         )
@@ -196,7 +193,6 @@ class TestSlurmdCharm:
                 "auth_key": '"***"',
                 "auth_key_id": json.dumps(auth_key_secret.id),
                 "controllers": json.dumps(EXAMPLE_CONTROLLERS),
-                "nhc_args": json.dumps(EXAMPLE_NHC_ARGS),
             },
         )
 

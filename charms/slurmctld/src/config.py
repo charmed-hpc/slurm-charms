@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -141,19 +141,6 @@ def update_default_partition(charm: "SlurmctldCharm") -> None:
         if current_default != "" and current_default_include.exists():
             with current_default_include.edit() as config:
                 config.partitions[current_default].default = False
-
-
-def update_nhc_args(charm: "SlurmctldCharm") -> None:
-    """Update the NHC arguments sent to `slurmd` applications."""
-    if not charm.slurmd.is_joined():
-        _logger.warning("no enlisted partitions. not updating `nhc` arguments")
-        return
-
-    _logger.info("updating `nhc` arguments")
-    nhc_args = cast(str, charm.config.get("health-check-params", ""))
-    _logger.debug("`nhc` arguments: `%s`", nhc_args)
-    charm.slurmd.set_controller_data(ControllerData(nhc_args=nhc_args))
-    _logger.info("`nhc` arguments successfully updated")
 
 
 def update_overrides(charm: "SlurmctldCharm") -> None:

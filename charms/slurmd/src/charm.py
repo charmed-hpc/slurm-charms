@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 # Copyright 2020-2024 Omnivector, LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,6 @@ import logging
 from typing import cast
 
 import gpu
-import nhc
 import ops
 import rdma
 from config import (
@@ -70,7 +69,6 @@ class SlurmdCharm(ops.CharmBase):
             default_state=State.DOWN.value,
             default_reason="New node.",
             custom_node_config="",
-            custom_nhc_config="",
             custom_partition_config="",
         )
         framework.observe(self.on.install, self._on_install)
@@ -78,7 +76,6 @@ class SlurmdCharm(ops.CharmBase):
         framework.observe(self.on.update_status, self._on_update_status)
         framework.observe(self.on.node_configured_action, self._on_node_configured_action)
         framework.observe(self.on.node_config_action, self._on_node_config_action)
-        framework.observe(self.on.show_nhc_config_action, self._on_show_nhc_config_action)
 
         self.slurmctld = SlurmdProvider(self, SLURMD_INTEGRATION_NAME)
         framework.observe(
@@ -114,9 +111,6 @@ class SlurmdCharm(ops.CharmBase):
             self.unit.status = ops.MaintenanceStatus("Installing `slurmd`")
             self.slurmd.install()
 
-            self.unit.status = ops.MaintenanceStatus("Installing `nhc`")
-            nhc.install()
-
             self.unit.status = ops.MaintenanceStatus("Installing RDMA packages")
             rdma.install()
 
@@ -142,14 +136,6 @@ class SlurmdCharm(ops.CharmBase):
     @refresh
     def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
         """Update the `slurmd` application's configuration."""
-        custom_nhc_config = cast(str, self.config.get("nhc-conf", ""))
-        if custom_nhc_config != self.stored.custom_nhc_config:
-            logger.info("updating `nhc.conf` on unit '%s'", self.unit.name)
-            logger.debug("'%s' `nhc.conf`:\n%s", self.unit.name, custom_nhc_config)
-            nhc.generate_config(custom_nhc_config)
-            self.stored.custom_nhc_config = custom_nhc_config
-            logger.info("`nhc.conf` successfully updated on unit '%s'", self.unit.name)
-
         if self.unit.is_leader():
             custom_partition_config = cast(str, self.config.get("partition-config", ""))
             if custom_partition_config != self.stored.custom_partition_config:
@@ -196,7 +182,6 @@ class SlurmdCharm(ops.CharmBase):
 
         self.slurmd.key.set(data.auth_key)
         self.slurmd.conf_server = data.controllers
-        nhc.generate_wrapper(data.nhc_args)
         self.service_needs_restart = True
 
     @refresh
@@ -274,13 +259,6 @@ class SlurmdCharm(ops.CharmBase):
                 "user-supplied-node-parameters-accepted": f"{valid_config}",
             },
         )
-
-    def _on_show_nhc_config_action(self, event: ops.ActionEvent) -> None:
-        """Show current nhc.conf."""
-        try:
-            event.set_results({"nhc.conf": nhc.get_config()})
-        except FileNotFoundError:
-            event.set_results({"nhc.conf": "/etc/nhc/nhc.conf not found."})
 
 
 if __name__ == "__main__":  # pragma: nocover
