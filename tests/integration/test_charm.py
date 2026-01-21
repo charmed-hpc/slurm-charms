@@ -185,28 +185,23 @@ def test_set_node_state(juju: jubilant.Juju) -> None:
     """Test that the `set-node-state` action updates the state of registered compute nodes."""
     slurmctld_unit = f"{SLURMCTLD_APP_NAME}/0"
     slurmd_unit = f"{SLURMD_APP_NAME}/0"
-    # Get the hostname of the compute node via `juju exec`.
-    hostname = juju.exec("hostname -s", unit=slurmd_unit).stdout
+    name = slurmd_unit.replace("/", "-")
 
     logger.info("testing that the `set-node-state` action updates the state of compute nodes")
     # Set state of compute node to down with reason "Maintenance".
     juju.run(
         slurmctld_unit,
         "set-node-state",
-        params={"nodes": hostname, "state": "down", "reason": "maintenance"},
+        params={"nodes": name, "state": "down", "reason": "maintenance"},
     )
     # Check that the state of `slurmd/0` is 'down'.
-    result = json.loads(
-        juju.exec(f"scontrol --json show node {hostname}", unit=slurmctld_unit).stdout
-    )
+    result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmctld_unit).stdout)
     assert "DOWN" in result["nodes"][0]["state"]
     assert result["nodes"][0]["reason"] == "'maintenance'"
 
     # Reset state to 'idle'.
-    juju.run(slurmctld_unit, "set-node-state", params={"nodes": hostname, "state": "idle"})
-    result = json.loads(
-        juju.exec(f"scontrol --json show node {hostname}", unit=slurmctld_unit).stdout
-    )
+    juju.run(slurmctld_unit, "set-node-state", params={"nodes": name, "state": "idle"})
+    result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmctld_unit).stdout)
     assert "IDLE" in result["nodes"][0]["state"]
     assert result["nodes"][0]["reason"] == ""
 

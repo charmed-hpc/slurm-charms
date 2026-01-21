@@ -152,7 +152,7 @@ def reconfigure_slurmd(charm: "SlurmdCharm") -> None:
     #   the `slurmd` units still have running jobs, but the cluster administrator
     #   is applying updates to the node configuration, or removing the node from the
     #   Charmed HPC cluster. Is it a documentation or technical issue?
-    scontrol("delete", f"nodename={charm.slurmd.hostname}", check=False)
+    scontrol("delete", f"nodename={charm.slurmd.name}", check=False)
     try:
         charm.slurmd.service.enable()
         charm.slurmd.service.restart()

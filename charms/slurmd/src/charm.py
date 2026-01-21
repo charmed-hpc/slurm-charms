@@ -124,6 +124,7 @@ class SlurmdCharm(ops.CharmBase):
             self.slurmd.service.stop()
             self.slurmd.service.disable()
             self.slurmd.dynamic = True
+            self.slurmd.name = self.unit.name.replace("/", "-")
             self.unit.set_workload_version(self.slurmd.version())
 
         except (SlurmOpsError, gpu.GPUOpsError) as e:
@@ -189,7 +190,7 @@ class SlurmdCharm(ops.CharmBase):
     def _on_slurmctld_disconnected(self, event: SlurmctldDisconnectedEvent) -> None:
         """Handle when the unit is disconnected from `slurmctld`."""
         try:
-            scontrol("delete", f"nodename={self.slurmd.hostname}")
+            scontrol("delete", f"nodename={self.slurmd.name}")
             self.slurmd.service.stop()
             self.slurmd.service.disable()
             del self.slurmd.conf_server
@@ -211,7 +212,7 @@ class SlurmdCharm(ops.CharmBase):
 
         # Update the nodes state if it is already enlisted with `slurmctld`.
         try:
-            scontrol("update", f"nodename={self.slurmd.hostname}", "state=idle")
+            scontrol("update", f"nodename={self.slurmd.name}", "state=idle")
         except SlurmOpsError:
             pass
 

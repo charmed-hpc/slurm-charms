@@ -19,7 +19,7 @@ import json
 
 import ops
 import pytest
-from constants import SLURMD_INTEGRATION_NAME
+from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
 from hpc_libs.errors import SystemdError
 from ops import testing
 from pytest_mock import MockerFixture
@@ -39,6 +39,81 @@ EXAMPLE_CONTROLLERS = ["juju-988225-0:6817", "juju-988225-1:6817"]
 )
 class TestSlurmdCharm:
     """Unit tests for the `slurmd` charmed operator."""
+
+    @pytest.mark.parametrize(
+        "mock_install,install_success",
+        (
+            pytest.param(
+                lambda: None,
+                True,
+                id="install success",
+            ),
+            pytest.param(
+                lambda: (_ for _ in ()).throw(SlurmOpsError("failed to install slurmd")),
+                False,
+                id="install fail",
+            ),
+        ),
+    )
+    @pytest.mark.parametrize(
+        "mock_gpu_autoinstall_success",
+        (pytest.param(True, id="gpu detected"), pytest.param(False, id="gpu not detected")),
+    )
+    def test_on_install(
+        self,
+        mock_charm,
+        mocker: MockerFixture,
+        mock_install,
+        install_success,
+        mock_gpu_autoinstall_success,
+        leader,
+    ) -> None:
+        """Test the `_on_install` event handler."""
+        with mock_charm(mock_charm.on.install(), testing.State(leader=leader)) as manager:
+            slurmd = manager.charm.slurmd
+
+            # Patch `slurmd` manager.
+            mocker.patch.object(slurmd, "install", mock_install)
+            mocker.patch.object(slurmd, "is_installed", lambda: install_success)
+            mocker.patch.object(slurmd, "version", return_value="25.11")
+            mocker.patch.object(slurmd.service, "stop")
+            mocker.patch.object(slurmd.service, "disable")
+
+            # Patch `rdma` module.
+            mocker.patch("rdma.install")
+
+            # Patch `gpu` module.
+            mocker.patch("gpu.autoinstall", lambda: mock_gpu_autoinstall_success)
+
+            state = manager.run()
+
+        if install_success:
+            assert slurmd.name == manager.charm.unit.name.replace("/", "-")
+            assert slurmd.dynamic is True
+            assert state.workload_version == "25.11"
+            assert state.opened_ports == frozenset(
+                {testing.TCPPort(port=SLURMD_PORT, protocol="tcp")}
+            )
+
+            if mock_gpu_autoinstall_success:
+                assert (
+                    ops.MaintenanceStatus("Detecting if machine is GPU-equipped")
+                    in mock_charm.unit_status_history
+                )
+            else:
+                assert (
+                    ops.MaintenanceStatus("No GPUs found. Continuing")
+                    in mock_charm.unit_status_history
+                )
+
+            assert state.unit_status == ops.BlockedStatus(
+                "Waiting for integrations: [`slurmctld`]"
+            )
+        else:
+            assert len(state.deferred) > 0
+            assert state.unit_status == ops.BlockedStatus(
+                "`slurmd` is not installed. See `juju debug-log` for details"
+            )
 
     @pytest.mark.parametrize(
         "mock_partition,expected",
