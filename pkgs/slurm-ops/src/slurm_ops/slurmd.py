@@ -73,6 +73,17 @@ class SlurmdManager(SlurmManager):
             options["-Z"] = value
 
     @property
+    def name(self) -> str:
+        """Get the name that the compute node is registered under in Slurm."""
+        options = self._load_options()
+        return options.get("-N", "")
+
+    @name.setter
+    def name(self, value: str) -> None:
+        with self._edit_options() as options:
+            options["-N"] = value
+
+    @property
     def user(self) -> str:
         """Get the user that the `slurmd` service runs as."""
         return SLURMD_USER
