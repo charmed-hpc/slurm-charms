@@ -43,16 +43,8 @@ class TestSlurmdCharm:
     @pytest.mark.parametrize(
         "mock_install,install_success",
         (
-            pytest.param(
-                lambda: None,
-                True,
-                id="install success",
-            ),
-            pytest.param(
-                lambda: (_ for _ in ()).throw(SlurmOpsError("failed to install slurmd")),
-                False,
-                id="install fail",
-            ),
+            pytest.param(None, True, id="install success"),
+            pytest.param(SlurmOpsError("failed to install slurmd"), False, id="install fail"),
         ),
     )
     @pytest.mark.parametrize(
@@ -73,7 +65,7 @@ class TestSlurmdCharm:
             slurmd = manager.charm.slurmd
 
             # Patch `slurmd` manager.
-            mocker.patch.object(slurmd, "install", mock_install)
+            mocker.patch.object(slurmd, "install", side_effect=mock_install)
             mocker.patch.object(slurmd, "is_installed", lambda: install_success)
             mocker.patch.object(slurmd, "version", return_value="25.11")
             mocker.patch.object(slurmd.service, "stop")
@@ -97,7 +89,7 @@ class TestSlurmdCharm:
 
             if mock_gpu_autoinstall_success:
                 assert (
-                    ops.MaintenanceStatus("Detecting if machine is GPU-equipped")
+                    ops.MaintenanceStatus("Successfully installed GPU drivers")
                     in mock_charm.unit_status_history
                 )
             else:
@@ -120,7 +112,7 @@ class TestSlurmdCharm:
         (
             pytest.param(None, ops.WaitingStatus("Waiting for `slurmd` to start"), id="success"),
             pytest.param(
-                lambda _: (_ for _ in ()).throw(SlurmOpsError("failed to load config")),
+                SlurmOpsError("failed to load config"),
                 ops.BlockedStatus(
                     "Failed to update partition configuration. "
                     + "See `juju debug-log` for details"
@@ -148,7 +140,7 @@ class TestSlurmdCharm:
             slurmd = manager.charm.slurmd
             mocker.patch.object(slurmd, "is_installed", return_value=True)
             if mock_partition:
-                mocker.patch("slurmutils.Partition.from_str", mock_partition)
+                mocker.patch("slurmutils.Partition.from_str", side_effect=mock_partition)
 
             state = manager.run()
 
@@ -164,13 +156,13 @@ class TestSlurmdCharm:
         "mock_restart,ready,expected",
         (
             pytest.param(
-                lambda: None,
+                None,
                 True,
                 ops.ActiveStatus(),
                 id="ready-start success",
             ),
             pytest.param(
-                lambda: (_ for _ in ()).throw(SystemdError("restart failed")),
+                SystemdError("restart failed"),
                 True,
                 ops.BlockedStatus(
                     "Failed to apply new `slurmd` configuration. See `juju debug-log` for details"
@@ -178,13 +170,13 @@ class TestSlurmdCharm:
                 id="ready-start fail",
             ),
             pytest.param(
-                lambda: None,
+                None,
                 False,
                 ops.WaitingStatus("Waiting for controller data"),
                 id="not ready-start success",
             ),
             pytest.param(
-                lambda: (_ for _ in ()).throw(SystemdError("restart failed")),
+                SystemdError("restart failed"),
                 False,
                 ops.WaitingStatus("Waiting for controller data"),
                 id="not ready-start fail",
@@ -227,9 +219,9 @@ class TestSlurmdCharm:
             ),
         ) as manager:
             slurmd = manager.charm.slurmd
+            mocker.patch.object(slurmd.service, "restart", side_effect=mock_restart)
             mocker.patch.object(slurmd, "is_installed", return_value=True)
             mocker.patch.object(slurmd.service, "is_active")
-            mocker.patch.object(slurmd.service, "restart", mock_restart)
             mocker.patch("config.get_node_info", return_value=Node(cpus=8))
             mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
 
@@ -241,12 +233,12 @@ class TestSlurmdCharm:
         "mock_stop,expected",
         (
             pytest.param(
-                lambda: None,
+                None,
                 ops.BlockedStatus("Waiting for integrations: [`slurmctld`]"),
                 id="stop success",
             ),
             pytest.param(
-                lambda: (_ for _ in ()).throw(SystemdError("stop failed")),
+                SystemdError("stop failed"),
                 ops.BlockedStatus("Failed to stop `slurmd`. See `juju debug-log` for details"),
                 id="stop fail",
             ),
@@ -276,8 +268,8 @@ class TestSlurmdCharm:
             testing.State(leader=leader, relations={integration}, secrets={auth_key_secret}),
         ) as manager:
             slurmd = manager.charm.slurmd
+            mocker.patch.object(slurmd.service, "stop", side_effect=mock_stop)
             mocker.patch.object(slurmd, "is_installed", return_value=True)
-            mocker.patch.object(slurmd.service, "stop", mock_stop)
 
             state = manager.run()
 
