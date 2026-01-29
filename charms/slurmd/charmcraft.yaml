@@ -75,22 +75,49 @@ actions:
   node-configured:
     description: Remove a node from DownNodes when the reason is `New node`.
 
-  node-config:
-    description: >
-      Set or return node configuration parameters.
+  set-node-config:
+    description: |
+      Set a custom configuration for the node.
 
-      To get the current node configuration for this unit:
-      ``bash
-      $ juju run slurmd/0 node-parameters
+      For example, to set a custom weight for the node, run:
+
+      ```shell
+      juju run slurmd/0 set-node-config parameters="weight=200"
       ```
 
-      To set node level configuration parameters for the unit `slurmd/0`:
-      ``bash
-      $ juju run slurmd/0 node-config parameters="Weight=200 Gres=gpu:tesla:1,gpu:kepler:1,bandwidth:lustre:no_consume:4G"
-      ```
+      To reset the applied custom configuration, run:
 
+      ```shell
+      juju run slurmd/0 set-node-config reset=true
+      ```
     params:
       parameters:
         type: string
-        description: >
-          Node configuration parameter as defined [here](https://slurm.schedmd.com/slurm.conf.html#SECTION_NODE-CONFIGURATION).
+        description: |
+          Node configuration parameters.
+
+          See the "Node configuration" of the slurm.conf manpage for a full
+          description of each option: https://slurm.schedmd.com/slurm.conf.html#SECTION_NODE-CONFIGURATION
+
+          The following charm-managed parameters cannot be set using this action:
+
+          - NodeName
+          - NodeAddr
+          - NodeHostname
+          - State
+          - Reason
+          - Port
+        default: ""
+
+      reset:
+        type: boolean
+        description: |
+          If true, reset the node to its base configuration set by `slurmd -C`.
+
+          This parameter can be used with the `parameters` parameter to replace the existing
+          custom node configuration with a new custom configuration:
+
+          ```shell
+          juju run slurmd/0 set-node-config parameters="weight=100" reset=true
+          ```
+        default: false

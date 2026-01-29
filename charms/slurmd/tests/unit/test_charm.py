@@ -274,3 +274,45 @@ class TestSlurmdCharm:
             state = manager.run()
 
         assert state.unit_status == expected
+
+    @pytest.mark.parametrize(
+        "params,accepted",
+        (
+            pytest.param(
+                {"parameters": "nodeport=427", "reset": True},
+                False,
+                id="invalid config",
+            ),
+            pytest.param(
+                {"parameters": "nodename=compute-0 port=67", "reset": True},
+                False,
+                id="override charm managed config",
+            ),
+            pytest.param(
+                {"parameters": "weight=200", "reset": True},
+                True,
+                id="reset custom config",
+            ),
+            pytest.param(
+                {"parameters": "realmemory=3072", "reset": False},
+                True,
+                id="merge custom config",
+            ),
+        ),
+    )
+    def test_on_set_node_config_action(self, mock_charm, params, accepted, leader) -> None:
+        """Test the `_on_set_node_config_action` action event handler."""
+        with mock_charm(
+            mock_charm.on.action("set-node-config", params=params),
+            testing.State(leader=leader),
+        ) as manager:
+            manager.run()
+
+        if accepted:
+            assert mock_charm.action_results == {"accepted": True}
+        else:
+            assert mock_charm.action_results == {"accepted": False}
+            # FIXME: https://github.com/canonical/operator/issues/2294
+            #   The Slurm charms must be upgraded to ops >= 3.4.0 so that an `ActionFailed`
+            #   failed event can be caught instead of inspecting a private attribute.
+            assert mock_charm._action_failure_message is not None

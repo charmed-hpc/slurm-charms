@@ -24,7 +24,6 @@ import ops
 import rdma
 from config import (
     State,
-    get_node_info,
     get_partition,
     reboot_if_required,
     reconfigure_slurmd,
@@ -75,7 +74,7 @@ class SlurmdCharm(ops.CharmBase):
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.update_status, self._on_update_status)
         framework.observe(self.on.node_configured_action, self._on_node_configured_action)
-        framework.observe(self.on.node_config_action, self._on_node_config_action)
+        framework.observe(self.on.set_node_config_action, self._on_set_node_config_action)
 
         self.slurmctld = SlurmdProvider(self, SLURMD_INTEGRATION_NAME)
         framework.observe(
@@ -220,46 +219,45 @@ class SlurmdCharm(ops.CharmBase):
 
     @refresh
     @reconfigure
-    def _on_node_config_action(self, event: ops.ActionEvent) -> None:
-        """Get or set the user_supplied_node_config.
+    def _on_set_node_config_action(self, event: ops.ActionEvent) -> None:
+        """Handle when the `set-node-config` action is run."""
+        try:
+            custom = Node.from_str(event.params["parameters"])
+        except (ModelError, ValueError) as e:
+            event.fail(
+                f"Validation for custom node configuration parameters '{event.params["parameters"]}'"
+                f" failed. Reason:\n{e.args[0]}"
+            )
+            event.set_results({"accepted": False})
+            return
 
-        Return the node config if the `node-config` parameter is not specified, otherwise
-        parse, validate, and store the input of the `node-config` parameter in stored state.
-        Lastly, update slurmctld if there are updates to the node config.
-        """
-        # Reassemble the node configuration here rather than read `/etc/default/slurmd` directly.
-        # If we don't do this, `node-config` will return a node configuration that may defer
-        # from what's actually set in Slurm since `node-config` will overwrite rather than
-        # update the existing custom node configuration.
-        base = get_node_info()
-        custom = event.params.get("parameters", "")
-        if (state := self.stored.default_state) != "idle":
-            base.state = state
-        if reason := self.stored.default_reason:
-            base.reason = reason
+        if any(
+            (
+                custom.node_name is not None,
+                custom.node_addr is not None,
+                custom.node_hostname is not None,
+                custom.state is not None,
+                custom.reason is not None,
+                custom.port is not None,
+            )
+        ):
+            event.fail(
+                f"Cannot apply custom node configuration parameters '{event.params["parameters"]}'."
+                f" Reason: Overrides charm-managed configuration parameter."
+            )
+            event.set_results({"accepted": False})
+            return
 
-        valid_config = False
-        if custom:
-            try:
-                custom_config = Node.from_str(custom)
-                valid_config = True
-            except (ModelError, ValueError) as e:
-                logger.error(e)
+        if event.params["reset"]:
+            self.stored.custom_node_config = str(custom)
+        else:
+            current = Node.from_str(self.stored.custom_node_config)
+            current.update(custom)
+            self.stored.custom_node_config = str(current)
 
-            if valid_config:
-                if (
-                    custom_node_config := str(custom_config)  # type: ignore
-                ) != self.stored.custom_node_config:
-                    self.stored.custom_node_config = custom_node_config
-                    self.service_needs_restart = True
-
-        base.update(Node.from_str(self.stored.custom_node_config))
-        event.set_results(
-            {
-                "node-parameters": str(base),
-                "user-supplied-node-parameters-accepted": f"{valid_config}",
-            },
-        )
+        self.service_needs_restart = True
+        # TODO: Return updated `slurm.conf` once `reconfigure` is refactored.
+        event.set_results({"accepted": True})
 
 
 if __name__ == "__main__":  # pragma: nocover

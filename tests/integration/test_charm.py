@@ -181,6 +181,24 @@ def test_node_configured_action(juju: jubilant.Juju) -> None:
 
 
 @pytest.mark.order(8)
+def test_set_node_config_action(juju: jubilant.Juju) -> None:
+    """Test that a compute node's configuration can be successfully updated."""
+    slurmd_unit = f"{SLURMD_APP_NAME}/0"
+    name = slurmd_unit.replace("/", "-")
+
+    logger.info("testing that we can update the configuration of a single compute node")
+    juju.run(slurmd_unit, "set-node-config", params={"parameters": "weight=100"})
+    # Check that the weight of the compute node is 100.
+    result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmd_unit).stdout)
+    assert result["nodes"][0]["weight"] == 100
+
+    # Reset compute node to its default configuration.
+    juju.run(slurmd_unit, "set-node-config", params={"reset": True})
+    result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmd_unit).stdout)
+    assert result["nodes"][0]["weight"] == 1
+
+
+@pytest.mark.order(9)
 def test_set_node_state(juju: jubilant.Juju) -> None:
     """Test that the `set-node-state` action updates the state of registered compute nodes."""
     slurmctld_unit = f"{SLURMCTLD_APP_NAME}/0"
