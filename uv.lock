@@ -290,7 +290,7 @@ wheels = [
 [[package]]
 name = "hpc-libs"
 version = "0.1.2"
-source = { git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef#fd80bea35bd0fbab5518744a86c472aa5d73ffef" }
+source = { git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff#9fba44f1729eba44be5577f679e5c03f588bcfff" }
 
 [package.optional-dependencies]
 all = [
@@ -518,17 +518,16 @@ wheels = [
 
 [[package]]
 name = "ops"
-version = "2.23.1"
+version = "3.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "importlib-metadata" },
     { name = "opentelemetry-api" },
     { name = "pyyaml" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/38/2d/488896632da371da6af1265c5fc6e39142f14b31d4c78a6c69cf453fcfd9/ops-2.23.1.tar.gz", hash = "sha256:aecacd67ef7ca913f63f397e0330bfa93d70529a3ef71ed2d99e2bc232564ae3", size = 527723, upload-time = "2025-07-30T06:26:55.029Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/d7/86b0b4db046221db85d8c8bc4c1df22aa3915b17081530f6c25ede7243e7/ops-3.5.1.tar.gz", hash = "sha256:376ef51d35d45b376795196851550e209565e922e58af8ac491cf23bc8b46498", size = 577928, upload-time = "2026-01-28T03:10:52.817Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ac/62/4b7bb8fa879c672d53cd3b58dc4df0f8cd8007e32d8bc73ec21d8bf238c6/ops-2.23.1-py3-none-any.whl", hash = "sha256:fdf58163beafd25180c12a4c7efaf1e76e5f8710508a97840c07055bb78b0c77", size = 188414, upload-time = "2025-07-30T06:26:53.361Z" },
+    { url = "https://files.pythonhosted.org/packages/59/77/e9ba7bd69917bf481dd8f3162ec37b028021d605f8e17a1fd05a5ec103e8/ops-3.5.1-py3-none-any.whl", hash = "sha256:890dd7bf33d1381afeed0e484d02c7bb13ad3945dcc7b723e8d73e4bba0ff94c", size = 211691, upload-time = "2026-01-28T03:10:48.778Z" },
 ]
 
 [package.optional-dependencies]
@@ -538,15 +537,16 @@ testing = [
 
 [[package]]
 name = "ops-scenario"
-version = "7.23.1"
+version = "8.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
     { name = "pyyaml" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dd/5d/bb3b6fd722b2b1f0831252e5cbd5a632ecce5361b5c4c009caf67ac30c19/ops_scenario-7.23.1.tar.gz", hash = "sha256:ae71a9a27c953b65d621495008f9f785aff28543810660063541d0b2990b2101", size = 109493, upload-time = "2025-07-30T06:26:59.101Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bc/de/b6de767862bcdfce2e68eeedc578dd0b1332eb0a73af0da6ee9244c5b514/ops_scenario-8.5.1.tar.gz", hash = "sha256:9b9a3cd67b5704f58d17952ca9327d11391a3b3ce7daea26d040458165e1117f", size = 112317, upload-time = "2026-01-28T03:10:54.486Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/78/75811a1368507f66660c3e38a69da4a1c8f2b9968b10e67741c786576686/ops_scenario-7.23.1-py3-none-any.whl", hash = "sha256:fe56f4cd19fb003285505b2fe22bc5c5beda77e06496bd0ed833456b55008324", size = 64312, upload-time = "2025-07-30T06:26:57.572Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/c3/5c84236fa8054ebad8b371582cecadfe9a03e77625176db37501a529f8d2/ops_scenario-8.5.1-py3-none-any.whl", hash = "sha256:909be01c223726019659b5454b4792c38b1d6ed5e8835d1d71794d6202b0f0ec", size = 64069, upload-time = "2026-01-28T03:10:50.077Z" },
 ]
 
 [[package]]
@@ -900,7 +900,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
     { name = "slurm-ops", editable = "pkgs/slurm-ops" },
 ]
@@ -964,12 +964,12 @@ requires-dist = [
     { name = "dbus-fast", marker = "extra == 'dev'", specifier = ">=1.90.2" },
     { name = "distro", marker = "extra == 'dev'", specifier = "==1.9.0" },
     { name = "flake8", marker = "extra == 'dev'" },
-    { name = "hpc-libs", extras = ["all"], git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", extras = ["all"], git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "influxdb", specifier = "==5.3.2" },
     { name = "jubilant", marker = "extra == 'dev'", specifier = "~=1.0" },
     { name = "nvidia-ml-py", specifier = "==12.560.30" },
-    { name = "ops", specifier = "~=2.19" },
-    { name = "ops", extras = ["testing"], marker = "extra == 'dev'", specifier = "~=2.19" },
+    { name = "ops", specifier = "~=3.0" },
+    { name = "ops", extras = ["testing"], marker = "extra == 'dev'", specifier = "~=3.0" },
     { name = "psutil", specifier = "==7.2.1" },
     { name = "pycryptodome", marker = "extra == 'dev'", specifier = "==3.20.0" },
     { name = "pyfakefs", marker = "extra == 'dev'", specifier = "==5.10.1" },
@@ -1000,7 +1000,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hpc-libs", extras = ["machine"], git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", extras = ["machine"], git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "slurmutils" },
 ]
 
@@ -1021,7 +1021,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cosl" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "influxdb" },
     { name = "ops" },
     { name = "psutil" },
@@ -1046,7 +1046,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cosl" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "nvidia-ml-py" },
     { name = "ops" },
     { name = "slurm-ops", editable = "pkgs/slurm-ops" },
@@ -1069,7 +1069,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cosl" },
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
     { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },
@@ -1088,7 +1088,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=fd80bea35bd0fbab5518744a86c472aa5d73ffef" },
+    { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
     { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },

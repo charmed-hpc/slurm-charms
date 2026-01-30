@@ -1,4 +1,4 @@
-# Copyright 2023-2025 Canonical Ltd.
+# Copyright 2023-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ name = "slurm-charms"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops ~= 2.19",
+    "ops ~= 3.0",
     "slurmutils<2.0.0,>=1.1.1",
     "influxdb==5.3.2",
     "nvidia-ml-py==12.560.30",
@@ -31,7 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     # Tests
-    "ops[testing]~=2.19",
+    "ops[testing] ~= 3.0",
     "cryptography~=44.0.1",
     "distro==1.9.0",
     "python-dotenv~=1.1.1",
@@ -70,7 +70,7 @@ members = [
 [tool.uv.sources]
 slurm-ops = { workspace = true }
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
-hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "fd80bea35bd0fbab5518744a86c472aa5d73ffef" }
+hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "9fba44f1729eba44be5577f679e5c03f588bcfff" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
