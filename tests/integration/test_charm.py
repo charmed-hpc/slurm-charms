@@ -149,38 +149,15 @@ def test_slurmdbd_port_number(juju: jubilant.Juju) -> None:
 
 
 @pytest.mark.order(6)
-def test_new_slurmd_unit_state_and_reason(juju: jubilant.Juju) -> None:
+def test_default_slurmd_unit_node_state_and_reason(juju: jubilant.Juju) -> None:
     """Test that new nodes join the cluster in a down state and with an appropriate reason."""
-    unit = f"{SACKD_APP_NAME}/0"
+    slurmd_unit = f"{SLURMD_APP_NAME}/0"
+    name = slurmd_unit.replace("/", "-")
 
-    logger.info("testing that a new slurmd unit is down with the reason: 'New node.'")
-    reason = juju.exec("sinfo -R | awk '{print $1, $2}' | sed 1d | tr -d '\n'", unit=unit)
-    state = juju.exec("sinfo | awk '{print $5}' | sed 1d | tr -d '\n'", unit=unit)
-    assert reason.stdout == "New node."
-    assert state.stdout == "down"
-
-
-@pytest.mark.order(7)
-@tenacity.retry(
-    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=30),
-    stop=tenacity.stop_after_attempt(3),
-    reraise=True,
-)
-def test_node_configured_action(juju: jubilant.Juju) -> None:
-    """Test that the node-configured charm action makes slurmd unit 'idle'.
-
-    Warnings:
-        There is some latency between when `node-configured` is run and when
-        `compute/0` becomes active within Slurm. `tenacity` is used here to account
-        for that delay by retrying this test over an expanding period of time to
-        give Slurm some additional time to reconfigure itself.
-    """
-    unit = f"{SLURMD_APP_NAME}/0"
-
-    logger.info("testing that the `node-configured` charm action makes node status 'idle'")
-    juju.run(unit, "node-configured")
-    state = juju.exec("sinfo | awk '{print $5}' | sed 1d | tr -d '\n'", unit=unit)
-    assert state.stdout == "idle"
+    logger.info("testing that a new slurmd unit is down with the reason: 'n/a'")
+    result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmd_unit).stdout)
+    assert "DOWN" in result["nodes"][0]["state"]
+    assert result["nodes"][0]["reason"] == "'n/a'"
 
 
 @pytest.mark.order(8)
@@ -194,11 +171,15 @@ def test_set_node_config_action(juju: jubilant.Juju) -> None:
     # Check that the weight of the compute node is 100.
     result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmd_unit).stdout)
     assert result["nodes"][0]["weight"] == 100
+    assert "DOWN" in result["nodes"][0]["state"]
+    assert result["nodes"][0]["reason"] == "'n/a'"
 
     # Reset compute node to its default configuration.
     juju.run(slurmd_unit, "set-node-config", params={"reset": True})
     result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmd_unit).stdout)
     assert result["nodes"][0]["weight"] == 1
+    assert "DOWN" in result["nodes"][0]["state"]
+    assert result["nodes"][0]["reason"] == "'n/a'"
 
 
 @pytest.mark.order(9)
@@ -220,7 +201,7 @@ def test_set_node_state(juju: jubilant.Juju) -> None:
     assert "DOWN" in result["nodes"][0]["state"]
     assert result["nodes"][0]["reason"] == "'maintenance'"
 
-    # Reset state to 'idle'.
+    # Set state to 'idle'.
     juju.run(slurmctld_unit, "set-node-state", params={"nodes": name, "state": "idle"})
     result = json.loads(juju.exec(f"scontrol --json show node {name}", unit=slurmctld_unit).stdout)
     assert "IDLE" in result["nodes"][0]["state"]
@@ -251,6 +232,7 @@ def test_gpu_job_submission(juju: jubilant.Juju) -> None:
     """
     sackd_unit = f"{SACKD_APP_NAME}/0"
     slurmd_unit = f"{SLURMD_APP_NAME}/0"
+    name = slurmd_unit.replace("/", "-")
 
     # Set up a mock GPU device on the slurmd unit by mounting over relevant files in /sys and /proc
     # This is tightly coupled to the method the Slurm "Autodetect=nvidia" plugin uses to detect GPUs
@@ -297,16 +279,15 @@ def test_gpu_job_submission(juju: jubilant.Juju) -> None:
 
     # Manually add Gres line to dynamic node config. Necessary as the mock GPU was not present at
     # charm install time so was not auto-detected.
-    juju.exec("sudo sed -i \"s/'$/ gres=gpu:mock_gpu:1'/\" /etc/default/slurmd", unit=slurmd_unit)
+    juju.run(slurmd_unit, "set-node-config", {"parameters": "gres=gpu:mock_gpu:1"})
 
     # Temporarily disable constrained devices to avoid cgroup errors in the test LXD containers
     juju.config(SLURMCTLD_APP_NAME, values={"cgroup-parameters": "constraindevices=no"})
 
     # Re-register the node to pick up the new GPU
     slurmd_result = juju.exec("hostname -s", unit=slurmd_unit)
-    slurmd_nodename = slurmd_result.stdout.strip()
-    logger.info("re-registering slurmd node '%s' to set up mock GPU", slurmd_nodename)
-    juju.exec(f"sudo scontrol delete NodeName={slurmd_nodename}", unit=sackd_unit)
+    logger.info("re-registering slurmd node '%s' to set up mock GPU", name)
+    juju.exec(f"sudo scontrol delete nodename={name}", unit=sackd_unit)
     juju.exec("sudo systemctl restart slurmd", unit=slurmd_unit)
 
     logger.info("testing that a GPU job can be submitted to slurm and successfully run")
@@ -331,7 +312,7 @@ def test_gpu_job_submission(juju: jubilant.Juju) -> None:
     juju.exec("sudo rm -rf /tmp/sys", unit=slurmd_unit)
     juju.exec("sudo rm -rf /tmp/proc", unit=slurmd_unit)
     juju.exec("sudo rm -f /dev/nvidia0", unit=slurmd_unit)
-    juju.exec("sudo sed -i \"s/ gres=gpu:mock_gpu:1'/'/\" /etc/default/slurmd", unit=slurmd_unit)
+    juju.run(slurmd_unit, "set-node-config", {"reset": True})
     juju.config(SLURMCTLD_APP_NAME, reset="cgroup-parameters")
-    juju.exec(f"sudo scontrol delete NodeName={slurmd_nodename}", unit=sackd_unit)
+    juju.exec(f"sudo scontrol delete nodename={name}", unit=sackd_unit)
     juju.exec("sudo systemctl restart slurmd", unit=slurmd_unit)

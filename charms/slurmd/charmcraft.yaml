@@ -57,6 +57,28 @@ provides:
 
 config:
   options:
+    default-node-state:
+      type: string
+      description: |
+        Default state to start newly deployed compute nodes in.
+
+        Valid states are:
+
+        - down
+        - idle
+
+        Deployed slurmd applications will block if an invalid state
+        is configured.
+      default: "down"
+
+    default-node-reason:
+      type: string
+      description: |
+        Default reason to provide for the state of newly deployed compute nodes.
+
+        Configured value will be ignored if the default node state is "idle".
+      default: ""
+
     partition-config:
       type: string
       default: ""
@@ -72,9 +94,6 @@ config:
         ```
 
 actions:
-  node-configured:
-    description: Remove a node from DownNodes when the reason is `New node`.
-
   set-node-config:
     description: |
       Set a custom configuration for the node.

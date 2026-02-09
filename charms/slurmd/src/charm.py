@@ -17,22 +17,16 @@
 """Charmed operator for `slurmd`, Slurm's compute node service."""
 
 import logging
-from typing import cast
 
 import gpu
 import ops
 import rdma
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from config import (
-    State,
-    get_partition,
-    reboot_if_required,
-    reconfigure_slurmd,
-    set_partition,
-)
+from config import ConfigManager
 from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
 from hpc_libs.errors import SystemdError
 from hpc_libs.interfaces import (
+    ComputeData,
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
@@ -41,14 +35,12 @@ from hpc_libs.interfaces import (
     controller_ready,
     wait_unless,
 )
-from hpc_libs.utils import StopCharm, reconfigure, refresh
-from slurm_ops import SlurmdManager, SlurmOpsError, scontrol
+from hpc_libs.utils import StopCharm, refresh
+from slurm_ops import SlurmdManager, SlurmOpsError
 from slurmutils import ModelError, Node
-from state import check_slurmd, slurmd_installed
+from state import check_slurmd, reboot_if_required, slurmd_installed
 
 logger = logging.getLogger(__name__)
-reconfigure = reconfigure(hook=reconfigure_slurmd)
-reconfigure.__doc__ = """Reconfigure the `slurmd` service after an event handler completes."""
 refresh = refresh(hook=check_slurmd)
 refresh.__doc__ = """Refresh status of the `slurmd` unit after an event handler completes."""
 
@@ -56,23 +48,19 @@ refresh.__doc__ = """Refresh status of the `slurmd` unit after an event handler 
 class SlurmdCharm(ops.CharmBase):
     """Charmed operator for `slurmd`, Slurm's compute node service."""
 
-    stored = ops.StoredState()
-    service_needs_restart: bool = False
-
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
 
-        self.slurmd = SlurmdManager(snap=False)
-        self.stored.set_default(
-            default_state=State.DOWN.value,
-            default_reason="New node.",
-            custom_node_config="",
-            custom_partition_config="",
-        )
+        self.slurmd = SlurmdManager(self.app.name, snap=False)
+        try:
+            self.configmgr = ConfigManager.load(self.config, self.app.name)
+        except SlurmOpsError as e:
+            self.unit.status = ops.BlockedStatus(e.message)
+            return
+
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.update_status, self._on_update_status)
-        framework.observe(self.on.node_configured_action, self._on_node_configured_action)
         framework.observe(self.on.set_node_config_action, self._on_set_node_config_action)
 
         self.slurmctld = SlurmdProvider(self, SLURMD_INTEGRATION_NAME)
@@ -121,10 +109,10 @@ class SlurmdCharm(ops.CharmBase):
 
             self.slurmd.service.stop()
             self.slurmd.service.disable()
+            self.slurmd.conf = self.slurmd.build_node()
             self.slurmd.dynamic = True
             self.slurmd.name = self.unit.name.replace("/", "-")
             self.unit.set_workload_version(self.slurmd.version())
-
         except (SlurmOpsError, gpu.GPUOpsError) as e:
             logger.error(e.message)
             event.defer()
@@ -135,21 +123,7 @@ class SlurmdCharm(ops.CharmBase):
     @refresh
     def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
         """Update the `slurmd` application's configuration."""
-        if self.unit.is_leader():
-            custom_partition_config = cast(str, self.config.get("partition-config", ""))
-            if custom_partition_config != self.stored.custom_partition_config:
-                try:
-                    set_partition(self, get_partition(self))
-                except SlurmOpsError as e:
-                    logger.error(e)
-                    raise StopCharm(
-                        ops.BlockedStatus(
-                            "Failed to update partition configuration. "
-                            + "See `juju debug-log` for details"
-                        )
-                    )
-
-                self.stored.custom_partition_config = custom_partition_config
+        self.slurmctld.set_compute_data(ComputeData(partition=self.configmgr.partition_config))
 
     @refresh
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
@@ -159,20 +133,12 @@ class SlurmdCharm(ops.CharmBase):
     @block_unless(slurmd_installed)
     def _on_slurmctld_connected(self, event: SlurmctldConnectedEvent) -> None:
         """Handle when the `slurmd` application is connected to `slurmctld`."""
-        try:
-            set_partition(self, get_partition(self))
-        except SlurmOpsError as e:
-            logger.error(e)
-            event.defer()
-            raise StopCharm(
-                ops.BlockedStatus(
-                    "Failed to update partition configuration. "
-                    + "See `juju debug-log` for details"
-                )
-            )
+        self.slurmctld.set_compute_data(
+            ComputeData(partition=self.configmgr.partition_config),
+            integration_id=event.relation.id,
+        )
 
     @refresh
-    @reconfigure
     @wait_unless(controller_ready)
     @block_unless(slurmd_installed)
     def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
@@ -181,14 +147,33 @@ class SlurmdCharm(ops.CharmBase):
 
         self.slurmd.key.set(data.auth_key)
         self.slurmd.conf_server = data.controllers
-        self.service_needs_restart = True
+
+        # Set default state and reason if this compute node is being added to a Slurm cluster
+        # and not just updated an updated controller list or Slurm key.
+        params = {}
+        if not self.slurmd.exists():
+            params = {
+                "state": self.configmgr.default_node_state,
+                "reason": self.configmgr.default_node_reason,
+            }
+
+        try:
+            self.slurmd.reconfigure(**params)
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to apply updated `slurmd` configuration. "
+                    "See `juju debug-log` for details"
+                )
+            )
 
     @refresh
     @block_unless(slurmd_installed)
     def _on_slurmctld_disconnected(self, event: SlurmctldDisconnectedEvent) -> None:
         """Handle when the unit is disconnected from `slurmctld`."""
         try:
-            scontrol("delete", f"nodename={self.slurmd.name}")
+            self.slurmd.delete()
             self.slurmd.service.stop()
             self.slurmd.service.disable()
             del self.slurmd.conf_server
@@ -199,32 +184,14 @@ class SlurmdCharm(ops.CharmBase):
                 ops.BlockedStatus("Failed to stop `slurmd`. See `juju debug-log` for details")
             )
 
-    def _on_node_configured_action(self, _: ops.ActionEvent) -> None:
-        """Move node from 'down' to 'idle'."""
-        self.stored.default_state = State.IDLE.value
-        self.stored.default_reason = ""
-
-        node = self.slurmd.conf
-        del node.state
-        self.slurmd.conf = node
-
-        # Update the nodes state if it is already enlisted with `slurmctld`.
-        try:
-            scontrol("update", f"nodename={self.slurmd.name}", "state=idle")
-        except SlurmOpsError:
-            pass
-
-        logger.debug("this node is not new anymore")
-
     @refresh
-    @reconfigure
     def _on_set_node_config_action(self, event: ops.ActionEvent) -> None:
         """Handle when the `set-node-config` action is run."""
         try:
             custom = Node.from_str(event.params["parameters"])
         except (ModelError, ValueError) as e:
             event.fail(
-                f"Validation for custom node configuration parameters '{event.params["parameters"]}'"
+                f"Validation for node configuration parameters '{event.params['parameters']}'"
                 f" failed. Reason:\n{e.args[0]}"
             )
             event.set_results({"accepted": False})
@@ -241,21 +208,40 @@ class SlurmdCharm(ops.CharmBase):
             )
         ):
             event.fail(
-                f"Cannot apply custom node configuration parameters '{event.params["parameters"]}'."
+                f"Cannot apply node configuration parameters '{event.params['parameters']}'."
                 f" Reason: Overrides charm-managed configuration parameter."
             )
             event.set_results({"accepted": False})
             return
 
         if event.params["reset"]:
-            self.stored.custom_node_config = str(custom)
-        else:
-            current = Node.from_str(self.stored.custom_node_config)
-            current.update(custom)
-            self.stored.custom_node_config = str(current)
+            self.slurmd.conf = self.slurmd.build_node()
 
-        self.service_needs_restart = True
-        # TODO: Return updated `slurm.conf` once `reconfigure` is refactored.
+        config = self.slurmd.conf
+        config.update(custom)
+        self.slurmd.conf = config
+
+        if self.slurmd.exists():
+            try:
+                info = self.slurmd.show_node()
+                # Index '0' contains the desired state information.
+                # The value of index '1' is "DYNAMIC_NORM" to show that this node is dynamic.
+                state = info["state"][0].lower()
+                reason = info["reason"]
+
+                # Node must be deleted and reregistered if changing hardware configuration like
+                # `RealMemory` or `MemSpecLimit`.
+                self.slurmd.delete()
+                self.slurmd.reconfigure(state=state, reason=reason)
+            except SlurmOpsError as e:
+                logger.error(e.message)
+                event.fail(
+                    "Failed to apply node configuration parameters. "
+                    "See `juju debug-log` for further details."
+                )
+                event.set_results({"accepted": False})
+                return
+
         event.set_results({"accepted": True})
 
 
