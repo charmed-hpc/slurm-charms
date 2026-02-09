@@ -5,7 +5,6 @@ requires-python = "==3.12.*"
 dependencies = [
     "ops",
     "slurmutils",
-    "nvidia-ml-py",
     "ubuntu-drivers-common",
     "hpc-libs",
     "cosl",

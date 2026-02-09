@@ -34,6 +34,7 @@ import distro
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from hpc_libs.errors import SnapError, SystemdError
 from hpc_libs.machine import (
     EnvManager,
     ServiceManager,
@@ -205,9 +206,7 @@ class _AptManager(OpsManager):
             repositories.add(ppa)
             apt.update()
         except (apt.GPGKeyError, CalledProcessError) as e:
-            raise SlurmOpsError(
-                f"failed to initialize apt to use {uri} package repository: {e}"
-            )
+            raise SlurmOpsError(f"failed to initialize apt to use {uri} package repository: {e}")
 
     @staticmethod
     def _set_ulimit() -> None:
@@ -576,6 +575,18 @@ class SlurmManager(ABC):
     @abstractmethod
     def group(self) -> str:  # noqa D102  # pragma: no cover
         raise NotImplementedError
+
+    def reconfigure(self) -> None:
+        """Reconfigure the managed Slurm service.
+
+        Raises:
+            SlurmOpsError: Raised if the managed Slurm service fails to reconfigure.
+        """
+        try:
+            self.service.enable()
+            self.service.restart()
+        except (SystemdError, SnapError) as e:
+            raise SlurmOpsError(f"failed to reconfigure Slurm service '{self._service}'") from e
 
     @contextmanager
     def _edit_options(self) -> Iterator[dict[str, Any]]:

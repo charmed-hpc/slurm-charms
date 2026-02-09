@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -149,6 +149,163 @@ ULIMIT_CONFIG = """
 * hard memlock unlimited
 * soft stack unlimited
 * hard stack unlimited
+"""
+
+SLURMD_C_OUTPUT = """
+NodeName=juju-03865c-2 CPUs=8 Boards=1 SocketsPerBoard=1 CoresPerSocket=8 ThreadsPerCore=1 RealMemory=15986
+UpTime=0-18:21:26
+"""
+
+SCONTROL_SHOW_NODE_OUTPUT = r"""
+{
+  "nodes": [
+    {
+      "architecture": "x86_64",
+      "burstbuffer_network_address": "",
+      "boards": 1,
+      "boot_time": {
+        "set": true,
+        "infinite": false,
+        "number": 1768928133
+      },
+      "tls_cert_last_renewal": {
+        "set": true,
+        "infinite": false,
+        "number": 0
+      },
+      "cert_flags": [],
+      "cluster_name": "",
+      "cores": 8,
+      "specialized_cores": 0,
+      "cpu_binding": 0,
+      "cpu_load": 11,
+      "free_mem": {
+        "set": true,
+        "infinite": false,
+        "number": 525
+      },
+      "cpus": 8,
+      "effective_cpus": 8,
+      "specialized_cpus": "",
+      "energy": {
+        "average_watts": 0,
+        "base_consumed_energy": 0,
+        "consumed_energy": 0,
+        "current_watts": {
+          "set": true,
+          "infinite": false,
+          "number": 0
+        },
+        "previous_consumed_energy": 0,
+        "last_collected": 0
+      },
+      "external_sensors": {},
+      "extra": "",
+      "power": {},
+      "features": [
+        "compute"
+      ],
+      "active_features": [
+        "compute"
+      ],
+      "gpu_spec": "",
+      "gres": "",
+      "gres_drained": "N\/A",
+      "gres_used": "",
+      "instance_id": "",
+      "instance_type": "",
+      "last_busy": {
+        "set": true,
+        "infinite": false,
+        "number": 1769027120
+      },
+      "mcs_label": "",
+      "specialized_memory": 1024,
+      "name": "compute-0",
+      "next_state_after_reboot": [
+        "INVALID"
+      ],
+      "address": "10.216.61.171",
+      "hostname": "juju-cd456c-2",
+      "state": [
+        "DOWN",
+        "DYNAMIC_NORM"
+      ],
+      "operating_system": "Linux 6.8.0-90-generic #91-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 18 14:14:30 UTC 2025",
+      "owner": "",
+      "partitions": [
+        "compute"
+      ],
+      "port": 6818,
+      "real_memory": 15986,
+      "res_cores_per_gpu": 0,
+      "comment": "",
+      "reason": "Not responding",
+      "reason_changed_at": {
+        "set": true,
+        "infinite": false,
+        "number": 1769096589
+      },
+      "reason_set_by_user": "slurm",
+      "resume_after": {
+        "set": true,
+        "infinite": false,
+        "number": 0
+      },
+      "reservation": "",
+      "alloc_memory": 0,
+      "alloc_cpus": 0,
+      "alloc_idle_cpus": 8,
+      "tres_used": "",
+      "tres_weighted": 0.0,
+      "slurmd_start_time": {
+        "set": true,
+        "infinite": false,
+        "number": 1769026890
+      },
+      "sockets": 1,
+      "threads": 1,
+      "temporary_disk": 0,
+      "weight": 1,
+      "topology": "",
+      "tres": "cpu=8,mem=15986M,billing=8",
+      "version": "25.11.0"
+    }
+  ],
+  "last_update": {
+    "set": true,
+    "infinite": false,
+    "number": 1769557962
+  },
+  "meta": {
+    "plugin": {
+      "type": "",
+      "name": "",
+      "data_parser": "data_parser\/v0.0.44",
+      "accounting_storage": "accounting_storage\/slurmdbd"
+    },
+    "client": {
+      "source": "\/dev\/pts\/1",
+      "user": "ubuntu",
+      "group": "ubuntu"
+    },
+    "command": [
+      "show",
+      "node"
+    ],
+    "slurm": {
+      "version": {
+        "major": "25",
+        "micro": "0",
+        "minor": "11"
+      },
+      "release": "25.11.0",
+      "cluster": "charmed-hpc-jj6q"
+    }
+  },
+  "errors": [],
+  "warnings": []
+}
 """
 
 EXAMPLE_ACCT_GATHER_CONFIG = """#

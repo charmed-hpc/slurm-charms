@@ -1059,12 +1059,14 @@ version = "0.1.0"
 source = { editable = "pkgs/slurm-ops" }
 dependencies = [
     { name = "hpc-libs", extra = ["machine"] },
+    { name = "nvidia-ml-py" },
     { name = "slurmutils" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "hpc-libs", extras = ["machine"], git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
+    { name = "nvidia-ml-py" },
     { name = "slurmutils" },
 ]
 
@@ -1100,7 +1102,6 @@ source = { virtual = "charms/slurmd" }
 dependencies = [
     { name = "cosl" },
     { name = "hpc-libs" },
-    { name = "nvidia-ml-py" },
     { name = "ops" },
     { name = "slurm-ops" },
     { name = "slurmutils" },
@@ -1111,7 +1112,6 @@ dependencies = [
 requires-dist = [
     { name = "cosl" },
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
-    { name = "nvidia-ml-py" },
     { name = "ops" },
     { name = "slurm-ops", editable = "pkgs/slurm-ops" },
     { name = "slurmutils" },

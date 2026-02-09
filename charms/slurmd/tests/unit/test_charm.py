@@ -70,6 +70,7 @@ class TestSlurmdCharm:
             mocker.patch.object(slurmd, "version", return_value="25.11")
             mocker.patch.object(slurmd.service, "stop")
             mocker.patch.object(slurmd.service, "disable")
+            mocker.patch.object(slurmd, "build_node")
 
             # Patch `rdma` module.
             mocker.patch("rdma.install")
@@ -107,23 +108,12 @@ class TestSlurmdCharm:
                 "`slurmd` is not installed. See `juju debug-log` for details"
             )
 
-    @pytest.mark.parametrize(
-        "mock_partition,expected",
-        (
-            pytest.param(None, ops.WaitingStatus("Waiting for `slurmd` to start"), id="success"),
-            pytest.param(
-                SlurmOpsError("failed to load config"),
-                ops.BlockedStatus(
-                    "Failed to update partition configuration. "
-                    + "See `juju debug-log` for details"
-                ),
-                id="fail",
-            ),
-        ),
-    )
-    def test_on_slurmctld_connected(
-        self, mock_charm, mocker: MockerFixture, mock_partition, leader, expected
-    ) -> None:
+    def test_on_config_changed(self, mock_charm, leader) -> None:
+        """Test the `_on_config_changed` event handler."""
+        with mock_charm(mock_charm.on.config_changed(), testing.State(leader=leader)) as manager:
+            manager.run()
+
+    def test_on_slurmctld_connected(self, mock_charm, mocker: MockerFixture, leader) -> None:
         """Test the `_on_slurmd_connected` event handler."""
         integration_id = 1
         integration = testing.Relation(
@@ -139,13 +129,11 @@ class TestSlurmdCharm:
         ) as manager:
             slurmd = manager.charm.slurmd
             mocker.patch.object(slurmd, "is_installed", return_value=True)
-            if mock_partition:
-                mocker.patch("slurmutils.Partition.from_str", side_effect=mock_partition)
 
             state = manager.run()
 
         if leader:
-            assert state.unit_status == expected
+            assert state.unit_status == ops.WaitingStatus("Waiting for `slurmd` to start")
         else:
             # Assert that non-leader units do not:
             #   1. handle `_on_slurmctld_connected`.
@@ -165,7 +153,7 @@ class TestSlurmdCharm:
                 SystemdError("restart failed"),
                 True,
                 ops.BlockedStatus(
-                    "Failed to apply new `slurmd` configuration. See `juju debug-log` for details"
+                    "Failed to apply updated `slurmd` configuration. See `juju debug-log` for details"
                 ),
                 id="ready-start fail",
             ),
@@ -222,7 +210,7 @@ class TestSlurmdCharm:
             mocker.patch.object(slurmd.service, "restart", side_effect=mock_restart)
             mocker.patch.object(slurmd, "is_installed", return_value=True)
             mocker.patch.object(slurmd.service, "is_active")
-            mocker.patch("config.get_node_info", return_value=Node(cpus=8))
+            mocker.patch.object(slurmd, "build_node", return_value=Node(cpus=8))
             mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
 
             state = manager.run()
@@ -296,13 +284,32 @@ class TestSlurmdCharm:
             ),
         ),
     )
-    def test_on_set_node_config_action(self, mock_charm, params, leader) -> None:
+    @pytest.mark.parametrize(
+        "exists", (pytest.param(True, id="exists"), pytest.param(False, id="does not exist"))
+    )
+    @pytest.mark.parametrize(
+        "mock_get_node_info",
+        (
+            # A tuple is required here since the default behavior of `side_effect` is to
+            # loop over the dict's keys when the desired behavior is to return the dict itself.
+            pytest.param(({"state": ["IDLE"], "reason": ""},), id="scontrol success"),
+            pytest.param(SlurmOpsError("scontrol failed"), id="scontrol fail"),
+        ),
+    )
+    def test_on_set_node_config_action(
+        self, mock_charm, mocker: MockerFixture, params, exists, mock_get_node_info, leader
+    ) -> None:
         """Test the `_on_set_node_config_action` action event handler."""
         with mock_charm(
             mock_charm.on.action("set-node-config", params=params),
             testing.State(leader=leader),
         ) as manager:
             try:
+                slurmd = manager.charm.slurmd
+                mocker.patch.object(slurmd, "build_node", return_value=Node(cpus=8))
+                mocker.patch.object(slurmd, "exists", return_value=exists)
+                mocker.patch.object(slurmd, "show_node", side_effect=mock_get_node_info)
+
                 manager.run()
                 assert mock_charm.action_results == {"accepted": True}
             except testing.ActionFailed:

@@ -16,6 +16,7 @@
 """Unit tests for the Slurm service operation managers."""
 
 import base64
+import json
 import subprocess
 import textwrap
 
@@ -24,46 +25,42 @@ from constants import (
     FAKE_GROUP,
     FAKE_USER,
     JWT_KEY,
+    SCONTROL_SHOW_NODE_OUTPUT,
     SLURM_KEY_BASE64,
     SLURM_SNAP_INFO_ACTIVE,
     SLURM_SNAP_INFO_INACTIVE,
+    SLURMD_C_OUTPUT,
 )
 from dotenv import dotenv_values
 from pyfakefs.fake_filesystem import FakeFilesystem
 from pytest_mock import MockerFixture
-from slurm_ops import (
-    SackdManager,
-    SlurmctldManager,
-    SlurmdbdManager,
-    SlurmdManager,
-    SlurmrestdManager,
-)
+from slurm_ops import SackdManager, SlurmdbdManager, SlurmdManager
 from slurm_ops.core import SlurmManager
 from slurmutils import Node
 
-services = ["sackd", "slurmctld", "slurmd", "slurmdbd", "slurmrestd"]
 
-
-@pytest.mark.parametrize(
-    "snap_backend",
-    (
-        pytest.param(False, id="apt backend"),
-        pytest.param(True, id="snap backend"),
-    ),
-)
 class TestManager:
     """Test Slurm service manager classes."""
 
-    @pytest.fixture(
-        params=zip(
-            [SackdManager, SlurmctldManager, SlurmdManager, SlurmdbdManager, SlurmrestdManager],
-            services,
-        ),
-        ids=["sackd", "slurmctld", "slurmd", "slurmdbd", "slurmrestd"],
-    )
+    @pytest.fixture(params=[True, False], ids=["apt backend", "snap backend"], scope="class")
+    def snap_backend(self, request) -> bool:
+        """Control whether to use the SlurmManager's `snap` or `apt` backend."""
+        return request.param
+
+    @pytest.fixture(scope="class")
     def mock_manager(self, request, snap_backend) -> tuple[SlurmManager, str]:
         """Request a mocked Slurm service manager and service name."""
-        return request.param[0](snap=snap_backend), request.param[1]
+
+        class MockSlurmManager(SlurmManager):
+            @property
+            def user(self) -> str:
+                return "slurm"
+
+            @property
+            def group(self) -> str:
+                return "slurm"
+
+        return MockSlurmManager("sackd", snap=snap_backend), "sackd"
 
     @pytest.fixture
     def mock_slurm_key(self, fs: FakeFilesystem, mock_manager, snap_backend) -> SlurmManager:
@@ -261,7 +258,7 @@ class TestSlurmdManager:
     def mock_manager(self, fs: FakeFilesystem) -> SlurmdManager:
         """Request a mocked `SackdManager` instance."""
         fs.create_file("/etc/default/slurmd")
-        return SlurmdManager()
+        return SlurmdManager(app_name="compute")
 
     # Test manager properties.
 
@@ -326,6 +323,62 @@ class TestSlurmdManager:
         assert mock_manager.dynamic is False
         assert "SLURMD_OPTIONS" in env
         assert env["SLURMD_OPTIONS"] == ""
+
+    def test_name(self, mock_manager) -> None:
+        """Test the `name` property."""
+        mock_manager.name = "compute-0"
+        env = dotenv_values("/etc/default/slurmd")
+
+        assert mock_manager.name == "compute-0"
+        assert "SLURMD_OPTIONS" in env
+        assert env["SLURMD_OPTIONS"] == "-N compute-0"
+
+    # Test manager methods.
+
+    def test_delete(self, mock_manager, mock_run) -> None:
+        """Test the `delete` method."""
+        mock_manager.name = "compute-0"
+
+        mock_manager.delete()
+
+        assert mock_run.call_args[0][0] == ["scontrol", "delete", "nodename=compute-0"]
+
+    @pytest.mark.parametrize(
+        "exists",
+        (
+            pytest.param(True, id="exists"),
+            pytest.param(False, id="does not exist"),
+        ),
+    )
+    def tests_exists(self, mock_manager, mock_run, exists) -> None:
+        """Test the `exists` method."""
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0 if exists else 1)
+
+        assert mock_manager.exists() == exists
+
+    def test_build_node(self, mock_manager, mock_run) -> None:
+        """Test the `build_node` method."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=SLURMD_C_OUTPUT
+        )
+
+        node = mock_manager.build_node()
+
+        assert mock_run.call_args[0][0] == ["slurmd", "-C"]
+        assert node.features == ["compute"]
+        assert node.node_name is None
+
+    def test_show_node(self, mock_manager, mock_run) -> None:
+        """Test the `show_node` method."""
+        mock_manager.name = "compute-0"
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=SCONTROL_SHOW_NODE_OUTPUT
+        )
+
+        info = mock_manager.show_node()
+
+        assert mock_run.call_args[0][0] == ["scontrol", "--json", "show", "node", "compute-0"]
+        assert info == json.loads(SCONTROL_SHOW_NODE_OUTPUT)["nodes"][0]
 
 
 class TestSlurmdbdManager:

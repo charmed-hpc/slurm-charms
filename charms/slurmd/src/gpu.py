@@ -19,7 +19,6 @@ import logging
 # ubuntu-drivers requires apt_pkg for package operations
 import apt_pkg  # pyright: ignore [reportMissingImports]
 import charms.operator_libs_linux.v0.apt as apt
-import pynvml
 import UbuntuDrivers.detect  # pyright: ignore [reportMissingImports]
 
 _logger = logging.getLogger(__name__)
@@ -99,42 +98,3 @@ def autoinstall() -> bool:
         raise GPUOpsError(f"failed to install packages {install_packages}. reason: {e}")
 
     return True
-
-
-def get_all_gpu() -> dict[str, list[int]]:
-    """Get the GPU devices on this node.
-
-    Returns:
-        A dict mapping model names to a list of device minor numbers. Model names are lowercase
-        with whitespace replaced by underscores. For example:
-
-        {'tesla_t4': [0, 1], 'l40s': [2, 3]}
-
-        represents a node with two Tesla T4 GPUs at /dev/nvidia0 and /dev/nvidia1, and two L40S
-        GPUs at /dev/nvidia2 and /dev/nvidia3.
-    """
-    gpu_info = {}
-
-    try:
-        pynvml.nvmlInit()
-    except pynvml.NVMLError as e:
-        _logger.info("no GPU info gathered: drivers cannot be detected")
-        _logger.debug("NVML init failed with reason: %s", e)
-        return gpu_info
-
-    gpu_count = pynvml.nvmlDeviceGetCount()
-    for i in range(gpu_count):
-        handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-
-        # Make model name lowercase and replace whitespace with underscores to turn into GRES-compatible format,
-        # For example, "Tesla T4" -> "tesla_t4", which can be added as "Gres=gpu:tesla_t4:1"
-        # Aims to follow convention set by Slurm autodetect:
-        # https://slurm.schedmd.com/gres.html#AutoDetect
-        model = pynvml.nvmlDeviceGetName(handle)
-        model = "_".join(model.split()).lower()
-
-        minor_number = pynvml.nvmlDeviceGetMinorNumber(handle)
-        gpu_info[model] = gpu_info.get(model, []) + [minor_number]
-
-    pynvml.nvmlShutdown()
-    return gpu_info
