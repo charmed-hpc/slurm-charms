@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 
 """Manage the state of the `slurmd` charmed operator."""
 
+import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ops
@@ -22,6 +24,8 @@ from hpc_libs.interfaces import ConditionEvaluation, controller_ready
 
 if TYPE_CHECKING:
     from charm import SlurmdCharm
+
+_logger = logging.getLogger(__name__)
 
 
 def slurmd_installed(charm: "SlurmdCharm") -> ConditionEvaluation:
@@ -61,3 +65,10 @@ def check_slurmd(charm: "SlurmdCharm") -> ops.StatusBase:
         return ops.WaitingStatus("Waiting for `slurmd` to start")
 
     return ops.ActiveStatus()
+
+
+def reboot_if_required(charm: "SlurmdCharm", *, now: bool = False) -> None:
+    """Perform a reboot of the unit if required, such as following a driver installation."""
+    if Path("/var/run/reboot-required").exists():
+        _logger.info("rebooting unit '%s'", charm.unit.name)
+        charm.unit.reboot(now)
