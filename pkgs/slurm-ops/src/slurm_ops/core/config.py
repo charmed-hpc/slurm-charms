@@ -15,7 +15,7 @@
 """Configuration managers for Slurm operations managers."""
 
 import shutil
-from collections.abc import Iterator, Mapping, Iterable
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from os import PathLike
 from pathlib import Path
@@ -65,19 +65,19 @@ class IncludeMapping[T: type[BaseEditor]](Mapping):
             for p in includes
         }
 
-    def __getitem__(self, key, /) -> "SlurmConfigManager":
+    def __getitem__(self, key, /) -> "SlurmConfigManager":  # noqa D105
         try:
             return self._data[key]
         except KeyError:
             return self.__missing__(key)
 
-    def __len__(self) -> int:
+    def __len__(self) -> int:  # noqa D105
         return len(self._data)
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[str]:  # noqa D105
         return iter(self._data)
 
-    def __missing__(self, key: str) -> "SlurmConfigManager":
+    def __missing__(self, key: str) -> "SlurmConfigManager":  # noqa D105
         return SlurmConfigManager(
             self._editor,
             Path(self._path) / key,

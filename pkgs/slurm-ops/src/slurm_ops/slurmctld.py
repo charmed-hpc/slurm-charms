@@ -17,6 +17,7 @@
 __all__ = ["SlurmctldManager"]
 
 import json
+
 from slurmutils import (
     AcctGatherConfigEditor,
     CGroupConfigEditor,
