@@ -36,9 +36,9 @@ _logger = logging.getLogger(__name__)
 class SlurmdManager(SlurmManager):
     """Manage Slurm's compute service, `slurmd`."""
 
-    def __init__(self, app_name: str, *, snap: bool = False) -> None:
+    def __init__(self, partition_name: str, *, snap: bool = False) -> None:
         super().__init__("slurmd", snap)
-        self._app_name = app_name
+        self._partition_name = partition_name
 
     @property
     def conf(self) -> Node:
@@ -182,7 +182,7 @@ class SlurmdManager(SlurmManager):
 
         # Add application name to `Features` so that this node will be
         # added to the correct partition by Slurm.
-        node.features = [self._app_name]
+        node.features = [self._partition_name]
 
         return node
 
