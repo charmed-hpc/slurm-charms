@@ -314,3 +314,15 @@ class TestSlurmdCharm:
                 assert mock_charm.action_results == {"accepted": True}
             except testing.ActionFailed:
                 assert mock_charm.action_results == {"accepted": False}
+
+    def test_bad_configuration(self, mock_charm, leader) -> None:
+        """Test if the `slurmd` charm successfully blocks if a configuration field is invalid."""
+        state = mock_charm.run(
+            mock_charm.on.config_changed(),
+            testing.State(leader=leader, config={"partition-config": "state=yowzah"}),
+        )
+
+        assert state.unit_status == ops.BlockedStatus(
+            "Configuration option(s) 'partition-config' failed validation. "
+            "See `juju debug-log` for details"
+        )

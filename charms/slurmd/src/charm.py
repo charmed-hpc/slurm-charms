@@ -36,6 +36,7 @@ from hpc_libs.interfaces import (
     wait_unless,
 )
 from hpc_libs.utils import StopCharm, refresh
+from pydantic import ValidationError
 from slurm_ops import SlurmdManager, SlurmOpsError
 from slurmutils import ModelError, Node
 from state import check_slurmd, reboot_if_required, slurmd_installed
@@ -53,9 +54,20 @@ class SlurmdCharm(ops.CharmBase):
 
         self.slurmd = SlurmdManager(self.app.name, snap=False)
         try:
-            self.configmgr = ConfigManager.load(self.config, self.app.name)
-        except SlurmOpsError as e:
-            self.unit.status = ops.BlockedStatus(e.message)
+            self.configmgr = self.load_config(ConfigManager, partition_name=self.app.name)
+        except ValidationError as e:
+            logger.error(e)
+            self.unit.status = ops.BlockedStatus(
+                "Configuration option(s) "
+                + ", ".join(
+                    [
+                        f"'{option.replace('_', '-')}'"  # type: ignore
+                        for error in e.errors()
+                        for option in error.get("loc", ())
+                    ]
+                )
+                + " failed validation. See `juju debug-log` for details"
+            )
             return
 
         framework.observe(self.on.install, self._on_install)
@@ -148,8 +160,7 @@ class SlurmdCharm(ops.CharmBase):
         self.slurmd.key.set(data.auth_key)
         self.slurmd.conf_server = data.controllers
 
-        # Set default state and reason if this compute node is being added to a Slurm cluster
-        # and not just updated an updated controller list or Slurm key.
+        # Set default state and reason if this compute node is being added to a Slurm cluster.
         params = {}
         if not self.slurmd.exists():
             params = {

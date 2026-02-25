@@ -18,7 +18,7 @@
 import pytest
 from config import ConfigManager
 from ops import ConfigData
-from slurm_ops import SlurmOpsError
+from pydantic import ValidationError
 from slurmutils import Partition
 
 APP_NAME = "compute"
@@ -28,43 +28,46 @@ class TestConfigManager:
     """Unit tests for the `ConfigManager` class."""
 
     @pytest.mark.parametrize(
-        "valid_config",
+        "valid_charm_config",
         (
             pytest.param(
                 {
-                    "default-node-state": "idle",
-                    "default-node-reason": "",
-                    "partition-config": "state=up maxtime=30-00:00:00",
+                    "default_node_state": "idle",
+                    "default_node_reason": "",
+                    "partition_config": "state=up maxtime=30-00:00:00",
                 },
                 id="idle no reason",
             ),
             pytest.param(
                 {
-                    "default-node-state": "down",
-                    "default-node-reason": "maintenance",
-                    "partition-config": "state=up maxtime=10-00:00:00",
+                    "default_node_state": "down",
+                    "default_node_reason": "maintenance",
+                    "partition_config": "state=up maxtime=10-00:00:00",
                 },
                 id="down with reason",
             ),
             pytest.param(
                 {
-                    "default-node-state": "down",
-                    "default-node-reason": "",
-                    "partition-config": "state=down",
+                    "default_node_state": "down",
+                    "default_node_reason": "",
+                    "partition_config": "state=down",
                 },
                 id="down empty reason",
             ),
         ),
     )
-    def test_load_valid_config(self, valid_config: ConfigData) -> None:
+    def test_load_valid_config(self, valid_charm_config: ConfigData) -> None:
         """Test the `load` method with valid configuration option values."""
-        default_node_state = valid_config["default-node-state"]
-        default_node_reason = valid_config["default-node-reason"]
-        partition_config = Partition.from_str(valid_config["partition-config"])
+        default_node_state = valid_charm_config["default_node_state"]
+        default_node_reason = valid_charm_config["default_node_reason"]
+        partition_config = Partition.from_str(valid_charm_config["partition_config"])
         partition_config.partition_name = APP_NAME
         partition_config.nodes = [APP_NAME]
 
-        config = ConfigManager.load(valid_config, APP_NAME)
+        config = ConfigManager(
+            **valid_charm_config,
+            partition_name=APP_NAME,
+        )
 
         assert config.default_node_state == default_node_state
 
@@ -76,29 +79,27 @@ class TestConfigManager:
         assert config.partition_config.dict() == partition_config.dict()
 
     @pytest.mark.parametrize(
-        "invalid_config",
+        "invalid_charm_config",
         (
             pytest.param(
                 {
-                    "default-node-state": "invalid",
-                    "default-node-reason": "",
-                    "partition-config": "state=up",
+                    "default_node_state": "invalid",
+                    "default_node_reason": "",
+                    "partition_config": "state=up",
                 },
                 id="invalid state",
             ),
             pytest.param(
                 {
-                    "default-node-state": "idle",
-                    "default-node-reason": "",
-                    "partition-config": "invalidkey=value",
+                    "default_node_state": "idle",
+                    "default_node_reason": "",
+                    "partition_config": "invalidkey=value",
                 },
                 id="invalid partition",
             ),
         ),
     )
-    def test_load_invalid_config(self, invalid_config: ConfigData) -> None:
+    def test_load_invalid_config(self, invalid_charm_config: ConfigData) -> None:
         """Test the `load` method with invalid configuration option values."""
-        with pytest.raises(SlurmOpsError) as exec_info:
-            ConfigManager.load(invalid_config, APP_NAME)
-
-        assert "failed validation" in exec_info.value.message
+        with pytest.raises(ValidationError):
+            ConfigManager(**invalid_charm_config, partition_name=APP_NAME)

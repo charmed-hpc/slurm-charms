@@ -17,9 +17,7 @@
 import logging
 from typing import Literal
 
-from ops import ConfigData
-from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, field_validator
-from slurm_ops import SlurmOpsError
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 from slurmutils import ModelError, Partition
 
 _logger = logging.getLogger(__name__)
@@ -33,44 +31,10 @@ class ConfigManager(BaseModel):
     #  transitioned to using pydantic models rather than custom ones.
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    # `app_name` must be public because private attributes are not accessible by validators.
-    #   See: https://github.com/pydantic/pydantic/issues/7142
-    app_name: str
     default_node_state: Literal["idle", "down"]
     default_node_reason: str
+    partition_name: str
     partition_config: Partition
-
-    @classmethod
-    def load(cls, config: ConfigData, /, app_name: str) -> "ConfigManager":
-        """Load `slurmd` application configuration options.
-
-        Args:
-            config: `slurmd` charmed application configuration data.
-            app_name: Name of the `slurmd` application.
-
-        Raises:
-            SlurmOpsError: Raised if a configuration option fails validation.
-        """
-        try:
-            return cls(
-                app_name=app_name,
-                default_node_state=config.get("default-node-state"),  # type: ignore
-                default_node_reason=config.get("default-node-reason"),  # type: ignore
-                partition_config=config.get("partition-config"),  # type: ignore
-            )
-        except ValidationError as e:
-            _logger.error(e)
-            raise SlurmOpsError(
-                "Configuration option(s) "
-                + ", ".join(
-                    [
-                        f"'{option.replace('_', '-')}'"  # type: ignore
-                        for error in e.errors()
-                        for option in error.get("loc", ())
-                    ]
-                )
-                + " failed validation. See `juju debug-log` for details"
-            )
 
     @field_validator("default_node_reason", mode="after")
     @classmethod
@@ -93,7 +57,7 @@ class ConfigManager(BaseModel):
         except (ModelError, ValueError) as e:
             raise ValueError(f"Invalid partition configuration: {value}. Reason:\n{e}")
 
-        name = info.data["app_name"]
+        name = info.data["partition_name"]
         partition.partition_name = name
         partition.nodes = [name]
         return partition
