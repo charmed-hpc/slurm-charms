@@ -1,0 +1,15 @@
+alert: SlurmComputeNodesDown
+expr: slurm_nodes_down{%%juju_topology%%} > 0
+for: 5m
+labels:
+  severity: critical
+annotations:
+  summary: Compute node(s) are down
+  description: >
+    Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+    compute node(s) reporting as 'DOWN' for more than 5 minutes. Immediate investigation
+    is recommended to restore cluster capacity and prevent job scheduling failures.
+
+    The reason for the compute node(s) being in the 'DOWN' state can be viewed with:
+
+    `sinfo --list-reasons`
