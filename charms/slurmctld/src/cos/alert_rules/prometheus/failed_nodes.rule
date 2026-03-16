@@ -1,0 +1,17 @@
+alert: SlurmComputeNodesFailing
+expr: slurm_nodes_fail{%%juju_topology%%} > 0
+for: 5m
+labels:
+  severity: critical
+annotations:
+  summary: Compute node(s) are failing or have failed
+  description: >
+    Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+    compute node(s) reporting as 'FAIL' for more than 5 minutes. Nodes enter the FAIL state
+    when Slurm detects that they are expected to fail soon due to hardware or configuration issues.
+    These nodes will be drained and removed from the scheduling pool to prevent job failures.
+    Immediate investigation is recommended to identify and resolve the underlying cause.
+
+    The reason for the compute node(s) being in the 'FAIL' state can be viewed with:
+
+    `sinfo --list-reasons`
