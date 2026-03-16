@@ -1,4 +1,4 @@
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +15,17 @@
 name: slurm charms tests
 on:
   workflow_call:
+    inputs:
+      enable_ha:
+        description: "Enable High Availability tests"
+        type: boolean
+        default: false
   pull_request:
     branches:
       - main
       - experimental
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC nightly
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -107,7 +114,8 @@ jobs:
         bases:
           - ubuntu@24.04
     name: Integration tests (LXD) | ${{ matrix.bases }}
-    runs-on: ubuntu-24.04
+    # xlarge runner used for nightly and HA-enabled tests. Standard ubuntu runner otherwise
+    runs-on: ${{ (github.event_name == 'schedule' || inputs.enable_ha) && 'self-hosted-linux-amd64-noble-xlarge' || 'ubuntu-24.04' }}
     needs:
       - inclusive-naming-check
       - lint
@@ -145,4 +153,11 @@ jobs:
           provider: lxd
           juju-channel: 3.6/stable
       - name: Run tests
-        run: just repo integration -- --charm-base=${{ matrix.bases }}
+        run: |
+          declare -a ARGS=()
+          # Only run HA tests nightly or if requested
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_ha }}" == "true" ]]; then
+            ARGS+=("--run-high-availability")
+          fi
+
+          just repo integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}
