@@ -1,0 +1,12 @@
+alert: SlurmComputeNodesUnknown
+expr: slurm_nodes_unknown{%%juju_topology%%} > 0
+for: 5m
+labels:
+  severity: critical
+annotations:
+  summary: Compute node(s) state is unknown
+  description: >
+    Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+    node(s) reporting as 'UNKNOWN' for more than 5 minutes. Nodes in this state have
+    not yet reported their status to the Slurm controller. This may indicate a
+    communication issue between the node and the Slurm controller's `slurmctld` service.
