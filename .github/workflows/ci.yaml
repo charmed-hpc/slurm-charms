@@ -154,10 +154,10 @@ jobs:
           juju-channel: 3.6/stable
       - name: Run tests
         run: |
+          declare -a ARGS=()
           # Only run HA tests nightly or if requested
-          HA_FLAG=""
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_ha }}" == "true" ]]; then
-            HA_FLAG="--run-high-availability"
+            ARGS+=("--run-high-availability")
           fi
 
-          just repo integration -- --charm-base=${{ matrix.bases }} $HA_FLAG
+          just repo integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}
