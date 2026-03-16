@@ -1,0 +1,20 @@
+alert: SlurmComputeNodesDrainingTooLong
+expr: slurm_nodes_drain{%%juju_topology%%} > 0
+for: 3h
+labels:
+  severity: warning
+annotations:
+  summary: Compute node(s) have been draining for more than 3 hours
+  description: >
+    Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+    compute node(s) that have been draining for more than 3 hours. This may indicate that
+    the nodes either need to be returned to service, or there are long-running jobs assigned
+    to these nodes that still need to complete.
+
+    The reason for the compute node(s) being in the 'DRAIN' state can be viewed with:
+
+    `sinfo --list-reasons`
+
+    The compute node(s) can be returned to service with:
+
+    `juju run <slurm-controller>/leader set-node-state nodes=<draining-nodes> state=idle`
