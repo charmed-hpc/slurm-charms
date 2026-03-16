@@ -1,0 +1,21 @@
+alert: SlurmComputeNodesNotResponding
+expr: slurm_nodes_noresp{%%juju_topology%%} > 0
+for: 5m
+labels:
+  severity: critical
+annotations:
+  summary: Compute node(s) are not responding
+  description: >
+    {{ $value }} compute node(s) are not responding to communication attempts from
+    the Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} for
+    more than 5 minutes.
+
+    Possible causes include:
+
+    - The Slurm compute service `slurmd` has crashed on the affected compute node(s).
+    - Network configuration changes are preventing the Slurm controller from
+      contacting the affected compute node(s).
+
+    Check the status of the `slurmd` service on the affected node(s) and review your network
+    configuration to restore communicate between the affect compute node(s) and the Slurm
+    controller's `slurmctld` service.
