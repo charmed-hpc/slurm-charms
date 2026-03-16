@@ -17,7 +17,7 @@ on:
   workflow_call:
     inputs:
       enable_ha:
-        description: "Perform High Availability tests"
+        description: "Enable High Availability tests"
         type: boolean
         default: false
   pull_request:
