@@ -47,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,7 +121,6 @@ jobs:
       - lint
       - unit-test
       - type-check
-      - commitlint
     steps:
       - name: Remove unnecessary files
         run: |
