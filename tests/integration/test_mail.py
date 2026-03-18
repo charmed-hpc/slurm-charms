@@ -147,7 +147,7 @@ def test_slurmctld_mail_job_end(juju: jubilant.Juju, smtp_handler) -> None:
     content_pattern = r"Your job \d+ has ended on charmed-hpc-[\w-]{4}\."
 
     juju.exec(
-        f"srun --partition {SLURMD_APP_NAME} --mail-user={to_address} --mail-type=END sleep 1",
+        f"srun --time=1 --partition {SLURMD_APP_NAME} --mail-user={to_address} --mail-type=END sleep 1",
         unit=sackd_unit,
     )
 
@@ -164,7 +164,7 @@ def test_slurmctld_mail_job_fail(juju: jubilant.Juju, smtp_handler) -> None:
 
     try:
         juju.exec(
-            f"srun --partition {SLURMD_APP_NAME} --mail-user={to_address} --mail-type=FAIL,END bash -c 'sleep 1; exit 1'",
+            f"srun --time=1 --partition {SLURMD_APP_NAME} --mail-user={to_address} --mail-type=FAIL,END bash -c 'sleep 1; exit 1'",
             unit=sackd_unit,
         )
     except jubilant.TaskError:
