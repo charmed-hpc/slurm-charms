@@ -227,7 +227,9 @@ def test_slurmctld_scale_down(juju: jubilant.Juju) -> None:
     juju.remove_unit(controllers["backup1"]["unit"])
     juju.wait(
         lambda status: len(status.apps[SLURMCTLD_APP_NAME].units) == 2
-        and jubilant.all_active(status, *SLURM_APPS)
+        and jubilant.all_active(status, *SLURM_APPS),
+        error=lambda status: jubilant.any_error(status, SLURM_APPS[SLURMCTLD_APP_NAME]),
+        timeout=600,
     )
 
     # Can take time for changes to propagate to login node. Retry if assertions fail
