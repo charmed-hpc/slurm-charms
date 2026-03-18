@@ -42,7 +42,7 @@ def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
         yield juju
 
         if request.session.testsfailed:
-            log = juju.debug_log(limit=1000)
+            log = juju.debug_log(limit=3000)
             print(log, end="")
 
 
