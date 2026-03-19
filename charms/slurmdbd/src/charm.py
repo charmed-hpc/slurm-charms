@@ -16,42 +16,35 @@
 
 """Charmed operator for `slurmdbd`, Slurm's database service."""
 
-# pyright: reportAttributeAccessIssue=false
-
 import logging
-from typing import Any
 from urllib.parse import urlparse
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
-from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from config import (
-    init_config,
-    reconfigure_slurmdbd,
-    update_overrides,
-    update_storage,
-)
+from config import ConfigManager
 from constants import (
     DATABASE_INTEGRATION_NAME,
+    PEER_INTEGRATION_NAME,
     SLURM_ACCT_DATABASE_NAME,
     SLURMDBD_INTEGRATION_NAME,
     SLURMDBD_PORT,
 )
 from hpc_libs.interfaces import (
+    DatabaseData,
     SlurmctldReadyEvent,
     SlurmdbdProvider,
     block_unless,
     controller_ready,
     wait_unless,
 )
-from hpc_libs.utils import StopCharm, leader, reconfigure, refresh
+from hpc_libs.utils import StopCharm, get_ingress_address, leader, refresh
+from pydantic import ValidationError
 from slurm_ops import SlurmdbdManager, SlurmOpsError
-from state import check_slurmdbd, slurmdbd_installed
+from slurmutils import SlurmdbdConfig
+from state import check_slurmdbd, slurmdbd_installed, slurmdbd_ready
 
 logger = logging.getLogger(__name__)
-#
-reconfigure = reconfigure(hook=reconfigure_slurmdbd)
-reconfigure.__doc__ = """Reconfigure the `slurmdbd` service after an event handler completes."""
+
 refresh = refresh(hook=check_slurmdbd)
 refresh.__doc__ = """Refresh status of the `slurmdbd` unit after an event handler completes."""
 
@@ -59,19 +52,28 @@ refresh.__doc__ = """Refresh status of the `slurmdbd` unit after an event handle
 class SlurmdbdCharm(ops.CharmBase):
     """Charmed operator for `slurmdbd`, Slurm's database service."""
 
-    stored = ops.StoredState()
-    service_needs_restart: bool = False
-
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
 
         self.slurmdbd = SlurmdbdManager(snap=False)
-        self.stored.set_default(
-            database_info={},
-            custom_slurmdbd_config={},
-        )
+        try:
+            self.configmgr = self.load_config(ConfigManager)
+        except ValidationError as e:
+            logger.error(e)
+            self.unit.status = ops.BlockedStatus(
+                "Configuration option(s) "
+                + ", ".join(
+                    [
+                        f"'{option.replace('_', '-')}'"  # type: ignore
+                        for error in e.errors()
+                        for option in error.get("loc", ())
+                    ]
+                )
+                + " failed validation. See `juju debug-log` for details"
+            )
+            return
+
         framework.observe(self.on.install, self._on_install)
-        framework.observe(self.on.start, self._on_start)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.update_status, self._on_update_status)
 
@@ -84,8 +86,6 @@ class SlurmdbdCharm(ops.CharmBase):
             database_name=SLURM_ACCT_DATABASE_NAME,
         )
         framework.observe(self.database.on.database_created, self._on_database_created)
-
-        self._grafana_agent = COSAgentProvider(self)
 
     @refresh
     def _on_install(self, event: ops.InstallEvent) -> None:
@@ -120,25 +120,28 @@ class SlurmdbdCharm(ops.CharmBase):
 
         self.unit.open_port("tcp", SLURMDBD_PORT)
 
-    @refresh
-    @reconfigure
-    def _on_start(self, _: ops.StartEvent) -> None:
-        """Write initial `slurmdbd.conf` file."""
-        if not self.unit.is_leader():
-            raise StopCharm(
-                ops.BlockedStatus(
-                    "`slurmdbd` high-availability is not supported. Scale down application"
-                )
-            )
-
-        init_config(self)
-
     @leader
     @refresh
-    @reconfigure
     def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
         """Update the `slurmdbd` charm's configuration."""
-        update_overrides(self)
+        # `slurmdbd.conf` must be updated here since the ingress address is not available
+        # in the `install` hook.
+        with self.slurmdbd.config.edit() as config:
+            config.auth_alt_parameters = {"jwt_key": f"{self.slurmdbd.jwt.path}"}
+            config.auth_alt_types = ["auth/jwt"]
+            config.auth_type = "auth/slurm"
+            config.dbd_addr = get_ingress_address(self, PEER_INTEGRATION_NAME)
+            config.dbd_host = self.slurmdbd.hostname
+            config.dbd_port = SLURMDBD_PORT
+            config.log_file = "/var/log/slurm/slurmdbd.log"
+            config.pid_file = "/var/run/slurmdbd/slurmdbd.pid"
+            config.plugin_dir = ["/usr/lib/x86_64-linux-gnu/slurm-wlm"]
+            config.slurm_user = self.slurmdbd.user
+            config.storage_type = "accounting_storage/mysql"
+
+        self.slurmdbd.overrides.dump(self.configmgr.slurmdbd_conf_parameters)
+
+        self._reconfigure()
 
     @leader
     @refresh
@@ -147,7 +150,6 @@ class SlurmdbdCharm(ops.CharmBase):
 
     @leader
     @refresh
-    @reconfigure
     @wait_unless(controller_ready)
     @block_unless(slurmdbd_installed)
     def _on_slurmctld_ready(self, event: SlurmctldReadyEvent) -> None:
@@ -156,10 +158,10 @@ class SlurmdbdCharm(ops.CharmBase):
 
         self.slurmdbd.key.set(data.auth_key)
         self.slurmdbd.jwt.set(data.jwt_key)
+        self._reconfigure()
 
     @leader
     @refresh
-    @reconfigure
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Process the `DatabaseCreatedEvent` and update the database parameters.
 
@@ -177,6 +179,11 @@ class SlurmdbdCharm(ops.CharmBase):
               updated as the database parameters in the slurmdbd.conf configuration file.
         """
         logger.debug("configuring new backend database for slurmdbd")
+
+        config = SlurmdbdConfig()
+        config.storage_user = event.username
+        config.storage_pass = event.password
+        config.storage_loc = SLURM_ACCT_DATABASE_NAME
 
         socket_endpoints = []
         tcp_endpoints = []
@@ -198,12 +205,6 @@ class SlurmdbdCharm(ops.CharmBase):
                 socket_endpoints.append(endpoint)
             else:
                 tcp_endpoints.append(endpoint)
-
-        database_info: dict[str, Any] = {
-            "storageuser": event.username,
-            "storagepass": event.password,
-            "storageloc": SLURM_ACCT_DATABASE_NAME,
-        }
 
         if socket_endpoints:
             # Socket endpoints will be preferred. This is the case when the mysql
@@ -231,12 +232,10 @@ class SlurmdbdCharm(ops.CharmBase):
             # Check IPv6 and strip any brackets
             if addr.startswith("[") and addr.endswith("]"):
                 addr = addr[1:-1]
-            database_info.update(
-                {
-                    "storagehost": addr,
-                    "storageport": int(port),
-                }
-            )
+
+            config.storage_host = addr
+            config.storage_port = int(port)
+
             # Make sure that the MYSQL_UNIX_PORT is removed from the env file.
             del self.slurmdbd.mysql_unix_port
         else:
@@ -247,7 +246,30 @@ class SlurmdbdCharm(ops.CharmBase):
             self.unit.status = ops.BlockedStatus("No database endpoints provided")
             raise ValueError(f"no endpoints provided: {event.endpoints}")
 
-        update_storage(self, database_info)
+        self.slurmdbd.storage.dump(config)
+        self._reconfigure()
+
+    def _reconfigure(self) -> None:
+        """Reconfigure the `slurmdbd` service and update `slurmctld` integration databag.
+
+        Raises:
+            StopCharm: Raised if an error occurs when reconfiguring the `slurmdbd` service.
+        """
+        if not slurmdbd_ready(self):
+            return
+
+        try:
+            self.slurmdbd.reconfigure()
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to apply updated `slurmdbd` configuration. "
+                    "See `juju debug-log` for details"
+                )
+            )
+
+        self.slurmctld.set_database_data(DatabaseData(hostname=self.slurmdbd.hostname))
 
 
 if __name__ == "__main__":

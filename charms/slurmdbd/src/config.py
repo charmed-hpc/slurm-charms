@@ -15,112 +15,29 @@
 """Manage the configuration of the `slurmdbd` charmed operator."""
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
 
-import ops
-from constants import (
-    DEFAULT_SLURMDBD_CONFIG,
-    OVERRIDES_CONFIG_FILE,
-    PEER_INTEGRATION_NAME,
-    STORAGE_CONFIG_FILE,
-)
-from hpc_libs.interfaces import DatabaseData
-from hpc_libs.utils import StopCharm, get_ingress_address, plog
-from slurm_ops import SlurmOpsError
+from pydantic import BaseModel, ConfigDict, field_validator
 from slurmutils import ModelError, SlurmdbdConfig
-from state import slurmdbd_ready
-
-if TYPE_CHECKING:
-    from charm import SlurmdbdCharm
 
 _logger = logging.getLogger(__name__)
 
 
-def init_config(charm: "SlurmdbdCharm", /) -> None:
-    """Initialize the `slurmdbd` service's configuration.
+class ConfigManager(BaseModel):
+    """Interface to `slurmdbd` application configuration options."""
 
-    This function "seeds" the starting point for the `slurmdbd` service's configuration;
-    it provides the default configuration values used by the service, but it does not provide
-    all the required configuration for `slurmdbd` to start successfully.
-    """
-    # Seed the `slurmdbd.conf` configuration file.
-    config = SlurmdbdConfig(
-        dbdhost=charm.slurmdbd.hostname,
-        dbdaddr=get_ingress_address(charm, PEER_INTEGRATION_NAME),
-        authalttypes=["auth/jwt"],
-        authaltparameters={"jwt_key": f"{charm.slurmdbd.jwt.path}"},
-        **DEFAULT_SLURMDBD_CONFIG,
-    )
-    charm.slurmdbd.config.dump(config)
+    # FIXME: `arbitrary_types_allowed=True` must be used here since pydantic cannot construct
+    #  a schema for the `Partition` object. This config can be removed when slurmutils v2 has
+    #  transitioned to using pydantic models rather than custom ones.
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+    slurmdbd_conf_parameters: SlurmdbdConfig
 
-def update_overrides(charm: "SlurmdbdCharm", /) -> None:
-    """Update the `slurmdbd.conf.overrides` configuration file.
+    @field_validator("slurmdbd_conf_parameters", mode="before")
+    @classmethod
+    def _build_slurmdbd_conf_parameters(cls, value: str) -> SlurmdbdConfig:
+        try:
+            config = SlurmdbdConfig.from_str(value)
+        except (ModelError, ValueError) as e:
+            raise ValueError(f"Invalid slurmdbd configuration override: {value}. Reason:\n{e}")
 
-    Raises:
-        StopCharm: Raised if the custom `slurmdbd.conf` configuration provided is invalid.
-    """
-    _logger.info("updating `%s`", OVERRIDES_CONFIG_FILE)
-    try:
-        config = SlurmdbdConfig.from_str(
-            cast(str, charm.config.get("slurmdbd-conf-parameters", ""))
-        )
-    except (ModelError, ValueError) as e:
-        _logger.error(e)
-        raise StopCharm(
-            ops.BlockedStatus(
-                "Failed to load custom `slurmdbd` configuration. "
-                + "See `juju debug-log` for details"
-            )
-        )
-
-    _logger.debug("`%s`:\n%s", OVERRIDES_CONFIG_FILE, plog(config.dict()))
-    charm.slurmdbd.config.includes[OVERRIDES_CONFIG_FILE].dump(config)
-    _logger.info("`%s` successfully updated", OVERRIDES_CONFIG_FILE)
-
-
-def update_storage(charm: "SlurmdbdCharm", /, config: dict[str, Any]) -> None:
-    """Update the `slurmdbd.conf.storage` configuration file.
-
-    Raises:
-        StopCharm: Raised if the `slurmdbd.conf` database configuration provided is invalid.
-    """
-    _logger.info("updating `%s`", STORAGE_CONFIG_FILE)
-    try:
-        storage = SlurmdbdConfig.from_dict(config)
-    except (ModelError, ValueError) as e:
-        _logger.error(e)
-        raise StopCharm(
-            ops.BlockedStatus(
-                "Failed to load database configuration for `slurmdbd`. "
-                + "See `juju debug-log` for details"
-            )
-        )
-
-    _logger.debug("`%s`:\n%s", STORAGE_CONFIG_FILE, plog(storage.dict()))
-    charm.slurmdbd.config.includes[STORAGE_CONFIG_FILE].dump(storage)
-    _logger.info("`%s` successfully updated", STORAGE_CONFIG_FILE)
-
-
-def reconfigure_slurmdbd(charm: "SlurmdbdCharm") -> None:
-    """Reconfigure and restart the `slurmdbd` service.
-
-    Raises:
-        SlurmOpsError: Raised if the `slurmdbd` service fails to start or restart.
-    """
-    if not slurmdbd_ready(charm):
-        return
-
-    try:
-        charm.slurmdbd.config.merge()
-        charm.slurmdbd.service.enable()
-        charm.slurmdbd.service.restart()
-    except SlurmOpsError as e:
-        _logger.error(e.message)
-        raise StopCharm(
-            ops.BlockedStatus(
-                "Failed to apply new `slurmdbd` configuration. See `juju debug-log` for details"
-            )
-        )
-
-    charm.slurmctld.set_database_data(DatabaseData(hostname=charm.slurmdbd.hostname))
+        return config
