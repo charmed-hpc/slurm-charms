@@ -87,6 +87,29 @@ class SlurmctldManager(SlurmManager):
 
         return ""
 
+    def set_default_partition(self, new: str, previous: str) -> None:
+        """Set the default partition in `slurm.conf.<partition>`.
+
+        Args:
+            new: Name of the new default partition.
+            previous: Name of the previous default partition.
+
+        Notes:
+            - If `new` is an empty string, the default partition will be unset and the
+              Slurm cluster will have no default partition.
+        """
+        includes = self.config.includes
+        new_default_include = includes[f"slurm.conf.{new}"]
+        previous_default_include = includes[f"slurm.conf.{previous}"]
+
+        if new != "" and new_default_include.exists():
+            with new_default_include.edit() as config:
+                config.partitions[new].default = True
+
+        if previous != "" and previous_default_include.exists():
+            with previous_default_include.edit() as config:
+                config.partitions[previous].default = False
+
     def get_controllers(self) -> list[str]:
         """Get hostnames for all controllers defined in the slurm.conf file."""
         controllers = []
