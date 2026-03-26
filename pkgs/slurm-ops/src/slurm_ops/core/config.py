@@ -149,6 +149,15 @@ class SlurmConfigManager[T: type[BaseEditor]]:
         for snapshot in self.snapshots.values():
             shutil.copy(snapshot.path, snapshot.path.parent / snapshot.path.stem)
 
+    def create(self) -> None:
+        """Create an empty configuration file with file mode and user/group ownership."""
+        self.path.touch(mode=self._mode)
+        shutil.chown(self.path, self._user, self._group)
+        # The Slurm daemons and `scontrol` will emit error messages if Slurm tries to
+        # read an empty configuration file. Adding an empty newline to the created file
+        # prevents these error messages from being emitted by Slurm.
+        self.path.write_text("\n")
+
     def exists(self) -> bool:
         """Check whether the configuration file exists."""
         return self.path.exists()
