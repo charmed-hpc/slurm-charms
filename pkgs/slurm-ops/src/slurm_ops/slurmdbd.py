@@ -16,7 +16,6 @@
 
 __all__ = ["SlurmdbdManager"]
 
-from functools import cached_property
 from os import PathLike
 
 from slurmutils import SlurmdbdConfigEditor
@@ -30,7 +29,7 @@ class SlurmdbdManager(SlurmManager):
     def __init__(self, snap: bool = False) -> None:
         super().__init__("slurmdbd", snap)
 
-    @cached_property
+    @property
     def config(self) -> SlurmConfigManager:
         """Get the configuration manager for the `slurmdbd.conf` file."""
         return SlurmConfigManager(
@@ -41,12 +40,12 @@ class SlurmdbdManager(SlurmManager):
             group=self.group,
         )
 
-    @cached_property
+    @property
     def overrides(self) -> SlurmConfigManager:
         """Get the configuration manager for the `slurmdbd.conf.overrides` file."""
         return self.config.includes["slurmdbd.conf.overrides"]
 
-    @cached_property
+    @property
     def storage(self) -> SlurmConfigManager:
         """Get the configuration manager for the `slurmdbd.conf.storage` file."""
         return self.config.includes["slurmdbd.conf.storage"]
