@@ -26,7 +26,7 @@ class ConfigManager(BaseModel):
     """Interface to `slurmdbd` application configuration options."""
 
     # FIXME: `arbitrary_types_allowed=True` must be used here since pydantic cannot construct
-    #  a schema for the `Partition` object. This config can be removed when slurmutils v2 has
+    #  a schema for the `SlurmdbdConfig` object. This config can be removed when slurmutils v2 has
     #  transitioned to using pydantic models rather than custom ones.
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
