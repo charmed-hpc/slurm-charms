@@ -36,41 +36,85 @@ class SlurmctldManager(SlurmManager):
     def __init__(self, snap: bool = False) -> None:
         super().__init__("slurmctld", snap)
 
-        self.config = SlurmConfigManager(
+    @property
+    def config(self) -> SlurmConfigManager[SlurmConfigEditor]:
+        """Get the configuration manager for the `slurm.conf` file."""
+        return SlurmConfigManager(
             SlurmConfigEditor,
             file=self._ops_manager.etc_path / "slurm.conf",
             mode=0o644,
             user=self.user,
             group=self.group,
         )
-        self.acct_gather = SlurmConfigManager(
+
+    @property
+    def accounting(self) -> SlurmConfigManager[SlurmConfigEditor]:
+        """Get the configuration manager for the `slurm.conf.accounting` file."""
+        return self.config.includes["slurm.conf.accounting"]
+
+    @property
+    def profiling(self) -> SlurmConfigManager[SlurmConfigEditor]:
+        """Get the configuration manager for the `slurm.conf.profiling` file."""
+        return self.config.includes["slurm.conf.profiling"]
+
+    @property
+    def overrides(self) -> SlurmConfigManager[SlurmConfigEditor]:
+        """Get the configuration manager for the `slurm.conf.overrides` file."""
+        return self.config.includes["slurm.conf.overrides"]
+
+    @property
+    def acct_gather(self) -> SlurmConfigManager[AcctGatherConfigEditor]:
+        """Get the configuration manager for the `acct_gather.conf` file."""
+        return SlurmConfigManager(
             AcctGatherConfigEditor,
             file=self._ops_manager.etc_path / "acct_gather.conf",
             mode=0o600,
             user=self.user,
             group=self.group,
         )
-        self.cgroup = SlurmConfigManager(
+
+    @property
+    def cgroup(self) -> SlurmConfigManager[CGroupConfigEditor]:
+        """Get the configuration manager for the `cgroup.conf` file."""
+        return SlurmConfigManager(
             CGroupConfigEditor,
             file=self._ops_manager.etc_path / "cgroup.conf",
             mode=0o644,
             user=self.user,
             group=self.group,
         )
-        self.gres = SlurmConfigManager(
+
+    @property
+    def gres(self) -> SlurmConfigManager[GresConfigEditor]:
+        """Get the configuration manager for the `gres.conf` file."""
+        return SlurmConfigManager(
             GresConfigEditor,
             file=self._ops_manager.etc_path / "gres.conf",
             mode=0o644,
             user=self.user,
             group=self.group,
         )
-        self.oci = SlurmConfigManager(
+
+    @property
+    def oci(self) -> SlurmConfigManager[OCIConfigEditor]:
+        """Get the configuration manager for the `oci.conf` file."""
+        return SlurmConfigManager(
             OCIConfigEditor,
             file=self._ops_manager.etc_path / "oci.conf",
             mode=0o644,
             user=self.user,
             group=self.group,
         )
+
+    @property
+    def user(self) -> str:
+        """Get the user that the `slurmctld` service runs as."""
+        return SLURM_USER
+
+    @property
+    def group(self) -> str:
+        """Get the group that the `slurmctld` service runs as."""
+        return SLURM_GROUP
 
     def get_default_partition(self) -> str:
         """Get the name of the default partition.
