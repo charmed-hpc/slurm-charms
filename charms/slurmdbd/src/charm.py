@@ -41,7 +41,7 @@ from hpc_libs.utils import StopCharm, get_ingress_address, leader, refresh
 from pydantic import ValidationError
 from slurm_ops import SlurmdbdManager, SlurmOpsError
 from slurmutils import SlurmdbdConfig
-from state import check_slurmdbd, slurmdbd_installed, slurmdbd_ready
+from state import check_slurmdbd, slurmdbd_installed, slurmdbd_ready, unit_is_leader
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,7 @@ class SlurmdbdCharm(ops.CharmBase):
         framework.observe(self.database.on.database_created, self._on_database_created)
 
     @refresh
+    @block_unless(unit_is_leader)
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Install `slurmdbd` after charm is deployed on the unit.
 
@@ -96,13 +97,6 @@ class SlurmdbdCharm(ops.CharmBase):
               so the service is stopped and disabled. The service is re-enabled after being
               integrated with a `slurmctld` application and backend database provider.
         """
-        if not self.unit.is_leader():
-            raise StopCharm(
-                ops.BlockedStatus(
-                    "`slurmdbd` high-availability is not supported. Scale down application"
-                )
-            )
-
         self.unit.status = ops.MaintenanceStatus("Installing `slurmdbd`")
         try:
             self.slurmdbd.install()
@@ -272,5 +266,5 @@ class SlurmdbdCharm(ops.CharmBase):
         self.slurmctld.set_database_data(DatabaseData(hostname=self.slurmdbd.hostname))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: nocover
     ops.main(SlurmdbdCharm)
