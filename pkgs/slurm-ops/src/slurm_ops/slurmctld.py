@@ -123,12 +123,18 @@ class SlurmctldManager(SlurmManager):
 
         return ""
 
-    @property
-    def user(self) -> str:
-        """Get the user that the `slurmctld` service runs as."""
-        return SLURM_USER
+    def reconfigure(self, *, restart: bool = False) -> None:
+        """Reconfigure the `slurmctld` service running on the machine.
 
-    @property
-    def group(self) -> str:
-        """Get the group that the `slurmctld` service runs as."""
-        return SLURM_GROUP
+        Args:
+            restart:
+                If `True`, restart the `slurmctld` service.
+                If `False`, reconfigure the `slurmctld` service with `scontrol reconfigure`.
+
+        Raises:
+            SlurmOpsError: Raised if a failure occurs when reconfiguring the `slurmctld` service.
+        """
+        if restart:
+            super().reconfigure()
+        else:
+            scontrol("reconfigure")
