@@ -20,11 +20,7 @@ from pathlib import Path
 from unittest.mock import call
 
 import pytest
-from constants import (
-    DEFAULT_SLURM_CONFIG,
-    HA_MOUNT_INTEGRATION_NAME,
-    HA_MOUNT_LOCATION,
-)
+from constants import HA_MOUNT_INTEGRATION_NAME, HA_MOUNT_LOCATION
 from ops import testing
 from pyfakefs.fake_filesystem import FakeFilesystem
 from pytest_mock import MockerFixture
@@ -53,7 +49,7 @@ class TestSlurmctldHA:
 
         # Set up an empty mount location and populate source directories with sample files
         etc_slurm = Path("/etc/slurm")
-        statesave = Path(DEFAULT_SLURM_CONFIG["statesavelocation"])
+        statesave = Path("/var/lib/slurm/checkpoint")
 
         slurm_conf_init = textwrap.dedent(f"""\
             slurmctldhost=hostname
@@ -106,7 +102,7 @@ class TestSlurmctldHA:
 
         # Populate source and target directories with different sample files
         etc_slurm = Path("/etc/slurm")
-        statesave = Path(DEFAULT_SLURM_CONFIG["statesavelocation"])
+        statesave = Path("/var/lib/slurm/checkpoint")
         ha_fs_prefix = Path(HA_MOUNT_LOCATION)
         ha_etc_slurm = ha_fs_prefix / "etc" / "slurm"
         ha_statesave = ha_fs_prefix / statesave.name
