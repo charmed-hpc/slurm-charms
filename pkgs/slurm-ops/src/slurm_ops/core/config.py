@@ -107,6 +107,50 @@ class SlurmConfigManager[T: type[BaseEditor]]:
         self._user = user
         self._group = group
 
+    @property
+    def name(self) -> str:
+        """Get the name of the configuration file."""
+        return self.path.name
+
+    @property
+    def path(self) -> Path:
+        """Get path to configuration file."""
+        return Path(self._file)
+
+    @property
+    def includes(self) -> MappingProxyType[str, "SlurmConfigManager"]:
+        """Get paths to additional configuration files."""
+        return MappingProxyType(
+            IncludeMapping(
+                [
+                    p
+                    for p in self.path.parent.glob(f"{self.path.name}.*")
+                    if p.suffix != ".snapshot"
+                ],
+                self._editor.__class__,
+                path=self.path.parent,
+                mode=self._mode,
+                user=self._user,
+                group=self._group,
+            )
+        )
+
+    @property
+    def snapshots(self) -> MappingProxyType[str, "SlurmConfigManager"]:
+        """Get paths to configuration file snapshots."""
+        return MappingProxyType(
+            {
+                p.name: SlurmConfigManager(
+                    self._editor.__class__,
+                    file=p,
+                    mode=self._mode,
+                    user=self._user,
+                    group=self._group,
+                )
+                for p in self.path.parent.glob(f"{self.path.name}*.snapshot")
+            }
+        )
+
     def load(self) -> Any:
         """Load the configuration file."""
         return self._editor.load(self._file)
@@ -165,42 +209,3 @@ class SlurmConfigManager[T: type[BaseEditor]]:
     def delete(self) -> None:
         """Delete the configuration file."""
         self.path.unlink(missing_ok=True)
-
-    @property
-    def path(self) -> Path:
-        """Get path to configuration file."""
-        return Path(self._file)
-
-    @property
-    def includes(self) -> MappingProxyType[str, "SlurmConfigManager"]:
-        """Get paths to additional configuration files."""
-        return MappingProxyType(
-            IncludeMapping(
-                [
-                    p
-                    for p in self.path.parent.glob(f"{self.path.name}.*")
-                    if p.suffix != ".snapshot"
-                ],
-                self._editor.__class__,
-                path=self.path.parent,
-                mode=self._mode,
-                user=self._user,
-                group=self._group,
-            )
-        )
-
-    @property
-    def snapshots(self) -> MappingProxyType[str, "SlurmConfigManager"]:
-        """Get paths to configuration file snapshots."""
-        return MappingProxyType(
-            {
-                p.name: SlurmConfigManager(
-                    self._editor.__class__,
-                    file=p,
-                    mode=self._mode,
-                    user=self._user,
-                    group=self._group,
-                )
-                for p in self.path.parent.glob(f"{self.path.name}*.snapshot")
-            }
-        )
