@@ -43,6 +43,19 @@ def slurmdbd_installed(charm: "SlurmdbdCharm") -> ConditionEvaluation:
     )
 
 
+def unit_is_leader(charm: ops.CharmBase) -> ConditionEvaluation:
+    """Check if this slurmdbd unit is the application leader."""
+    is_leader = charm.unit.is_leader()
+    return ConditionEvaluation(
+        is_leader,
+        (
+            "`slurmdbd` service high-availability is not supported. Scale down application"
+            if not is_leader
+            else ""
+        ),
+    )
+
+
 database_exists = integration_exists(DATABASE_INTEGRATION_NAME)
 database_exists.__doc__ = """Check if the `database` integration exists."""
 
