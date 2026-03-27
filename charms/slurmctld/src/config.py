@@ -14,12 +14,8 @@
 
 """Manage the configuration of the `slurmctld` charmed operator."""
 
-import logging
-
 from pydantic import BaseModel, ConfigDict, field_validator
 from slurmutils import CGroupConfig, ModelError, SlurmConfig
-
-_logger = logging.getLogger(__name__)
 
 
 class ConfigManager(BaseModel):
