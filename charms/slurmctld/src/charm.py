@@ -851,8 +851,8 @@ class SlurmctldCharm(ops.CharmBase):
         """Refresh the list of controllers in slurm.conf and relevant Slurm services.
 
         Notes:
-            - This function must only be called by a hook with a @reconfigure decorator to ensure
-              slurmrestd is also updated with the new Slurm configuration.
+            - This function must only be called by a hook that calls the `_reconfigure`
+              method to ensure slurmrestd is also updated with the new Slurm configuration.
         """
         new_controllers = self._get_controllers()
         with self.slurmctld.config.edit() as config:
