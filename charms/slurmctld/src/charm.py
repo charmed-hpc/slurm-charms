@@ -789,7 +789,7 @@ class SlurmctldCharm(ops.CharmBase):
         #   '['scontrol', 'reconfigure']' failed with exit code 1. reason: slurm_reconfigure error:
         #   Slurm backup controller in standby mode
         try:
-            self.slurmctld.service.restart()
+            self.slurmctld.reconfigure(restart=True)
         except SlurmOpsError as e:
             logger.error(e.message)
             raise StopCharm(
@@ -800,7 +800,7 @@ class SlurmctldCharm(ops.CharmBase):
         self.slurmctld_peer.signal_slurmctld_restart()
 
         try:
-            scontrol("reconfigure")
+            self.slurmctld.reconfigure()
         except SlurmOpsError as e:
             logger.error(e.message)
             raise StopCharm(
