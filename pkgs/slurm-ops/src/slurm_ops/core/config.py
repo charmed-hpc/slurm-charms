@@ -151,6 +151,18 @@ class SlurmConfigManager[T: type[BaseEditor]]:
             }
         )
 
+    def exists(self) -> bool:
+        """Check whether the configuration file exists."""
+        return self.path.exists()
+
+    def create(self) -> None:
+        """Create an empty configuration file with file mode and user/group ownership."""
+        # This "odd" context manager invocation enables us to ensure that the configuration
+        # file is created with the correct owner, group, and mode, but not overwrite any
+        # pre-existing content if the file already exists.
+        with self.edit() as _:
+            pass
+
     def load(self) -> Any:
         """Load the configuration file."""
         return self._editor.load(self._file)
@@ -192,19 +204,6 @@ class SlurmConfigManager[T: type[BaseEditor]]:
         """Restore the current configuration file from a snapshot."""
         for snapshot in self.snapshots.values():
             shutil.copy(snapshot.path, snapshot.path.parent / snapshot.path.stem)
-
-    def create(self) -> None:
-        """Create an empty configuration file with file mode and user/group ownership."""
-        self.path.touch(mode=self._mode)
-        shutil.chown(self.path, self._user, self._group)
-        # The Slurm daemons and `scontrol` will emit error messages if Slurm tries to
-        # read an empty configuration file. Adding an empty newline to the created file
-        # prevents these error messages from being emitted by Slurm.
-        self.path.write_text("\n")
-
-    def exists(self) -> bool:
-        """Check whether the configuration file exists."""
-        return self.path.exists()
 
     def delete(self) -> None:
         """Delete the configuration file."""
