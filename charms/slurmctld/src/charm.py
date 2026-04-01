@@ -18,30 +18,19 @@
 
 import logging
 import secrets
-from typing import cast
 
 import mail
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.smtp_integrator.v0.smtp import SmtpDataAvailableEvent, SmtpRequires
-from config import (
-    get_controllers,
-    init_config,
-    reconfigure_slurmctld,
-    update_cgroup_config,
-    update_default_partition,
-    update_overrides,
-)
+from config import ConfigManager
 from constants import (
-    ACCOUNTING_CONFIG_FILE,
     CLUSTER_NAME_PREFIX,
-    DEFAULT_PROFILING_CONFIG,
     HA_MOUNT_INTEGRATION_NAME,
     MAIL_INTEGRATION_NAME,
     MAILPROG_PATH,
     OCI_RUNTIME_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
-    PROFILING_CONFIG_FILE,
     PROMETHEUS_EXPORTER_PORT,
     SACKD_INTEGRATION_NAME,
     SLURMCTLD_PORT,
@@ -71,10 +60,12 @@ from hpc_libs.interfaces import (
     partition_ready,
     wait_unless,
 )
-from hpc_libs.utils import StopCharm, leader, plog, reconfigure, refresh
+from hpc_libs.is_container import is_container
+from hpc_libs.utils import StopCharm, leader, plog, refresh
 from integrations import SlurmctldPeer, SlurmctldPeerConnectedEvent
 from interface_influxdb import InfluxDB, InfluxDBAvailableEvent, InfluxDBUnavailableEvent
 from psutil import net_if_addrs
+from pydantic import ValidationError
 from slurm_ops import SlurmctldManager, SlurmOpsError, scontrol
 from slurmutils import (
     AcctGatherConfig,
@@ -91,11 +82,10 @@ from state import (
     shared_state_mounted,
     slurmctld_installed,
     slurmctld_is_active,
+    slurmctld_ready,
 )
 
 logger = logging.getLogger(__name__)
-reconfigure = reconfigure(hook=reconfigure_slurmctld)
-reconfigure.__doc__ = """Reconfigure the `slurmctld` service after an event handler completes."""
 refresh = refresh(hook=check_slurmctld)
 refresh.__doc__ = """Refresh status of the `slurmctld` unit after an event handler completes."""
 
@@ -112,6 +102,23 @@ class SlurmctldCharm(ops.CharmBase):
         self._stored.set_default(unit_departing=False)
 
         self.slurmctld = SlurmctldManager(snap=False)
+        try:
+            self.configmgr = self.load_config(ConfigManager)
+        except ValidationError as e:
+            logger.error(e)
+            self.unit.status = ops.BlockedStatus(
+                "Configuration option(s) "
+                + ", ".join(
+                    [
+                        f"'{option.replace('_', '-')}'"  # type: ignore
+                        for error in e.errors()
+                        for option in error.get("loc", ())
+                    ]
+                )
+                + " failed validation. See `juju debug-log` for details"
+            )
+            return
+
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.leader_elected, self._on_leader_elected)
         framework.observe(self.on.start, self._on_start)
@@ -213,7 +220,6 @@ class SlurmctldCharm(ops.CharmBase):
         self.unit.open_port("tcp", PROMETHEUS_EXPORTER_PORT)
 
     @refresh
-    @reconfigure
     @wait_unless(shared_state_mounted)
     def _on_leader_elected(self, event: ops.LeaderElectedEvent) -> None:
         """Refresh controller lists on leader re-election."""
@@ -222,6 +228,7 @@ class SlurmctldCharm(ops.CharmBase):
             return
 
         self._refresh_controllers()
+        self._reconfigure()
 
     @refresh
     @block_unless(slurmctld_installed, shared_state_mounted)
@@ -234,9 +241,56 @@ class SlurmctldCharm(ops.CharmBase):
               for example, after a reboot of the underlying instance.
         """
         try:
-            # Prevent slurm.conf being overwritten after a reboot of the underlying instance
+            # Prevent `slurm.conf` being overwritten after a reboot of the underlying instance.
             if self.unit.is_leader() and not self.slurmctld.config.exists():
-                init_config(self)
+                data = self.slurmctld_peer.get_controller_peer_app_data()
+                with self.slurmctld.config.edit() as config:
+                    config.cluster_name = data.cluster_name if data else ""
+                    config.slurmctld_host = self._get_controllers()
+                    config.auth_alt_parameters = {"jwt_key": "/etc/slurm/jwt_hs256.key"}
+                    config.auth_alt_types = ["auth/jwt"]
+                    config.auth_type = "auth/slurm"
+                    config.cred_type = "cred/slurm"
+                    config.gres_types = ["gpu"]
+                    config.max_node_count = 65533
+                    config.metrics_type = "metrics/openmetrics"
+                    config.plugin_dir = ["/usr/lib/x86_64-linux-gnu/slurm-wlm"]
+                    config.plug_stack_config = "/etc/slurm/plugstack.conf.d/plugstack.conf"
+                    config.proctrack_type = (
+                        "proctrack/linuxproc" if is_container() else "proctrack/cgroup"
+                    )
+                    config.reboot_program = "/usr/sbin/reboot --reboot"
+                    config.select_type = "select/cons_tres"
+                    config.select_type_parameters = {"cr_cpu_memory": True}
+                    config.slurmctld_parameters = {"enable_configless": True}
+                    config.slurmctld_port = SLURMCTLD_PORT
+                    config.slurmd_port = 6818
+                    config.state_save_location = "/var/lib/slurm/checkpoint"
+                    config.slurmd_spool_dir = "/var/lib/slurm/slurmd"
+                    config.slurmctld_log_file = "/var/log/slurm/slurmctld.log"
+                    config.slurmd_log_file = "/var/log/slurm/slurmd.log"
+                    config.slurmd_pid_file = "/var/run/slurmd.pid"
+                    config.slurmctld_pid_file = "/var/run/slurmctld.pid"
+                    config.slurm_user = self.slurmctld.user
+                    config.slurmd_user = "root"
+                    config.task_plugin = (
+                        ["task/affinity"] if is_container() else ["task/cgroup", "task/affinity"]
+                    )
+                    config.include = [
+                        self.slurmctld.accounting.name,
+                        self.slurmctld.profiling.name,
+                        self.slurmctld.overrides.name,
+                    ]
+
+                # The `include` files must exist for `slurmctld` to start successfully.
+                self.slurmctld.accounting.create()
+                self.slurmctld.profiling.create()
+                self.slurmctld.overrides.create()
+
+            # Prevent `gres.conf` being overwritten after a reboot of the underlying instance.
+            if self.unit.is_leader() and not self.slurmctld.gres.exists():
+                with self.slurmctld.gres.edit() as config:
+                    config.auto_detect = "nvidia"
 
             self.slurmctld.service.enable()
             self.slurmctld.service.restart()
@@ -248,25 +302,57 @@ class SlurmctldCharm(ops.CharmBase):
             )
 
     @refresh
-    @reconfigure
     def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
         """Update the `slurmctld` application's configuration."""
         # Each unit maintains its own Slurm-Mail configuration, not just the leader.
         # File coherence not a concern - Slurm-Mail can run with a stale slurm-mail.conf. It just
         # briefly attempts to use an old SMTP config or an old `email-from-name` until hooks run to
-        # bring config in sync
+        # bring config in sync.
         if self.model.relations.get(MAIL_INTEGRATION_NAME):
             with mail.configure() as config:
-                config.from_name = cast(str, self.config["email-from-name"])
+                config.from_name = self.configmgr.email_from_name
         else:
             logger.debug("smtp integration not connected. skipping mail configuration")
 
         # Only the leader handles configuration changes for the slurmctld service. Non-leader units
         # read configuration managed by the leader.
         if self.unit.is_leader():
-            update_cgroup_config(self)
-            update_default_partition(self)
-            update_overrides(self)
+            self.slurmctld.overrides.dump(self.configmgr.slurm_conf_parameters)
+
+            current_default_partition = self.slurmctld.get_default_partition()
+            if self.configmgr.default_partition == current_default_partition:
+                logger.debug(
+                    "default partition '%s' has not changed. "
+                    "skipping update to default partition configuration",
+                    current_default_partition,
+                )
+            else:
+                logger.info(
+                    "default partition has changed from '%s' to '%s'. "
+                    "updating default partition configuration",
+                    current_default_partition,
+                    self.configmgr.default_partition,
+                )
+                self.slurmctld.set_default_partition(
+                    self.configmgr.default_partition,
+                    current_default_partition,
+                )
+                logger.info("default partition configuration updated successfully")
+
+            # Slurm's `proctrack/cgroup` process tracking plugin cannot be used if
+            # slurmctld is deployed inside a system container.
+            if is_container():
+                logger.warning(
+                    "machine is a container. not enabling the `proctrack/cgroup` plugin or "
+                    "configuring the `%s` file",
+                    self.slurmctld.cgroup.name,
+                )
+            else:
+                logger.info("updating `%s` configuration", self.slurmctld.cgroup.name)
+                self.slurmctld.cgroup.dump(self.configmgr.cgroup_parameters)
+                logger.info("`%s` configuration updated successfully", self.slurmctld.cgroup.name)
+
+        self._reconfigure()
 
     @refresh
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
@@ -289,19 +375,19 @@ class SlurmctldCharm(ops.CharmBase):
         self.slurmctld_peer.update_controller_peer_app_data(cluster_name=cluster_name)
 
     @refresh
-    @reconfigure
     def _on_slurmctld_changed(self, event) -> None:
         """Handle when `slurmctld` units join or leave."""
         # Only a slurm.conf update needed - no other conf files are affected.
         # slurmrestd gets the updated config via the reconfigure hook
         self._refresh_controllers()
+        self._reconfigure()
 
     @refresh
     @wait_unless(slurmctld_is_active)
     @block_unless(slurmctld_installed)
     def _on_sackd_connected(self, event: SackdConnectedEvent) -> None:
         """Handle when a new `sackd` application is connected."""
-        new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in get_controllers(self)]
+        new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in self._get_controllers()]
         self.sackd.set_controller_data(
             ControllerData(
                 auth_key=self.slurmctld.key.get(),
@@ -311,7 +397,6 @@ class SlurmctldCharm(ops.CharmBase):
         )
 
     @refresh
-    @reconfigure
     @wait_unless(partition_ready, slurmctld_is_active)
     @block_unless(slurmctld_installed)
     def _on_slurmd_ready(self, event: SlurmdReadyEvent) -> None:
@@ -320,8 +405,7 @@ class SlurmctldCharm(ops.CharmBase):
         name = data.partition.partition_name
         include = f"slurm.conf.{name}"
 
-        default_partition = cast(str, self.config.get("default-partition", ""))
-        if default_partition == name:
+        if name == self.configmgr.default_partition:
             data.partition.default = True
 
         with self.slurmctld.config.includes[include].edit() as config:
@@ -334,7 +418,7 @@ class SlurmctldCharm(ops.CharmBase):
         except ModelError:
             pass
 
-        new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in get_controllers(self)]
+        new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in self._get_controllers()]
         self.slurmd.set_controller_data(
             ControllerData(
                 auth_key=self.slurmctld.key.get(),
@@ -343,8 +427,9 @@ class SlurmctldCharm(ops.CharmBase):
             integration_id=event.relation.id,
         )
 
+        self._reconfigure()
+
     @refresh
-    @reconfigure
     @block_unless(slurmctld_installed)
     def _on_slurmd_disconnected(self, event: SlurmdDisconnectedEvent) -> None:
         """Handle when a `slurmd` application is disconnected."""
@@ -358,6 +443,7 @@ class SlurmctldCharm(ops.CharmBase):
             pass
 
         self.slurmctld.config.includes[include].delete()
+        self._reconfigure()
 
     @refresh
     @block_unless(slurmctld_installed)
@@ -372,14 +458,13 @@ class SlurmctldCharm(ops.CharmBase):
         )
 
     @refresh
-    @reconfigure
     @wait_unless(database_ready, all_units_observed)
     @block_unless(slurmctld_installed)
     def _on_slurmdbd_ready(self, event: SlurmdbdReadyEvent) -> None:
         """Handle when database data is ready from a `slurmdbd` application."""
         data = self.slurmdbd.get_database_data(event.relation.id)
 
-        with self.slurmctld.config.includes[ACCOUNTING_CONFIG_FILE].edit() as config:
+        with self.slurmctld.accounting.edit() as config:
             config.accounting_storage_host = data.hostname
             config.accounting_storage_port = 6819
             config.accounting_storage_type = "accounting_storage/slurmdbd"
@@ -388,16 +473,17 @@ class SlurmctldCharm(ops.CharmBase):
         self.slurmctld.acct_gather.restore()
         try:
             with self.slurmctld.config.edit() as config:
-                config.include = [PROFILING_CONFIG_FILE] + config.include
+                config.include = [self.slurmctld.profiling.name] + config.include
         except ModelError:
             pass
 
+        self._reconfigure()
+
     @refresh
-    @reconfigure
     @block_unless(slurmctld_installed)
     def _on_slurmdbd_disconnected(self, _: SlurmdbdDisconnectedEvent) -> None:
         """Handle when a `slurmdbd` application is disconnected."""
-        with self.slurmctld.config.includes[ACCOUNTING_CONFIG_FILE].edit() as config:
+        with self.slurmctld.accounting.edit() as config:
             del config.accounting_storage_host
             del config.accounting_storage_port
             del config.accounting_storage_type
@@ -409,9 +495,11 @@ class SlurmctldCharm(ops.CharmBase):
         self.slurmctld.acct_gather.delete()
         try:
             with self.slurmctld.config.edit() as config:
-                config.include.remove(PROFILING_CONFIG_FILE)
+                config.include.remove(self.slurmctld.profiling.name)
         except ValueError:
             pass
+
+        self._reconfigure()
 
     @refresh
     @wait_unless(config_ready, database_ready, slurmctld_is_active)
@@ -431,7 +519,6 @@ class SlurmctldCharm(ops.CharmBase):
 
     @leader
     @refresh
-    @reconfigure
     @wait_unless(database_ready)
     @block_unless(slurmctld_installed)
     def _on_influxdb_available(self, event: InfluxDBAvailableEvent) -> None:
@@ -467,25 +554,34 @@ class SlurmctldCharm(ops.CharmBase):
                 )
             )
 
-        config = SlurmConfig(**DEFAULT_PROFILING_CONFIG)
-        logger.info("updating `%s`", PROFILING_CONFIG_FILE)
-        logger.debug("`%s`:\n%s", PROFILING_CONFIG_FILE, plog(config.dict()))
-        self.slurmctld.config.includes[PROFILING_CONFIG_FILE].dump(config)
-        logger.info("`%s` successfully updated", PROFILING_CONFIG_FILE)
+        logger.info("updating `%s` configuration", self.slurmctld.profiling.name)
+        config = SlurmConfig()
+        config.acct_gather_profile_type = "acct_gather_profile/influxdb"
+        config.acct_gather_interconnect_type = "acct_gather_interconnect/sysfs"
+        config.accounting_storage_tres = ["ic/sysfs"]
+        config.acct_gather_node_freq = 30
+        config.job_acct_gather_frequency = {"task": 5, "network": 5}
+        config.job_acct_gather_type = (
+            "jobacct_gather/linux" if is_container() else "jobacct_gather/cgroup"
+        )
+        logger.debug("`%s`:\n%s", self.slurmctld.profiling.name, plog(config.dict()))
+        self.slurmctld.profiling.dump(config)
+        logger.info("`%s` configuration updated successfully", self.slurmctld.profiling.name)
+
+        self._reconfigure()
 
     @leader
-    @reconfigure
     @block_unless(slurmctld_installed)
     def _on_influxdb_unavailable(self, _: InfluxDBUnavailableEvent) -> None:
         """Clear the `acct_gather.conf` options on departed relation."""
         logger.info("`influxdb` database is no longer available. disabling job profiling")
 
-        logger.info("deleting `acct_gather.conf`")
+        logger.info("deleting `%s` configuration", self.slurmctld.acct_gather.name)
         self.slurmctld.acct_gather.delete()
-        logger.info("`acct_gather.conf` successfully deleted")
+        logger.info("`%s` configuration deleted successfully", self.slurmctld.acct_gather.name)
 
-        logger.info("clearing `%s`", PROFILING_CONFIG_FILE)
-        with self.slurmctld.config.includes[PROFILING_CONFIG_FILE].edit() as profiling:
+        logger.info("clearing `%s` configuration", self.slurmctld.profiling.name)
+        with self.slurmctld.profiling.edit() as profiling:
             del profiling.acct_gather_profile_type
             del profiling.acct_gather_interconnect_type
             del profiling.accounting_storage_tres
@@ -493,28 +589,30 @@ class SlurmctldCharm(ops.CharmBase):
             del profiling.job_acct_gather_frequency
             del profiling.job_acct_gather_type
 
-        logger.info("`%s` successfully cleared", PROFILING_CONFIG_FILE)
+        logger.info("`%s` configuration cleared successfully", self.slurmctld.profiling.name)
+        self._reconfigure()
 
-    @reconfigure
     @block_unless(slurmctld_installed)
     def _on_oci_runtime_ready(self, event: OCIRuntimeReadyEvent) -> None:
         """Handle when OCI runtime data is ready from a Slurm OCI runtime provider."""
         data = self.oci_runtime.get_oci_runtime_data(event.relation.id)
 
-        logger.info("updating `oci.conf`")
-        logger.debug("`oci.conf`:\n%s", plog(data.ociconfig.dict()))
+        logger.info("updating `%s` configuration", self.slurmctld.oci.name)
+        logger.debug("`%s`:\n%s", self.slurmctld.oci.name, plog(data.ociconfig.dict()))
         self.slurmctld.oci.dump(data.ociconfig)
-        logger.info("`oci.conf` successfully updated")
+        logger.info("`%s` configuration updated successfully", self.slurmctld.oci.name)
+        self._reconfigure()
 
-    @reconfigure
     @block_unless(slurmctld_installed)
     def _on_oci_runtime_disconnected(self, _: OCIRuntimeDisconnectedEvent) -> None:
         """Handle when a Slurm OCI runtime is disconnected."""
         logger.info("oci runtime has been disconnected. disabling oci support")
 
-        logger.info("deleting `oci.conf`")
+        logger.info("deleting `%s` configuration", self.slurmctld.oci.name)
         self.slurmctld.oci.delete()
-        logger.info("`oci.conf` successfully deleted")
+        logger.info("`%s` configuration deleted successfully", self.slurmctld.oci.name)
+
+        self._reconfigure()
 
     def _on_show_current_config_action(self, event: ops.ActionEvent) -> None:
         """Show current slurm.conf."""
@@ -568,7 +666,6 @@ class SlurmctldCharm(ops.CharmBase):
             )
 
     @refresh
-    @reconfigure
     @wait_unless(database_ready)
     @block_unless(slurmctld_installed)
     def _on_smtp_data_available(self, event: SmtpDataAvailableEvent) -> None:
@@ -593,7 +690,7 @@ class SlurmctldCharm(ops.CharmBase):
                 config.use_tls = use_tls
                 config.user = event.user
                 config.password = password
-                config.from_name = cast(str, self.config["email-from-name"])
+                config.from_name = self.configmgr.email_from_name
         except mail.MailOpsError as e:
             logger.error(e.message)
             event.defer()
@@ -607,13 +704,14 @@ class SlurmctldCharm(ops.CharmBase):
             with self.slurmctld.config.edit() as config:
                 config.mail_prog = str(MAILPROG_PATH)
 
+        self._reconfigure()
+
     def _on_smtp_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Handle SMTP relation departing."""
         if event.departing_unit == self.unit:
             self._stored.unit_departing = True
 
     @refresh
-    @reconfigure
     @block_unless(slurmctld_installed)
     def _on_smtp_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         """Clean up on SMTP relation breaking."""
@@ -638,6 +736,86 @@ class SlurmctldCharm(ops.CharmBase):
             raise StopCharm(
                 ops.BlockedStatus(
                     "Failed to uninstall slurm-mail package. See `juju debug-log` for details"
+                )
+            )
+
+        self._reconfigure()
+
+    def _get_controllers(self) -> list[str]:
+        """Get hostnames for all Slurm controllers."""
+        # Read the current list of controllers from the slurm.conf file and compare with the
+        # controllers currently in the peer relation.
+        # File ordering must be preserved as it dictates which slurmctld instance is the primary and
+        # which are backups.
+        from_file = self.slurmctld.get_controllers()
+        from_peer = self.slurmctld_peer.get_controllers()
+
+        logger.debug(
+            "controllers from slurm.conf: %s, from peer integration: %s", from_file, from_peer
+        )
+
+        # Controllers in the file but not the peer relation have departed.
+        # Controllers in the peer relation but not the file are newly added.
+        from_file_set = set(from_file)
+        controllers = [c for c in from_file if c in from_peer] + [
+            c for c in from_peer if c not in from_file_set
+        ]
+
+        logger.debug("current controllers: %s", controllers)
+        return controllers
+
+    def _reconfigure(self) -> None:
+        """Reconfigure the `slurmctld` and update integration databags.
+
+        Notes:
+            - In a `slurmctld` high availability setup, all `slurmctld` services across all
+              `slurmctld` units in the cluster are restarted by this function. This ensures all
+              `slurm.conf` changes are picked up, including those not re-read by an
+              `scontrol reconfigure` command. If a restart is not done, removal of a controller
+              will result in a malfunctioning cluster as `SlurmctldHost` lines are not
+              re-read and an availability event may cause a failover attempt to
+              a nonexistent backup.
+
+        Raises:
+            StopCharm: Raised if an error occurs when reconfiguring the `slurmctld` service.
+        """
+        if not slurmctld_ready(self):
+            return
+
+        # This must occur before `scontrol reconfigure` in case the primary `slurmctld` has been
+        # removed and this unit is a backup being promoted to the new primary.
+        #
+        # If the `scontrol reconfigure` is performed first in this situation, it fails with:
+        #   '['scontrol', 'reconfigure']' failed with exit code 1. reason: slurm_reconfigure error:
+        #   Slurm backup controller in standby mode
+        try:
+            self.slurmctld.reconfigure(restart=True)
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to restart `slurmctld.service`. See `juju debug-log` for details"
+                )
+            )
+        self.slurmctld_peer.signal_slurmctld_restart()
+
+        try:
+            self.slurmctld.reconfigure()
+        except SlurmOpsError as e:
+            logger.error(e.message)
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to apply new Slurm configuration. See `juju debug-log` for details"
+                )
+            )
+
+        if self.slurmrestd.is_joined():
+            self.slurmrestd.set_controller_data(
+                ControllerData(
+                    slurmconfig={
+                        "slurm.conf": self.slurmctld.config.load(),
+                        **{k: v.load() for k, v in self.slurmctld.config.includes.items()},
+                    }
                 )
             )
 
@@ -673,10 +851,10 @@ class SlurmctldCharm(ops.CharmBase):
         """Refresh the list of controllers in slurm.conf and relevant Slurm services.
 
         Notes:
-            - This function must only be called by a hook with a @reconfigure decorator to ensure
-              slurmrestd is also updated with the new Slurm configuration.
+            - This function must only be called by a hook that calls the `_reconfigure`
+              method to ensure slurmrestd is also updated with the new Slurm configuration.
         """
-        new_controllers = get_controllers(self)
+        new_controllers = self._get_controllers()
         with self.slurmctld.config.edit() as config:
             config.slurmctld_host = new_controllers
 
