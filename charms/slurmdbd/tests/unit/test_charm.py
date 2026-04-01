@@ -74,7 +74,7 @@ class TestSlurmdbdCharm:
             assert state.unit_status == expected
         else:
             assert state.unit_status == ops.BlockedStatus(
-                "`slurmdbd` service high-availability is not supported. Scale down application"
+                "`slurmdbd` high-availability is not supported. Scale down application"
             )
 
     def test_on_config_changed(
