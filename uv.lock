@@ -990,7 +990,7 @@ dependencies = [
 requires-dist = [
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
-    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurm-ops", editable = "internal/slurm-ops" },
 ]
 
 [[package]]
@@ -1075,7 +1075,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'" },
     { name = "rpds-py", specifier = "~=0.23.1" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurm-ops", editable = "internal/slurm-ops" },
     { name = "slurmutils", specifier = ">=1.1.1,<2.0.0" },
     { name = "tenacity", marker = "extra == 'dev'", specifier = "~=8.2" },
 ]
@@ -1084,7 +1084,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "slurm-ops"
 version = "0.1.0"
-source = { editable = "pkgs/slurm-ops" }
+source = { editable = "internal/slurm-ops" }
 dependencies = [
     { name = "hpc-libs", extra = ["machine"] },
     { name = "nvidia-ml-py" },
@@ -1119,7 +1119,7 @@ requires-dist = [
     { name = "influxdb" },
     { name = "ops" },
     { name = "psutil" },
-    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurm-ops", editable = "internal/slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1141,7 +1141,7 @@ requires-dist = [
     { name = "cosl" },
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
-    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurm-ops", editable = "internal/slurm-ops" },
     { name = "slurmutils" },
     { name = "ubuntu-drivers-common", git = "https://github.com/canonical/ubuntu-drivers-common?rev=554b91edfd3699625dbed90f679abb31a897b76e" },
 ]
@@ -1163,7 +1163,7 @@ requires-dist = [
     { name = "cosl" },
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
-    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurm-ops", editable = "internal/slurm-ops" },
     { name = "slurmutils" },
 ]
 
@@ -1182,7 +1182,7 @@ dependencies = [
 requires-dist = [
     { name = "hpc-libs", git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff" },
     { name = "ops" },
-    { name = "slurm-ops", editable = "pkgs/slurm-ops" },
+    { name = "slurm-ops", editable = "internal/slurm-ops" },
     { name = "slurmutils" },
 ]
 
