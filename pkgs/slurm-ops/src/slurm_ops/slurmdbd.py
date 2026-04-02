@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,13 +29,26 @@ class SlurmdbdManager(SlurmManager):
     def __init__(self, snap: bool = False) -> None:
         super().__init__("slurmdbd", snap)
 
-        self.config = SlurmConfigManager(
+    @property
+    def config(self) -> SlurmConfigManager:
+        """Get the configuration manager for the `slurmdbd.conf` file."""
+        return SlurmConfigManager(
             SlurmdbdConfigEditor,
             file=self._ops_manager.etc_path / "slurmdbd.conf",
             mode=0o600,
             user=self.user,
             group=self.group,
         )
+
+    @property
+    def overrides(self) -> SlurmConfigManager:
+        """Get the configuration manager for the `slurmdbd.conf.overrides` file."""
+        return self.config.includes["slurmdbd.conf.overrides"]
+
+    @property
+    def storage(self) -> SlurmConfigManager:
+        """Get the configuration manager for the `slurmdbd.conf.storage` file."""
+        return self.config.includes["slurmdbd.conf.storage"]
 
     @property
     def mysql_unix_port(self) -> str | None:
@@ -52,10 +65,19 @@ class SlurmdbdManager(SlurmManager):
 
     @property
     def user(self) -> str:
-        """Get the user that the `slurmd` service runs as."""
+        """Get the user that the `slurmdbd` service runs as."""
         return SLURM_USER
 
     @property
     def group(self) -> str:
-        """Get the group that the `slurmd` service runs as."""
+        """Get the group that the `slurmdbd` service runs as."""
         return SLURM_GROUP
+
+    def reconfigure(self) -> None:
+        """Reconfigure the `slurmdbd` service running on the machine.
+
+        Raises:
+            SlurmOpsError: Raised if a failure occurs when reconfiguring the `slurmdbd` service.
+        """
+        self.config.merge()
+        super().reconfigure()

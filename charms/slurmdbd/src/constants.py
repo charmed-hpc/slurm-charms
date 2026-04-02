@@ -1,4 +1,4 @@
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 # Copyright 2024 Omnivector, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,15 +21,3 @@ SLURMDBD_INTEGRATION_NAME = "slurmctld"
 
 SLURM_ACCT_DATABASE_NAME = "slurm_acct_db"
 SLURMDBD_PORT = 6819
-
-OVERRIDES_CONFIG_FILE = "slurmdbd.conf.overrides"
-STORAGE_CONFIG_FILE = "slurmdbd.conf.storage"
-DEFAULT_SLURMDBD_CONFIG = {
-    "dbdport": SLURMDBD_PORT,
-    "authtype": "auth/slurm",
-    "slurmuser": "slurm",
-    "plugindir": ["/usr/lib/x86_64-linux-gnu/slurm-wlm"],
-    "pidfile": "/var/run/slurmdbd/slurmdbd.pid",
-    "logfile": "/var/log/slurm/slurmdbd.log",
-    "storagetype": "accounting_storage/mysql",
-}
