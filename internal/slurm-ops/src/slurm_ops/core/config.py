@@ -25,7 +25,7 @@ from typing import Any
 from slurmutils import BaseEditor
 
 
-class IncludeMapping[T: type[BaseEditor]](Mapping):
+class IncludeMapping[T: BaseEditor](Mapping):
     """Map of include file names to `SlurmConfigManager` instances.
 
     Notes:
@@ -41,7 +41,7 @@ class IncludeMapping[T: type[BaseEditor]](Mapping):
         self,
         includes: Iterable[Path],
         /,
-        editor: T,
+        editor: type[T],
         path: Path,
         *,
         mode: int,
@@ -87,7 +87,7 @@ class IncludeMapping[T: type[BaseEditor]](Mapping):
         )
 
 
-class SlurmConfigManager[T: type[BaseEditor]]:
+class SlurmConfigManager[T: BaseEditor]:
     """Slurm configuration manager.
 
     Args:
@@ -98,7 +98,7 @@ class SlurmConfigManager[T: type[BaseEditor]]:
         group: System group that owns the managed configuration file.
     """
 
-    def __init__(self, editor: T, file: str | PathLike, mode: int, user: str, group: str) -> None:
+    def __init__(self, editor: type[T], file: str | PathLike, mode: int, user: str, group: str) -> None:
         # Cast to `Any` as we only want `editor` to be subtype of `BaseEditor`,
         # but not be a `BaseEditor` object.
         self._editor: Any = editor()

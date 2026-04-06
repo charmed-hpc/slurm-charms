@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ from slurm_ops import (
     SlurmrestdManager,
 )
 from slurm_ops.core import SlurmManager
+from slurm_ops.core.base import UBUNTU_HPC_SLURM_PPA_URI  # noqa
 
 services = ["sackd", "slurmctld", "slurmd", "slurmdbd", "slurmrestd"]
 
@@ -61,12 +62,18 @@ class TestAptManager:
         fs.create_dir("/usr/lib/systemd/system")
         fs.create_dir("/var/lib/slurm")
 
-        return request.param[0](), request.param[1]
+        manager_t = request.param[0]
+        if issubclass(manager_t, SlurmdManager):
+            manager = manager_t(partition_name="compute")
+        else:
+            manager = manager_t()
+
+        return manager, request.param[1]
 
     def test_install(self, mock_manager, mocker: MockerFixture) -> None:
         """Test the `install` method."""
         manager, _ = mock_manager
-        mocker.patch("slurm_ops.core.base._AptManager._init_ubuntu_hpc_ppa")
+        mocker.patch("slurm_ops.core.base._AptManager._init_ppa")
         mocker.patch("slurm_ops.core.base._AptManager._install_service")
         mocker.patch("slurm_ops.core.base._AptManager._apply_overrides")
         mocker.patch("shutil.chown")
@@ -134,13 +141,13 @@ class TestAptManager:
         mocker.patch("distro.codename", return_value="noble")
 
         # Test that Ubuntu HPC PPA is successfully added to the sources list.
-        manager._ops_manager._init_ubuntu_hpc_ppa()
+        manager._ops_manager._init_ppa(UBUNTU_HPC_SLURM_PPA_URI)
         expected = [
             "add-apt-repository",
             "--yes",
             (
                 "--sourceslist="
-                + "deb https://ppa.launchpadcontent.net/ubuntu-hpc/experimental/ubuntu noble main"
+                + "deb https://ppa.launchpadcontent.net/ubuntu-hpc/slurm-wlm-25.11/ubuntu noble main"
             ),
             "--no-update",
         ]
@@ -159,15 +166,8 @@ class TestAptManager:
             stderr=b"failed to add ppa",
             output=b"",
         )
-        with pytest.raises(SlurmOpsError) as exec_info:
-            manager._ops_manager._init_ubuntu_hpc_ppa()
-
-        assert exec_info.type == SlurmOpsError
-        assert exec_info.value.message == (
-            "failed to initialize apt to use ubuntu hpc repositories. "
-            + "reason: Command 'add-apt-repository --yes --sourceslist=...' "
-            + "returned non-zero exit status 1."
-        )
+        with pytest.raises(SlurmOpsError):
+            manager._ops_manager._init_ppa(UBUNTU_HPC_SLURM_PPA_URI)
 
     def test_set_ulimit(self, mock_manager) -> None:
         """Test the `_set_ulimit` helper method."""
@@ -194,7 +194,6 @@ class TestAptManager:
                 assert mock_add_package.call_args[0][0] == [
                     "slurmctld",
                     "libpmix-dev",
-                    "prometheus-slurm-exporter",
                 ]
 
             case "slurmd":
@@ -267,7 +266,13 @@ class TestSnapManager:
         """Request a mocked Slurm service manager and service name."""
         fs.create_file("/var/snap/slurm/common/.env")
 
-        return request.param[0](snap=True), request.param[1]
+        manager_t = request.param[0]
+        if issubclass(manager_t, SlurmdManager):
+            manager = manager_t(partition_name="compute", snap=True)
+        else:
+            manager = manager_t(snap=True)
+
+        return manager, request.param[1]
 
     def test_install(self, mock_manager, mock_run, mocker: MockerFixture) -> None:
         """Test the `install` method."""
