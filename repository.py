@@ -23,8 +23,8 @@ import yaml
 ROOT_DIR = Path(__file__).parent.resolve()
 BUILD_PATH = ROOT_DIR / "_build"
 CHARMS_PATH = ROOT_DIR / "charms"
-EXTERNAL_PKGS_PATH = ROOT_DIR / "pkg"
-INTERNAL_PKGS_PATH = ROOT_DIR / "internal"
+PUBLIC_PKGS_PATH = ROOT_DIR / "pkg"
+PRIVATE_PKGS_PATH = ROOT_DIR / "internal"
 PYPROJECT_FILE = "pyproject.toml"
 CHARMCRAFT_FILE = "charmcraft.yaml"
 LOCK_FILE = "uv.lock"
@@ -154,13 +154,11 @@ class Charm:
 class Repository:
     """Information about the monorepo."""
 
-    charms: Collection[Charm]
-    external_libraries: Collection[CharmLibrary]
-    internal_libraries: Collection[CharmLibrary]
-    libraries: Collection[CharmLibrary]
-    external_packages: Collection[Package]
-    internal_packages: Collection[Package]
-    packages: Collection[Package]
+    charms: list[Charm]
+    external_libraries: list[CharmLibrary]
+    internal_libraries: list[CharmLibrary]
+    public_packages: list[Package]
+    private_packages: list[Package]
 
     def __init__(self) -> None:
         """Load the monorepo information."""
@@ -178,12 +176,12 @@ class Repository:
             raise RepositoryError("Failed to read uv.lock file")
 
         try:
-            external_libraries = [
+            self.external_libraries = [
                 CharmLibrary.from_charmcraft_lib(entry)
                 for entry in project["tool"]["repository"]["external-libraries"]
             ]
         except KeyError:
-            external_libraries = []
+            self.external_libraries = []
 
         try:
             binary_packages = project["tool"]["repository"]["binary-packages"]
@@ -201,7 +199,7 @@ class Repository:
         except OSError:
             raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`")
 
-        internal_libraries = []
+        self.internal_libraries = []
         for charm in CHARMS_PATH.iterdir():
             path = charm / "lib"
             charm_name = charm.name.replace("-", "_")
@@ -210,7 +208,7 @@ class Repository:
                 relpath = p.relative_to(path)
                 name = relpath.stem
                 major_version = int(relpath.parts[2][1:])
-                internal_libraries.append(
+                self.internal_libraries.append(
                     CharmLibrary(
                         charm=charm.name,
                         name=name,
@@ -221,26 +219,22 @@ class Repository:
                     )
                 )
 
-        libraries = external_libraries + internal_libraries
-
-        internal_packages = [
-            pkg for path in INTERNAL_PKGS_PATH.iterdir() if (pkg := load_package(path)) is not None
+        self.private_packages = [
+            pkg for path in PRIVATE_PKGS_PATH.iterdir() if (pkg := load_package(path)) is not None
         ]
 
-        external_packages = [
-            pkg for path in EXTERNAL_PKGS_PATH.iterdir() if (pkg := load_package(path) is not None)
+        self.public_packages = [
+            pkg for path in PUBLIC_PKGS_PATH.iterdir() if (pkg := load_package(path) is not None)
         ]
 
-        packages = external_packages + internal_packages
-
-        charms = [
+        self.charms = [
             charm
             for path in CHARMS_PATH.iterdir()
             if (
                 charm := load_charm(
                     path,
-                    libraries=libraries,
-                    packages=packages,
+                    libraries=self.libraries,
+                    packages=self.packages,
                     binary_packages=resolved_binary_packages,
                     uv_lock=uv_lock,
                 )
@@ -248,13 +242,13 @@ class Repository:
             is not None
         ]
 
-        self.charms = charms
-        self.external_libraries = external_libraries
-        self.internal_libraries = internal_libraries
-        self.libraries = libraries
-        self.internal_packages = internal_packages
-        self.external_packages = external_packages
-        self.packages = packages
+    @property
+    def libraries(self) -> Collection[CharmLibrary]:
+        return self.internal_libraries + self.external_libraries
+
+    @property
+    def packages(self) -> Collection[Package]:
+        return self.private_packages + self.public_packages
 
 
 def load_charm(
