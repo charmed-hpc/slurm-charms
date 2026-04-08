@@ -22,9 +22,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
+from charmed_hpc_libs.errors import Error
+from charmlibs import apt
 from constants import DEFAULT_SLURM_MAIL_CONFIG, SLURM_MAIL_CONFIG_PATH
-from hpc_libs.errors import Error
-from hpc_libs.machine import apt
 from pydantic import BaseModel, ConfigDict, Field
 
 _logger = logging.getLogger(__name__)

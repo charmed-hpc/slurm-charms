@@ -98,7 +98,9 @@ class SlurmConfigManager[T: BaseEditor]:
         group: System group that owns the managed configuration file.
     """
 
-    def __init__(self, editor: type[T], file: str | PathLike, mode: int, user: str, group: str) -> None:
+    def __init__(
+        self, editor: type[T], file: str | PathLike, mode: int, user: str, group: str
+    ) -> None:
         # Cast to `Any` as we only want `editor` to be subtype of `BaseEditor`,
         # but not be a `BaseEditor` object.
         self._editor: Any = editor()

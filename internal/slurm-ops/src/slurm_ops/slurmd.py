@@ -23,8 +23,7 @@ from subprocess import CalledProcessError
 from typing import Any, cast
 
 import pynvml
-from hpc_libs.machine import call
-from hpc_libs.utils import plog
+from charmed_hpc_libs.ops import call
 from slurmutils import Node
 
 from slurm_ops import SlurmOpsError, scontrol
@@ -50,7 +49,7 @@ class SlurmdManager(SlurmManager):
     def conf(self, value: Node) -> None:
         _logger.info("updating compute node '%s' node configuration", self.name)
 
-        _logger.debug("'%s' node configuration:\n%s", self.name, plog(value.dict()))
+        _logger.debug("'%s' node configuration:\n%s", self.name, value.dict())
         with self._edit_options() as options:
             options["--conf"] = str(value)
 
@@ -201,7 +200,7 @@ class SlurmdManager(SlurmManager):
         _logger.debug(
             "retrieved configuration for node '%s' from slurm with scontrol:\n%s",
             self.name,
-            plog(info),
+            info,
         )
 
         return info

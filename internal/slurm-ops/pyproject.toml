@@ -20,7 +20,7 @@ authors = [
     { name = "Ubuntu High-Performance Computing", email = "hpc-ubuntu-group@canonical.com" },
 ]
 requires-python = ">=3.12"
-dependencies = ["hpc-libs[machine]", "slurmutils", "nvidia-ml-py"]
+dependencies = ["charmed-hpc-libs[ops]", "charmlibs-apt", "slurmutils", "nvidia-ml-py"]
 
 [build-system]
 requires = ["hatchling"]

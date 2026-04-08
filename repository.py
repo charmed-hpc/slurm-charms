@@ -224,7 +224,7 @@ class Repository:
         ]
 
         self.public_packages = [
-            pkg for path in PUBLIC_PKGS_PATH.iterdir() if (pkg := load_package(path) is not None)
+            pkg for path in PUBLIC_PKGS_PATH.iterdir() if (pkg := load_package(path)) is not None
         ]
 
         self.charms = [
@@ -497,7 +497,7 @@ def validate_charm(charm: str, repository: Repository) -> Charm:
 def validate_package(package: str, repository: Repository) -> Package:
     """Validate the package."""
     try:
-        return next(filter(lambda p: p.name == package, repository.packages))
+        return next(filter(lambda p: p.path.name == package, repository.packages))
     except StopIteration:
         raise RepositoryError(f"Unknown package `{package}`")
 
@@ -795,6 +795,10 @@ def unit_test_cli(
             files.append(str(coverage_file))
 
     for package in packages:
+        tests_path = package.path / "tests" / "unit"
+        if not any(tests_path.glob("test_*.py")):
+            logger.info("skipping unit tests for package %s (no tests found)", package.name)
+            continue
         logger.info("running unit tests for package %s", package.name)
         coverage_file = package.path / ".coverage"
         uv_run(

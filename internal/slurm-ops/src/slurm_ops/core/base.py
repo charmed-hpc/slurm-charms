@@ -34,19 +34,19 @@ from typing import Any, Protocol
 
 import distro
 import yaml
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from hpc_libs.errors import SnapError, SystemdError
-from hpc_libs.machine import (
+from charmed_hpc_libs.errors import SnapError, SystemdError
+from charmed_hpc_libs.ops import (
     EnvManager,
     ServiceManager,
     SnapServiceManager,
     SystemctlServiceManager,
-    apt,
     call,
     snap,
     systemctl,
 )
+from charmlibs import apt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .errors import SlurmOpsError
 from .options import marshal_options, parse_options

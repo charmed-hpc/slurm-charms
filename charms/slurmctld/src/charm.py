@@ -21,6 +21,43 @@ import secrets
 
 import mail
 import ops
+from charmed_hpc_libs.ops import (
+    StopCharm,
+    block_unless,
+    is_container,
+    leader,
+    refresh,
+    wait_unless,
+)
+from charmed_slurm_oci_runtime_interface import (
+    OCIRuntimeDisconnectedEvent,
+    OCIRuntimeReadyEvent,
+    OCIRuntimeRequirer,
+)
+from charmed_slurm_sackd_interface import (
+    SackdConnectedEvent,
+    SackdRequirer,
+)
+from charmed_slurm_slurmctld_interface import (
+    ControllerData,
+)
+from charmed_slurm_slurmd_interface import (
+    SlurmdDisconnectedEvent,
+    SlurmdReadyEvent,
+    SlurmdRequirer,
+    partition_ready,
+)
+from charmed_slurm_slurmdbd_interface import (
+    SlurmdbdConnectedEvent,
+    SlurmdbdDisconnectedEvent,
+    SlurmdbdReadyEvent,
+    SlurmdbdRequirer,
+    database_ready,
+)
+from charmed_slurm_slurmrestd_interface import (
+    SlurmrestdConnectedEvent,
+    SlurmrestdRequirer,
+)
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.smtp_integrator.v0.smtp import SmtpDataAvailableEvent, SmtpRequires
 from config import ConfigManager
@@ -39,29 +76,6 @@ from constants import (
     SLURMRESTD_INTEGRATION_NAME,
 )
 from high_availability import SlurmctldHA
-from hpc_libs.interfaces import (
-    ControllerData,
-    OCIRuntimeDisconnectedEvent,
-    OCIRuntimeReadyEvent,
-    OCIRuntimeRequirer,
-    SackdConnectedEvent,
-    SackdRequirer,
-    SlurmdbdConnectedEvent,
-    SlurmdbdDisconnectedEvent,
-    SlurmdbdReadyEvent,
-    SlurmdbdRequirer,
-    SlurmdDisconnectedEvent,
-    SlurmdReadyEvent,
-    SlurmdRequirer,
-    SlurmrestdConnectedEvent,
-    SlurmrestdRequirer,
-    block_unless,
-    database_ready,
-    partition_ready,
-    wait_unless,
-)
-from hpc_libs.is_container import is_container
-from hpc_libs.utils import StopCharm, leader, plog, refresh
 from integrations import SlurmctldPeer, SlurmctldPeerConnectedEvent
 from interface_influxdb import InfluxDB, InfluxDBAvailableEvent, InfluxDBUnavailableEvent
 from psutil import net_if_addrs
@@ -538,10 +552,8 @@ class SlurmctldCharm(ops.CharmBase):
             logger.info("updating `acct_gather.conf`")
             logger.debug(
                 "`acct_gather.conf`:\n%s",
-                plog(
-                    config.dict()
-                    | ({"profileinfluxdbpass": "***"} if config.profile_influxdb_pass else {})
-                ),
+                config.dict()
+                | ({"profileinfluxdbpass": "***"} if config.profile_influxdb_pass else {}),
             )
             self.slurmctld.acct_gather.dump(config)
             logger.info("`acct_gather.conf` successfully updated")
@@ -564,7 +576,7 @@ class SlurmctldCharm(ops.CharmBase):
         config.job_acct_gather_type = (
             "jobacct_gather/linux" if is_container() else "jobacct_gather/cgroup"
         )
-        logger.debug("`%s`:\n%s", self.slurmctld.profiling.name, plog(config.dict()))
+        logger.debug("`%s`:\n%s", self.slurmctld.profiling.name, config.dict())
         self.slurmctld.profiling.dump(config)
         logger.info("`%s` configuration updated successfully", self.slurmctld.profiling.name)
 
@@ -598,7 +610,7 @@ class SlurmctldCharm(ops.CharmBase):
         data = self.oci_runtime.get_oci_runtime_data(event.relation.id)
 
         logger.info("updating `%s` configuration", self.slurmctld.oci.name)
-        logger.debug("`%s`:\n%s", self.slurmctld.oci.name, plog(data.ociconfig.dict()))
+        logger.debug("`%s`:\n%s", self.slurmctld.oci.name, data.ociconfig.dict())
         self.slurmctld.oci.dump(data.ociconfig)
         logger.info("`%s` configuration updated successfully", self.slurmctld.oci.name)
         self._reconfigure()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 # Copyright 2020-2024 Omnivector, LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,16 +19,14 @@
 import logging
 
 import ops
-from constants import SLURMRESTD_INTEGRATION_NAME, SLURMRESTD_PORT
-from hpc_libs.interfaces import (
+from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, wait_unless
+from charmed_slurm_slurmrestd_interface import (
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
     SlurmrestdProvider,
-    block_unless,
     controller_ready,
-    wait_unless,
 )
-from hpc_libs.utils import StopCharm, refresh
+from constants import SLURMRESTD_INTEGRATION_NAME, SLURMRESTD_PORT
 from slurm_ops import SlurmOpsError, SlurmrestdManager
 from state import check_slurmrestd, slurmrestd_installed
 

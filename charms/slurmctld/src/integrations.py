@@ -1,4 +1,4 @@
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import ops
-from hpc_libs.interfaces.base import Interface
-from hpc_libs.utils import leader, plog
+from charmed_hpc_libs.interfaces import Interface
+from charmed_hpc_libs.ops import leader
 from state import all_units_observed
 
 if TYPE_CHECKING:
@@ -168,7 +168,6 @@ class SlurmctldPeer(Interface):
         """Handle when a `slurmctld` unit departs the peer relation."""
         # Fire only once the leader unit has seen the last departing unit leave
         if self.unit.is_leader() and all_units_observed(self.charm).ok:
-
             if event.departing_unit == self.unit:
                 _logger.debug(
                     "leader is departing. next elected leader will refresh controller config"
@@ -312,5 +311,5 @@ class SlurmctldPeer(Interface):
             self._integration_name,
             target.name,
         )
-        _logger.debug("`%s` data for '%s':\n%s", self._integration_name, target.name, plog(data))
+        _logger.debug("`%s` data for '%s':\n%s", self._integration_name, target.name, data)
         integration.save(data, target)

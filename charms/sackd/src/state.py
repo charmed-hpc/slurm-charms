@@ -17,8 +17,8 @@
 from typing import TYPE_CHECKING
 
 import ops
+from charmed_hpc_libs.ops import ConditionEvaluation
 from constants import SACKD_INTEGRATION_NAME
-from hpc_libs.interfaces import ConditionEvaluation
 
 if TYPE_CHECKING:
     from charm import SackdCharm

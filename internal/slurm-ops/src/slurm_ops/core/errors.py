@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 """Errors raised by utilities in the `slurm-ops` package."""
 
-from hpc_libs.errors import Error
+from charmed_hpc_libs.errors import Error
 
 
 class SlurmOpsError(Error):

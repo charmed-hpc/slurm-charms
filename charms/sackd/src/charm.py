@@ -18,16 +18,14 @@
 import logging
 
 import ops
-from constants import SACKD_INTEGRATION_NAME, SACKD_PORT
-from hpc_libs.interfaces import (
+from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
+from charmed_slurm_sackd_interface import (
     SackdProvider,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
-    block_unless,
     controller_ready,
-    wait_unless,
 )
-from hpc_libs.utils import StopCharm, refresh
+from constants import SACKD_INTEGRATION_NAME, SACKD_PORT
 from slurm_ops import SackdManager, SlurmOpsError
 from state import check_sackd, sackd_installed
 

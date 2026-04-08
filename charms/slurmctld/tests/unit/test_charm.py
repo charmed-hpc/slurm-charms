@@ -19,14 +19,14 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from charmed_slurm_oci_runtime_interface import OCIRuntimeDisconnectedEvent, OCIRuntimeReadyEvent
+from charmlibs import apt
 from constants import (
     CLUSTER_NAME_PREFIX,
     MAIL_INTEGRATION_NAME,
     OCI_RUNTIME_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
 )
-from hpc_libs.interfaces import OCIRuntimeDisconnectedEvent, OCIRuntimeReadyEvent
-from hpc_libs.machine import apt
 from ops import testing
 from pytest_mock import MockerFixture
 from slurm_ops import SlurmOpsError

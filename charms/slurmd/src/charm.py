@@ -21,21 +21,19 @@ import logging
 import gpu
 import ops
 import rdma
-from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from config import ConfigManager
-from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
-from hpc_libs.errors import SystemdError
-from hpc_libs.interfaces import (
+from charmed_hpc_libs.errors import SystemdError
+from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
+from charmed_slurm_slurmd_interface import (
     ComputeData,
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
     SlurmdProvider,
-    block_unless,
     controller_ready,
-    wait_unless,
 )
-from hpc_libs.utils import StopCharm, refresh
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
+from config import ConfigManager
+from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
 from pydantic import ValidationError
 from slurm_ops import SlurmdManager, SlurmOpsError
 from slurmutils import ModelError, Node

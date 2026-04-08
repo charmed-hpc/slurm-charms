@@ -20,13 +20,13 @@ from pathlib import Path
 from subprocess import CalledProcessError, CompletedProcess
 
 import pytest
+from charmlibs import apt
 from constants import (
     SLURM_APT_INFO,
     SLURM_SNAP_INFO_ACTIVE,
     SLURM_SNAP_INFO_NOT_INSTALLED,
     ULIMIT_CONFIG,
 )
-from hpc_libs.machine import apt
 from pyfakefs.fake_filesystem import FakeFilesystem
 from pytest_mock import MockerFixture
 from slurm_ops import (
@@ -135,9 +135,9 @@ class TestAptManager:
     def test_init_ubuntu_hpc_ppa(self, mock_manager, mocker: MockerFixture, mock_run) -> None:
         """Test the `_init_ubuntu_hpc_ppa` helper method."""
         manager, _ = mock_manager
-        mocker.patch("hpc_libs.machine.apt.DebianRepository._get_keyid_by_gpg_key")
-        mocker.patch("hpc_libs.machine.apt.DebianRepository._dearmor_gpg_key")
-        mocker.patch("hpc_libs.machine.apt.DebianRepository._write_apt_gpg_keyfile")
+        mocker.patch("charmlibs.apt.DebianRepository._get_keyid_by_gpg_key")
+        mocker.patch("charmlibs.apt.DebianRepository._dearmor_gpg_key")
+        mocker.patch("charmlibs.apt.DebianRepository._write_apt_gpg_keyfile")
         mocker.patch("distro.codename", return_value="noble")
 
         # Test that Ubuntu HPC PPA is successfully added to the sources list.
