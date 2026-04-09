@@ -228,6 +228,67 @@ def test_set_node_state(juju: jubilant.Juju) -> None:
 
 
 @pytest.mark.order(10)
+def test_rotate_auth_key(juju: jubilant.Juju) -> None:
+    """Test that the `rotate-auth-key` action updates the Slurm authentication key across the cluster."""
+    slurmctld_unit = f"{SLURMCTLD_APP_NAME}/0"
+    sackd_unit = f"{SACKD_APP_NAME}/0"
+    slurmd_unit = f"{SLURMD_APP_NAME}/0"
+    non_controller_units = [
+        sackd_unit,
+        slurmd_unit,
+        f"{SLURMDBD_APP_NAME}/0",
+        f"{SLURMRESTD_APP_NAME}/0",
+    ]
+
+    logger.info("testing that the `rotate-auth-key` action updates the Slurm authentication key")
+
+    # Gather existing authentication key from `slurmctld/0`.
+    result = juju.exec("sudo cat /etc/slurm/slurm.jwks", unit=slurmctld_unit)
+    initial_key_entry = json.loads(result.stdout)
+
+    juju.run(slurmctld_unit, "rotate-auth-key")
+
+    # Wait for action to complete and for all Slurm applications to return to ActiveStatus
+    juju.wait(
+        lambda status: jubilant.all_active(status, *SLURM_APPS),
+        error=lambda status: jubilant.any_error(status, *SLURM_APPS),
+    )
+
+    # Check authentication key has been updated on all units
+    # Key rotation does not complete until the secret-remove event has completed on slurmctld. This
+    # event is triggered after all observers have updated to the new secret revision. There may be
+    # a gap where all Slurm applications are in ActiveStatus but secret-remove has not yet run so
+    # the old key is still present on slurmctld. Account for this with tenacity
+    attempts = tenacity.Retrying(
+        wait=tenacity.wait.wait_exponential(multiplier=2, min=1),
+        stop=tenacity.stop_after_attempt(5),
+        reraise=True,
+    )
+    for attempt in attempts:
+        with attempt:
+            result = juju.exec("sudo cat /etc/slurm/slurm.jwks", unit=slurmctld_unit)
+            new_key_entry = json.loads(result.stdout)
+
+            # Check old key removed from controller and new key present
+            assert len(new_key_entry["keys"]) == 1
+            assert new_key_entry != initial_key_entry
+
+            # Check new key present on all other units
+            for unit in non_controller_units:
+                result = juju.exec("sudo cat /etc/slurm/slurm.jwks", unit=unit)
+                key_entry = json.loads(result.stdout)
+                assert len(key_entry["keys"]) == 1
+                assert key_entry == new_key_entry, f"auth key rotation failed on: {unit}"
+
+            # Check units can communicate with controller
+            assert juju.exec("sinfo", unit=sackd_unit).success
+            assert juju.exec("sinfo", unit=slurmd_unit).success
+            # Database does not have client tools installed. Query from the controller
+            assert juju.exec("sacct", unit=slurmctld_unit).success
+            # TODO: confirm slurmrestd connectivity
+
+
+@pytest.mark.order(11)
 def test_job_submission(juju: jubilant.Juju) -> None:
     """Test that a job can be successfully submitted to the Slurm cluster."""
     sackd_unit = f"{SACKD_APP_NAME}/0"
@@ -241,7 +302,7 @@ def test_job_submission(juju: jubilant.Juju) -> None:
     assert sackd_result.stdout == slurmd_result.stdout
 
 
-@pytest.mark.order(11)
+@pytest.mark.order(12)
 def test_gpu_job_submission(juju: jubilant.Juju) -> None:
     """Test that a job requesting a GPU can be successfully submitted to the Slurm cluster.
 
