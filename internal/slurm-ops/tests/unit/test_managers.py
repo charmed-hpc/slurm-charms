@@ -26,7 +26,7 @@ from constants import (
     FAKE_USER,
     JWT_KEY,
     SCONTROL_SHOW_NODE_OUTPUT,
-    SLURM_KEY_BASE64,
+    SLURM_KEY_CONTENTS,
     SLURM_SNAP_INFO_ACTIVE,
     SLURM_SNAP_INFO_INACTIVE,
     SLURMD_C_OUTPUT,
@@ -64,16 +64,18 @@ class TestManager:
 
     @pytest.fixture
     def mock_slurm_key(self, fs: FakeFilesystem, mock_manager, snap_backend) -> SlurmManager:
-        """Request a Slurm service manager with a fake `slurm.key` secret file."""
+        """Request a Slurm service manager with a fake Slurm auth key file."""
         if snap_backend:
-            fs.create_file("/var/snap/slurm/common/etc/slurm/slurm.key")
+            fs.create_file(
+                "/var/snap/slurm/common/etc/slurm/slurm.jwks",
+                contents=json.dumps(SLURM_KEY_CONTENTS),
+            )
         else:
-            fs.create_file("/etc/slurm/slurm.key")
+            fs.create_file("/etc/slurm/slurm.jwks", contents=json.dumps(SLURM_KEY_CONTENTS))
 
         manager, _ = mock_manager
         manager.key._user = FAKE_USER
         manager.key._group = FAKE_GROUP
-        manager.key._file.write_bytes(base64.b64decode(SLURM_KEY_BASE64))
         return manager
 
     @pytest.fixture
@@ -174,22 +176,59 @@ class TestManager:
             assert mock_run.call_args[0][0] == ["systemctl", "is-active", "--quiet", service]
             assert status == active
 
-    # Test `<manager>.key` component.
+    # Test auth key component.
 
-    def test_get_slurm_key(self, mock_slurm_key) -> None:
-        """Test the `<manager>.key.get()` method."""
-        assert mock_slurm_key.key.get() == SLURM_KEY_BASE64
+    def test_add_slurm_key(self, mock_slurm_key) -> None:
+        """Test the `<manager>.key.add(...)` method appends a new key."""
+        new_key = "xyz123=="
+        new_key_id = "abcdef12-3456-7890-abcd-ef1234567890"
+        new_key_entry = {"alg": "HS256", "kty": "oct", "kid": new_key_id, "k": new_key}
+
+        mock_slurm_key.key.add(new_key, new_key_id)
+
+        file_contents = json.loads(mock_slurm_key.key.path.read_text())
+        assert len(file_contents["keys"]) == 2
+        assert file_contents["keys"][0] == SLURM_KEY_CONTENTS["keys"][0]
+        assert file_contents["keys"][1] == new_key_entry
+
+    def test_keep_latest_slurm_key(self, mock_slurm_key) -> None:
+        """Test the `<manager>.key.keep_latest_key()` preserves only the latest key."""
+        new_key = "xyz123=="
+        new_key_id = "abcdef12-3456-7890-abcd-ef1234567890"
+        new_key_contents = {
+            "keys": [{"alg": "HS256", "kty": "oct", "kid": new_key_id, "k": new_key}]
+        }
+
+        mock_slurm_key.key.add(new_key, new_key_id)
+        mock_slurm_key.key.keep_latest_key()
+
+        file_contents = json.loads(mock_slurm_key.key.path.read_text())
+        assert file_contents == new_key_contents
 
     def test_set_slurm_key(self, mock_slurm_key) -> None:
-        """Test the `<manager>.key.set(...)` method."""
-        mock_slurm_key.key.set(SLURM_KEY_BASE64)
-        assert mock_slurm_key.key.get() == SLURM_KEY_BASE64
+        """Test the `<manager>.key.set(...)` method successfully overwrites key file."""
+        new_key = "xyz123=="
+        new_key_id = "abcdef12-3456-7890-abcd-ef1234567890"
+        new_key_contents = {
+            "keys": [{"alg": "HS256", "kty": "oct", "kid": new_key_id, "k": new_key}]
+        }
 
-    def test_generate_slurm_key(self, mock_slurm_key) -> None:
-        """Test the `<manager>.key.generate()` method."""
-        mock_slurm_key.key.generate()
-        key = base64.b64encode(mock_slurm_key.key.path.read_bytes()).decode()
-        assert mock_slurm_key.key.get() == key
+        mock_slurm_key.key.set(new_key, new_key_id)
+
+        file_contents = json.loads(mock_slurm_key.key.path.read_text())
+        assert file_contents == new_key_contents
+
+    def test_generate_slurm_valid_key(self, mock_slurm_key) -> None:
+        """Test the `<manager>.key.generate()` method produces valid keys."""
+        # Verify it can be decoded back from Base64
+        key = mock_slurm_key.key.generate()
+        decoded = base64.b64decode(key)
+        assert len(decoded) == 2048
+
+    def test_generate_slurm_key_is_unique(self, mock_slurm_key) -> None:
+        """Test the `<manager>.key.generate()` method produces unique keys."""
+        # Statistically, two keys should never be identical
+        assert mock_slurm_key.key.generate() != mock_slurm_key.key.generate()
 
     # Test `<manager>.jwt` component.
 

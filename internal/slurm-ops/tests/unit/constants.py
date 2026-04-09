@@ -26,7 +26,16 @@ FAKE_USER = pwd.getpwuid(FAKE_USER_UID).pw_name
 FAKE_GROUP_GID = os.getgid()
 FAKE_GROUP = grp.getgrgid(FAKE_GROUP_GID).gr_name
 
-SLURM_KEY_BASE64 = "MTIzNDU2Nzg5MA=="
+SLURM_KEY_CONTENTS = {
+    "keys": [
+        {
+            "alg": "HS256",
+            "kty": "oct",
+            "kid": "12345678-90ab-cdef-1234-567890abcdef",
+            "k": "MTIzNDU2Nzg5MA==",
+        }
+    ]
+}
 
 JWT_KEY = """-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAt3PLWkwUOeckDwyMpHgGqmOZhitC8KfOQY/zPWfo+up5RQXz
