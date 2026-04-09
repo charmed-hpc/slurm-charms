@@ -95,7 +95,7 @@ def _unit_data_decoder(value: str) -> str:
     return json.loads(value)
 
 
-class _SlurmctldPeerEvents(ops.CharmEvents):
+class _SlurmctldPeerEvents(ops.ObjectEvents):
     """`slurmctld` peer events."""
 
     slurmctld_peer_connected = ops.EventSource(SlurmctldPeerConnectedEvent)

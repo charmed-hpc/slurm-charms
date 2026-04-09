@@ -124,7 +124,7 @@ class SlurmctldDisconnectedEvent(ops.RelationEvent):
     """Event emitted when `slurmctld` is disconnected from a Slurm-related application."""
 
 
-class _SlurmctldRequirerEvents(ops.CharmEvents):
+class _SlurmctldRequirerEvents(ops.ObjectEvents):
     """`slurmctld` requirer events."""
 
     slurmctld_connected = ops.EventSource(SlurmctldConnectedEvent)

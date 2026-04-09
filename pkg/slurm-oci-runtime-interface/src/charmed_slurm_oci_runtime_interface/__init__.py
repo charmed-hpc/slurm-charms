@@ -66,7 +66,7 @@ class OCIRuntimeDisconnectedEvent(ops.RelationEvent):
     """Event emitted when the OCI runtime application is disconnected from `slurmctld`."""
 
 
-class _OCIRunTimeRequirerEvents(ops.CharmEvents):
+class _OCIRunTimeRequirerEvents(ops.ObjectEvents):
     """`slurm_oci_runtime` requirer events."""
 
     oci_runtime_ready = ops.EventSource(OCIRuntimeReadyEvent)
@@ -149,7 +149,7 @@ class OCIRuntimeRequirer(SlurmctldProvider):
         self.on.oci_runtime_ready.emit(event.relation)
 
     @leader
-    def _on_relation_broken(self, event: OCIRuntimeDisconnectedEvent) -> None:
+    def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         if self._stored.unit_departing:
             return
 
