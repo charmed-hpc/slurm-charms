@@ -36,7 +36,7 @@ def mock_charm(mock_ctx, fs: FakeFilesystem, mocker: MockerFixture) -> testing.C
           otherwise `ops.testing.Context` will fail to locate the `sackd` charm's
           charmcraft.yaml file.
     """
-    fs.create_file("/etc/slurm/slurm.key", create_missing_dirs=True)
+    fs.create_file("/etc/slurm/slurm.jwks", create_missing_dirs=True)
     fs.create_file("/etc/default/sackd", create_missing_dirs=True)
     mocker.patch("subprocess.run")
 

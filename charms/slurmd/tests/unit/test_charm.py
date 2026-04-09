@@ -27,6 +27,7 @@ from slurm_ops import SlurmOpsError
 from slurmutils import Node
 
 EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_AUTH_CONTENT_ID = "12345678-90ab-cdef-1234-567890abcdef"
 EXAMPLE_CONTROLLERS = ["juju-988225-0:6817", "juju-988225-1:6817"]
 
 
@@ -175,7 +176,9 @@ class TestSlurmdCharm:
         self, mock_charm, mocker: MockerFixture, mock_restart, ready, leader, expected
     ) -> None:
         """Test the `_on_slurmctld_ready` event handler."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+        auth_key_secret = testing.Secret(
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_CONTENT_ID}
+        )
 
         integration_id = 1
         integration = testing.Relation(

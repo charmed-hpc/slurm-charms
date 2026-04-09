@@ -75,6 +75,7 @@ class SlurmdbdCharm(ops.CharmBase):
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.update_status, self._on_update_status)
+        framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         self.slurmctld = SlurmdbdProvider(self, SLURMDBD_INTEGRATION_NAME)
         framework.observe(self.slurmctld.on.slurmctld_ready, self._on_slurmctld_ready)
@@ -155,9 +156,39 @@ class SlurmdbdCharm(ops.CharmBase):
         """Handle when controller data is ready from `slurmctld`."""
         data = self.slurmctld.get_controller_data(event.relation.id)
 
-        self.slurmdbd.key.set(data.auth_key)
+        self.slurmdbd.key.set(data.auth_key, data.auth_key_content_id)
         self.slurmdbd.jwt.set(data.jwt_key)
         self._reconfigure()
+
+    @refresh
+    @block_unless(slurmdbd_installed)
+    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        """Handle when a secret is changed."""
+        if event.secret.label != AUTH_KEY_LABEL:
+            logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
+            return
+
+        content = event.secret.get_content(refresh=True)
+        auth_key = content.get("key")
+        auth_key_id = content.get("keyid")
+        if not auth_key or not auth_key_id:
+            logger.error(
+                "auth key or key ID is empty in secret with label '%s'", event.secret.label
+            )
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
+                )
+            )
+
+        self.slurmdbd.key.set(auth_key, auth_key_id)
+
+        # Other Slurm charms reload the service here. That is not possible for slurmdbd as the
+        # SIGHUP reload signal does not reload the key file. Restart instead.
+        # TODO: Determine a zero-downtime solution. Consider filing a Slurm bug requesting slurmdbd
+        # reloading match the behavior of sackd, slurmctld and slurmd.
+        self.slurmdbd.service.restart()
 
     @leader
     @refresh
