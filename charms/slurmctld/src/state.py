@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import ops
 from charmed_hpc_libs.ops.conditions import ConditionEvaluation
 from constants import HA_MOUNT_INTEGRATION_NAME
+from slurm_ops.core.errors import SlurmOpsError
 
 if TYPE_CHECKING:
     from charm import SlurmctldCharm
@@ -151,6 +152,25 @@ def slurmctld_ready(charm: "SlurmctldCharm") -> bool:
     )
 
 
+def auth_key_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:
+    """Check if the Slurm authentication key is valid."""
+    try:
+        keys = charm.slurmctld.key.get()
+    except SlurmOpsError as e:
+        return ConditionEvaluation(False, e.message)
+
+    num_keys = len(keys.get("keys", []))
+    if num_keys == 0:
+        return ConditionEvaluation(False, "Authentication key file contains no keys")
+    if num_keys > 1:
+        return ConditionEvaluation(
+            False,
+            "Authentication key rotation in progress. Waiting for rotation to complete.",
+        )
+
+    return ConditionEvaluation(True, "")
+
+
 def check_slurmctld(charm: "SlurmctldCharm") -> ops.StatusBase:
     """Determine the state of the `slurmctld` application/unit based on satisfied conditions."""
     ok, message = slurmctld_installed(charm)
@@ -162,6 +182,10 @@ def check_slurmctld(charm: "SlurmctldCharm") -> ops.StatusBase:
         return ops.WaitingStatus(message)
 
     ok, message = slurmctld_is_active(charm)
+    if not ok:
+        return ops.WaitingStatus(message)
+
+    ok, message = auth_key_ready(charm)
     if not ok:
         return ops.WaitingStatus(message)
 

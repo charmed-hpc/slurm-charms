@@ -40,7 +40,7 @@ def mock_charm(
     mock_ctx, fs: FakeFilesystem, mocker: MockerFixture, mock_scontrol
 ) -> testing.Context[SlurmctldCharm]:
     """Mock `SlurmctldCharm` context with fake filesystem."""
-    fs.create_file("/etc/slurm/slurm.key", create_missing_dirs=True)
+    fs.create_file("/etc/slurm/slurm.jwks", contents='{"keys": []}', create_missing_dirs=True)
     mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
     mocker.patch("subprocess.run")
     return mock_ctx

@@ -118,6 +118,16 @@ config:
         https://github.com/neilmunday/slurm-mail/blob/v4.31/etc/slurm-mail/slurm-mail.conf#L16
 
 actions:
+  rotate-auth-key:
+    description: |
+      Perform a cluster-wide rotation of the key used to authenticate Slurm remote procedure calls.
+
+      Example usage:
+
+      ```bash
+      juju run slurmctld/leader rotate-auth-key
+      ```
+
   show-current-config:
     description: |
       Display the currently used `slurm.conf`.
