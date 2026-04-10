@@ -19,8 +19,8 @@ import json
 
 import ops
 import pytest
+from charmed_hpc_libs.errors import SystemdError
 from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
-from hpc_libs.errors import SystemdError
 from ops import testing
 from pytest_mock import MockerFixture
 from slurm_ops import SlurmOpsError

@@ -21,6 +21,7 @@ from pathlib import Path
 from subprocess import CalledProcessError
 
 import ops
+from charmed_hpc_libs.ops import call
 from charms.filesystem_client.v0.mount_info import (
     MountedFilesystemEvent,
     MountInfo,
@@ -28,7 +29,6 @@ from charms.filesystem_client.v0.mount_info import (
     MountRequires,
 )
 from constants import HA_MOUNT_LOCATION
-from hpc_libs.machine import call
 
 _logger = logging.getLogger(__name__)
 

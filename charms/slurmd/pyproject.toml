@@ -6,7 +6,8 @@ dependencies = [
     "ops",
     "slurmutils",
     "ubuntu-drivers-common",
-    "hpc-libs",
+    "charmed-hpc-libs[ops] >= 0.1.0",
+    "charmed-slurm-slurmd-interface",
     "cosl",
     "slurm-ops",
 ]

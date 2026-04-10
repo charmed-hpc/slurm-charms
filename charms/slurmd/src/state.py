@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ops
+from charmed_hpc_libs.ops import ConditionEvaluation
+from charmed_slurm_slurmd_interface import controller_ready
 from constants import SLURMD_INTEGRATION_NAME
-from hpc_libs.interfaces import ConditionEvaluation, controller_ready
 
 if TYPE_CHECKING:
     from charm import SlurmdCharm

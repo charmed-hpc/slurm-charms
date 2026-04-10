@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,14 +18,11 @@ import logging
 from typing import TYPE_CHECKING
 
 import ops
+from charmed_hpc_libs.ops import ConditionEvaluation, integration_exists
+from charmed_slurm_slurmdbd_interface import controller_ready
 from constants import (
     DATABASE_INTEGRATION_NAME,
     SLURMDBD_INTEGRATION_NAME,
-)
-from hpc_libs.interfaces import (
-    ConditionEvaluation,
-    controller_ready,
-    integration_exists,
 )
 
 if TYPE_CHECKING:

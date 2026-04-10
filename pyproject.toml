@@ -26,7 +26,14 @@ dependencies = [
     "rpds-py ~= 0.23.1",
     "cosl < 1.0.0,>= 0.0.50",
     "hpc-libs[all]",
+    "charmed-hpc-libs[all] >= 0.1.0",
     "slurm-ops",
+    "charmed-slurm-slurmctld-interface",
+    "charmed-slurm-oci-runtime-interface",
+    "charmed-slurm-sackd-interface",
+    "charmed-slurm-slurmd-interface",
+    "charmed-slurm-slurmdbd-interface",
+    "charmed-slurm-slurmrestd-interface",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +79,12 @@ members = [
 
 [tool.uv.sources]
 slurm-ops = { workspace = true }
+charmed-slurm-slurmctld-interface = { workspace = true }
+charmed-slurm-oci-runtime-interface = { workspace = true }
+charmed-slurm-sackd-interface = { workspace = true }
+charmed-slurm-slurmd-interface = { workspace = true }
+charmed-slurm-slurmdbd-interface = { workspace = true }
+charmed-slurm-slurmrestd-interface = { workspace = true }
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
 hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "9fba44f1729eba44be5577f679e5c03f588bcfff" }
 

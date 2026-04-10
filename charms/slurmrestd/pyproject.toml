@@ -2,6 +2,12 @@
 name = "slurmrestd"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = ["ops", "slurmutils", "hpc-libs", "slurm-ops"]
+dependencies = [
+    "ops",
+    "slurmutils",
+    "charmed-hpc-libs[ops] >= 0.1.0",
+    "charmed-slurm-slurmrestd-interface",
+    "slurm-ops"
+]
 
 [tool.repository]

@@ -20,6 +20,14 @@ import logging
 from urllib.parse import urlparse
 
 import ops
+from charmed_hpc_libs.ops import get_ingress_address
+from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, leader, refresh, wait_unless
+from charmed_slurm_slurmdbd_interface import (
+    DatabaseData,
+    SlurmctldReadyEvent,
+    SlurmdbdProvider,
+    controller_ready,
+)
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from config import ConfigManager
 from constants import (
@@ -29,15 +37,6 @@ from constants import (
     SLURMDBD_INTEGRATION_NAME,
     SLURMDBD_PORT,
 )
-from hpc_libs.interfaces import (
-    DatabaseData,
-    SlurmctldReadyEvent,
-    SlurmdbdProvider,
-    block_unless,
-    controller_ready,
-    wait_unless,
-)
-from hpc_libs.utils import StopCharm, get_ingress_address, leader, refresh
 from pydantic import ValidationError
 from slurm_ops import SlurmdbdManager, SlurmOpsError
 from slurmutils import SlurmdbdConfig

@@ -2,7 +2,14 @@
 name = "slurmdbd"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = ["ops", "slurmutils", "hpc-libs", "cosl", "slurm-ops"]
+dependencies = [
+    "ops",
+    "slurmutils",
+    "charmed-hpc-libs[ops] >= 0.1.0",
+    "charmed-slurm-slurmdbd-interface",
+    "cosl",
+    "slurm-ops"
+]
 
 [tool.repository]
 libraries = ["data-platform-libs.data_interfaces", "grafana-agent.cos_agent"]
