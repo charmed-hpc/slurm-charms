@@ -280,7 +280,11 @@ class SlurmctldRequirer(Interface):
         self.on.slurmctld_disconnected.emit(event.relation)
 
     def get_controller_data(self, integration_id: int | None = None) -> ControllerData:
-        """Get controller data from the `slurmctld` application databag."""
+        """Get controller data from the `slurmctld` application databag.
+
+        Args:
+            integration_id: ID of integration to pull controller data from.
+        """
         data = self._load_integration_data(ControllerData, integration_id=integration_id).pop()
         if data.auth_key_id:
             auth_key = self.charm.model.get_secret(id=data.auth_key_id)

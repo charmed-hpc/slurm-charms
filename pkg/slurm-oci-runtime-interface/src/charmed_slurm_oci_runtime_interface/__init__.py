@@ -56,9 +56,9 @@ class OCIRuntimeReadyEvent(ops.RelationEvent):
     """Event emitted when the OCI runtime application leader is ready.
 
     Notes:
-        The OCI runtime application leader is "ready" once it is installed on
-        each principal unit and able to share its configuration information
-        required by the Slurm controller `slurmctld`.
+        - The OCI runtime application leader is "ready" once it is installed on
+          each principal unit and able to share its configuration information
+          required by the Slurm controller `slurmctld`.
     """
 
 
@@ -77,11 +77,10 @@ class OCIRuntimeProvider(SlurmctldRequirer):
     """Integration interface implementation for `slurm_oci_runtime` providers.
 
     Notes:
-        This interface should be used on the OCI runtime application leader to
-        provide OCI runtime information to the `slurmctld` application leader.
-
-        Only the leading `oci_runtime` unit should interact with `slurmctld`.
-        All other `oci_runtime` units are peers to be directed by the leader.
+        - This interface should be used on the OCI runtime application leader to
+          provide OCI runtime information to the `slurmctld` application leader.
+        - Only the leading `oci_runtime` unit should interact with `slurmctld`.
+          All other `oci_runtime` units are peers to be directed by the leader.
     """
 
     @leader
@@ -159,6 +158,6 @@ class OCIRuntimeRequirer(SlurmctldProvider):
         """Get OCI runtime data from the `slurm_oci_runtime` application databag.
 
         Args:
-            integration_id: Integration ID to pull OCI runtime configuration data from.
+            integration_id: ID of integration to pull OCI runtime configuration data from.
         """
         return self._load_integration_data(OCIRuntimeData, integration_id=integration_id).pop()
