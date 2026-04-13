@@ -20,8 +20,8 @@ from pathlib import Path
 
 import ops
 import pytest
+from charmed_slurm_slurmctld_interface import AUTH_KEY_LABEL
 from constants import SACKD_INTEGRATION_NAME
-from hpc_libs.interfaces import AUTH_KEY_LABEL
 from ops import testing
 from pytest_mock import MockerFixture
 from slurm_ops import SlurmOpsError
@@ -132,8 +132,7 @@ class TestSackdCharm:
             remote_app_name="slurmctld",
             remote_app_data=(
                 {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps(EXAMPLE_CONTROLLERS),
                 }
                 if ready
@@ -181,8 +180,7 @@ class TestSackdCharm:
             id=integration_id,
             remote_app_name="slurmctld",
             remote_app_data={
-                "auth_key": '"***"',
-                "auth_key_id": json.dumps(auth_key_secret.id),
+                "auth_secret_id": json.dumps(auth_key_secret.id),
                 "controllers": json.dumps(EXAMPLE_CONTROLLERS),
             },
         )
@@ -217,8 +215,7 @@ class TestSackdCharm:
             id=integration_id,
             remote_app_name="slurmctld",
             remote_app_data={
-                "auth_key": '"***"',
-                "auth_key_id": json.dumps(auth_key_secret.id),
+                "auth_secret_id": json.dumps(auth_key_secret.id),
                 "controllers": json.dumps(EXAMPLE_CONTROLLERS),
             },
         )
@@ -254,8 +251,7 @@ class TestSackdCharm:
             id=integration_id,
             remote_app_name="slurmctld",
             remote_app_data={
-                "auth_key": '"***"',
-                "auth_key_id": json.dumps(auth_key_secret.id),
+                "auth_secret_id": json.dumps(auth_key_secret.id),
                 "controllers": json.dumps(EXAMPLE_CONTROLLERS),
             },
         )

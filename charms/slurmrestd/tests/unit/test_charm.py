@@ -20,8 +20,8 @@ from pathlib import Path
 
 import ops
 import pytest
+from charmed_slurm_slurmctld_interface import AUTH_KEY_LABEL
 from constants import SLURMRESTD_INTEGRATION_NAME
-from hpc_libs.interfaces import AUTH_KEY_LABEL
 from ops import testing
 from pytest_mock import MockerFixture
 

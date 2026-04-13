@@ -188,14 +188,12 @@ class TestSlurmdCharm:
             remote_app_name="slurmctld",
             remote_app_data=(
                 {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps(EXAMPLE_CONTROLLERS),
                 }
                 if ready
                 else {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps([]),
                 }
             ),
