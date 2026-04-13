@@ -15,6 +15,7 @@
 """Integration interface implementation for the `slurmrestd` interface."""
 
 __all__ = [
+    "AUTH_KEY_LABEL",
     "SlurmctldDisconnectedEvent",
     "SlurmctldReadyEvent",
     "SlurmrestdConnectedEvent",
@@ -26,6 +27,7 @@ __all__ = [
 import ops
 from charmed_hpc_libs.ops.conditions import leader
 from charmed_slurm_slurmctld_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldDisconnectedEvent,
     SlurmctldProvider,
     SlurmctldReadyEvent,
@@ -52,7 +54,7 @@ class SlurmrestdProvider(SlurmctldRequirer):
     """
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
-        super().__init__(charm, integration_name, required_app_data={"auth_key_id", "slurmconfig"})
+        super().__init__(charm, integration_name, required_app_data={"auth_secret_id", "slurmconfig"})
 
 
 class SlurmrestdRequirer(SlurmctldProvider):

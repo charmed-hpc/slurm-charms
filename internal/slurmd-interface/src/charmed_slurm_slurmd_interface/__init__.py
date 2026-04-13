@@ -14,6 +14,7 @@
 """Integration interface implementation for the `slurmd` interface."""
 
 __all__ = [
+    "AUTH_KEY_LABEL",
     "ComputeData",
     "SlurmdConnectedEvent",
     "SlurmdReadyEvent",
@@ -32,6 +33,7 @@ from dataclasses import dataclass
 import ops
 from charmed_hpc_libs.ops import ConditionEvaluation, leader
 from charmed_slurm_slurmctld_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
     SlurmctldProvider,
@@ -43,7 +45,7 @@ from charmed_slurm_slurmctld_interface import (
 from slurmutils import Partition
 
 _REQUIRED_APP_DATA = {
-    "auth_key_id": lambda value: value != '""',
+    "auth_secret_id": lambda value: value != '""',
     "controllers": lambda value: value != "[]",
 }
 
