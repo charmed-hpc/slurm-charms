@@ -121,6 +121,7 @@ actions:
   rotate-auth-key:
     description: |
       Perform a cluster-wide rotation of the key used to authenticate Slurm remote procedure calls.
+      See: https://documentation.ubuntu.com/charmed-hpc/latest/explanation/key-rotation/#authentication-key-rotation
 
       Example usage:
 
