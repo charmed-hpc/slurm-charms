@@ -22,6 +22,7 @@ import pytest
 from charmed_hpc_libs.ops.conditions import refresh, wait_unless
 from charmed_slurm_slurmctld_interface import ControllerData
 from charmed_slurm_slurmrestd_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldReadyEvent,
     SlurmrestdConnectedEvent,
     SlurmrestdProvider,
@@ -33,6 +34,7 @@ from slurmutils import SlurmConfig
 
 SLURMRESTD_INTEGRATION_NAME = "slurmrestd"
 EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_AUTH_KEY_ID = "12345678-90ab-cdef-1234-567890abcdef"
 EXAMPLE_SLURM_CONFIG = {
     "slurm.conf": SlurmConfig(
         clustername="charmed-hpc-abc_",
@@ -82,9 +84,12 @@ class MockSlurmrestdRequirerCharm(ops.CharmBase):
         )
 
     def _on_slurmrestd_connected(self, event: SlurmrestdConnectedEvent) -> None:
+        auth_key_secret = self.app.add_secret(
+            {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
+        )
         self.slurmrestd.set_controller_data(
             ControllerData(
-                auth_key=EXAMPLE_AUTH_KEY,
+                auth_secret_id=auth_key_secret.get_info().id,
                 slurmconfig=EXAMPLE_SLURM_CONFIG,
             ),
             integration_id=event.relation.id,
@@ -144,14 +149,13 @@ class TestSlurmrestdInterface:
             remote_app_name="slurmrestd-requirer",
             remote_app_data=(
                 {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "slurmconfig": json.dumps(
                         {k: v.dict() for k, v in EXAMPLE_SLURM_CONFIG.items()}
                     ),
                 }
                 if ready
-                else {"auth_key": '"***"'}
+                else {"auth_secret_id": json.dumps("")}
             ),
         )
 
@@ -202,11 +206,8 @@ class TestSlurmrestdInterface:
         integration = state.get_relation(slurmrestd_integration_id)
         if leader:
             # Verify that the leader unit has set the required data for `slurmrestd`.
-            assert "auth_key" in integration.local_app_data
-            assert integration.local_app_data["auth_key"] == '"***"'
-
-            assert "auth_key_id" in integration.local_app_data
-            assert integration.local_app_data["auth_key_id"] != '""'
+            assert "auth_secret_id" in integration.local_app_data
+            assert integration.local_app_data["auth_secret_id"] != '""'
 
             assert "slurmconfig" in integration.local_app_data
             assert integration.local_app_data["slurmconfig"] == json.dumps(

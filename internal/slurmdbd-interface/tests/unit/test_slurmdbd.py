@@ -26,6 +26,7 @@ from charmed_slurm_slurmctld_interface import (
     SlurmctldDisconnectedEvent,
 )
 from charmed_slurm_slurmdbd_interface import (
+    AUTH_KEY_LABEL,
     DatabaseData,
     SlurmctldReadyEvent,
     SlurmdbdConnectedEvent,
@@ -40,6 +41,7 @@ from ops import testing
 
 SLURMDBD_INTEGRATION_NAME = "slurmdbd"
 EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_AUTH_KEY_ID = "12345678-90ab-cdef-1234-567890abcdef"
 EXAMPLE_HOSTNAME = "127.0.0.1"
 EXAMPLE_JWT_KEY = "abc987||"
 
@@ -101,9 +103,12 @@ class MockSlurmdbdRequirerCharm(ops.CharmBase):
         )
 
     def _on_slurmdbd_connected(self, event: SlurmdbdConnectedEvent) -> None:
+        auth_key_secret = self.app.add_secret(
+            {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
+        )
         self.slurmdbd.set_controller_data(
             ControllerData(
-                auth_key=EXAMPLE_AUTH_KEY,
+                auth_secret_id=auth_key_secret.get_info().id,
                 jwt_key=EXAMPLE_JWT_KEY,
             ),
             integration_id=event.relation.id,
@@ -201,13 +206,12 @@ class TestSlurmdbdInterface:
             remote_app_name="slurmdbd-requirer",
             remote_app_data=(
                 {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "jwt_key": '"***"',
                     "jwt_key_id": json.dumps(jwt_key_secret.id),
                 }
                 if ready
-                else {"auth_key": '"***"', "jwt_key": '"***"'}
+                else {"auth_secret_id": '""', "jwt_key": '"***"'}
             ),
         )
 
@@ -299,11 +303,8 @@ class TestSlurmdbdInterface:
         if leader:
             integration = state.get_relation(slurmdbd_integration_id)
 
-            # Assert `auth_key` is redacted in the integration data.
-            assert integration.local_app_data["auth_key"] == '"***"'
-
-            # Assert that `auth_key_id` is set to the `auth_key` secret URI.
-            assert integration.local_app_data["auth_key_id"] != '""'
+            # Assert that `auth_secret_id` is set to the `auth_key` secret URI.
+            assert integration.local_app_data["auth_secret_id"] != '""'
 
             # Assert `jwt_key` is redacted in the integration data.
             assert integration.local_app_data["jwt_key"] == '"***"'

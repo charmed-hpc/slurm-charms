@@ -21,6 +21,7 @@ import ops
 import pytest
 from charmed_hpc_libs.ops.conditions import refresh, wait_unless
 from charmed_slurm_sackd_interface import (
+    AUTH_KEY_LABEL,
     SackdConnectedEvent,
     SackdProvider,
     SackdRequirer,
@@ -33,6 +34,7 @@ from ops import testing
 
 SACKD_INTEGRATION_NAME = "sackd"
 EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_AUTH_KEY_ID = "12345678-90ab-cdef-1234-567890abcdef"
 EXAMPLE_CONTROLLERS = ["127.0.0.1", "127.0.1.1"]
 
 
@@ -74,9 +76,12 @@ class MockSackdRequirerCharm(ops.CharmBase):
         )
 
     def _on_sackd_connected(self, event: SackdConnectedEvent) -> None:
+        auth_key_secret = self.app.add_secret(
+            {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
+        )
         self.sackd.set_controller_data(
             ControllerData(
-                auth_key=EXAMPLE_AUTH_KEY,
+                auth_secret_id=auth_key_secret.get_info().id,
                 controllers=EXAMPLE_CONTROLLERS,
             ),
             integration_id=event.relation.id,
@@ -126,7 +131,10 @@ class TestSackdInterface:
     )
     def test_provider_on_slurmctld_ready_event(self, provider_ctx, leader, ready) -> None:
         """Test that the `sackd` provider waits for controller data."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+        auth_key_secret = testing.Secret(
+            label=AUTH_KEY_LABEL,
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID},
+        )
 
         sackd_integration_id = 1
         sackd_integration = testing.Relation(
@@ -136,14 +144,12 @@ class TestSackdInterface:
             remote_app_name="sackd-requirer",
             remote_app_data=(
                 {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps(EXAMPLE_CONTROLLERS),
                 }
                 if ready
                 else {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(""),
+                    "auth_secret_id": json.dumps(""),
                     "controllers": json.dumps([]),
                 }
             ),
@@ -190,17 +196,17 @@ class TestSackdInterface:
 
         state = requirer_ctx.run(
             requirer_ctx.on.relation_created(sackd_integration),
-            testing.State(leader=leader, relations={sackd_integration}),
+            testing.State(
+                leader=leader,
+                relations={sackd_integration},
+            ),
         )
 
         integration = state.get_relation(sackd_integration_id)
         if leader:
             # Verify that the leader unit has set the required data for `sackd`.
-            assert "auth_key" in integration.local_app_data
-            assert integration.local_app_data["auth_key"] == '"***"'
-
-            assert "auth_key_id" in integration.local_app_data
-            assert integration.local_app_data["auth_key_id"] != '""'
+            assert "auth_secret_id" in integration.local_app_data
+            assert integration.local_app_data["auth_secret_id"] != '""'
 
             assert "controllers" in integration.local_app_data
             assert integration.local_app_data["controllers"] == json.dumps(EXAMPLE_CONTROLLERS)
