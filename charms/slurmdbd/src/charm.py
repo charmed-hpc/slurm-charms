@@ -23,6 +23,7 @@ import ops
 from charmed_hpc_libs.ops import get_ingress_address
 from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, leader, refresh, wait_unless
 from charmed_slurm_slurmdbd_interface import (
+    AUTH_KEY_LABEL,
     DatabaseData,
     SlurmctldReadyEvent,
     SlurmdbdProvider,
@@ -156,7 +157,7 @@ class SlurmdbdCharm(ops.CharmBase):
         """Handle when controller data is ready from `slurmctld`."""
         data = self.slurmctld.get_controller_data(event.relation.id)
 
-        self.slurmdbd.key.set(data.auth_key, data.auth_key_content_id)
+        self.slurmdbd.key.set(data.auth_key, data.auth_key_id)
         self.slurmdbd.jwt.set(data.jwt_key)
         self._reconfigure()
 

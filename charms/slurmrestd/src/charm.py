@@ -21,6 +21,7 @@ import logging
 import ops
 from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, wait_unless
 from charmed_slurm_slurmrestd_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
     SlurmrestdProvider,
@@ -94,7 +95,7 @@ class SlurmrestdCharm(ops.CharmBase):
         data = self.slurmctld.get_controller_data(event.relation.id)
 
         try:
-            self.slurmrestd.key.set(data.auth_key, data.auth_key_content_id)
+            self.slurmrestd.key.set(data.auth_key, data.auth_key_id)
             for name, config in data.slurmconfig.items():
                 self.slurmrestd.config.includes[name].dump(config)
             self.slurmrestd.service.enable()

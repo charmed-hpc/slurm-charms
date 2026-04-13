@@ -40,6 +40,7 @@ from charmed_slurm_sackd_interface import (
     SackdRequirer,
 )
 from charmed_slurm_slurmctld_interface import (
+    AUTH_KEY_LABEL,
     ControllerData,
 )
 from charmed_slurm_slurmd_interface import (
@@ -421,11 +422,11 @@ class SlurmctldCharm(ops.CharmBase):
     @block_unless(slurmctld_installed)
     def _on_sackd_connected(self, event: SackdConnectedEvent) -> None:
         """Handle when a new `sackd` application is connected."""
-        auth_key_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
+        auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
         new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in self._get_controllers()]
         self.sackd.set_controller_data(
             ControllerData(
-                auth_key_id=auth_key_id,
+                auth_secret_id=auth_secret_id,
                 controllers=new_endpoints,
             ),
             integration_id=event.relation.id,
@@ -436,7 +437,7 @@ class SlurmctldCharm(ops.CharmBase):
     @block_unless(slurmctld_installed)
     def _on_slurmd_ready(self, event: SlurmdReadyEvent) -> None:
         """Handle when partition data is ready from a `slurmd` application."""
-        auth_key_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
+        auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
         data = self.slurmd.get_compute_data(event.relation.id)
         name = data.partition.partition_name
         include = f"slurm.conf.{name}"
@@ -457,7 +458,7 @@ class SlurmctldCharm(ops.CharmBase):
         new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in self._get_controllers()]
         self.slurmd.set_controller_data(
             ControllerData(
-                auth_key_id=auth_key_id,
+                auth_secret_id=auth_secret_id,
                 controllers=new_endpoints,
             ),
             integration_id=event.relation.id,
@@ -485,10 +486,10 @@ class SlurmctldCharm(ops.CharmBase):
     @block_unless(slurmctld_installed)
     def _on_slurmdbd_connected(self, event: SlurmdbdConnectedEvent) -> None:
         """Handle when a new `slurmdbd` application is connected."""
-        auth_key_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
+        auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
         self.slurmdbd.set_controller_data(
             ControllerData(
-                auth_key_id=auth_key_id,
+                auth_secret_id=auth_secret_id,
                 jwt_key=self.slurmctld.jwt.get(),
             ),
             integration_id=event.relation.id,
@@ -543,10 +544,10 @@ class SlurmctldCharm(ops.CharmBase):
     @block_unless(slurmctld_installed)
     def _on_slurmrestd_connected(self, event: SlurmrestdConnectedEvent) -> None:
         """Handle when a new `slurmrestd` application is connected."""
-        auth_key_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
+        auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
         self.slurmrestd.set_controller_data(
             ControllerData(
-                auth_key_id=auth_key_id,
+                auth_secret_id=auth_secret_id,
                 slurmconfig={
                     "slurm.conf": self.slurmctld.config.load(),
                     **{k: v.load() for k, v in self.slurmctld.config.includes.items()},
@@ -907,12 +908,12 @@ class SlurmctldCharm(ops.CharmBase):
         if self.slurmrestd.is_joined():
             # Workaround for: https://github.com/charmed-hpc/slurm-charms/issues/203
             # TODO: Remove setting of key ID once merging of databag info is implemented. Only the
-            # slurmconfig needs updated. The auth_key_id should not be overwritten
-            auth_key_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
+            # slurmconfig needs updated. The auth Secret ID should not be overwritten
+            auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
             for integration in self.model.relations.get(SLURMRESTD_INTEGRATION_NAME, []):
                 self.slurmrestd.set_controller_data(
                     ControllerData(
-                        auth_key_id=auth_key_id,
+                        auth_secret_id=auth_secret_id,
                         slurmconfig={
                             "slurm.conf": self.slurmctld.config.load(),
                             **{k: v.load() for k, v in self.slurmctld.config.includes.items()},
@@ -934,7 +935,7 @@ class SlurmctldCharm(ops.CharmBase):
 
             data = ControllerData(
                 auth_key="",  # Don't set keys here or secrets will be replaced with "***"
-                auth_key_id=current.auth_key_id,
+                auth_secret_id=current.auth_secret_id,
                 controllers=new_endpoints,  # Update only the controllers
                 jwt_key="",
                 jwt_key_id=current.jwt_key_id,

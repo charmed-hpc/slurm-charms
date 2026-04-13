@@ -24,6 +24,7 @@ import rdma
 from charmed_hpc_libs.errors import SystemdError
 from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
 from charmed_slurm_slurmd_interface import (
+    AUTH_KEY_LABEL,
     ComputeData,
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
@@ -156,7 +157,7 @@ class SlurmdCharm(ops.CharmBase):
         """Handle when controller data is ready from the `slurmctld` application."""
         data = self.slurmctld.get_controller_data(event.relation.id)
 
-        self.slurmd.key.set(data.auth_key, data.auth_key_content_id)
+        self.slurmd.key.set(data.auth_key, data.auth_key_id)
         self.slurmd.conf_server = data.controllers
 
         # Set default state and reason if this compute node is being added to a Slurm cluster.

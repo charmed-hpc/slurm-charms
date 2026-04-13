@@ -19,8 +19,10 @@ import logging
 from subprocess import CalledProcessError
 
 import ops
+from charmed_hpc_libs.ops import call
 from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
 from charmed_slurm_sackd_interface import (
+    AUTH_KEY_LABEL,
     SackdProvider,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
@@ -92,7 +94,7 @@ class SackdCharm(ops.CharmBase):
         data = self.slurmctld.get_controller_data(event.relation.id)
 
         try:
-            self.sackd.key.set(data.auth_key, data.auth_key_content_id)
+            self.sackd.key.set(data.auth_key, data.auth_key_id)
             self.sackd.conf_server = data.controllers
             self.sackd.service.enable()
             self.sackd.service.restart()
