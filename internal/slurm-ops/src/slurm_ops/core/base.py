@@ -531,7 +531,7 @@ class _SlurmSecretManager:
             ValueError: If `key` or `key_id` is empty.
         """
         data = self.get()
-        new_entry = self._get_new_entry(key, key_id)
+        new_entry = self._build_new_entry(key, key_id)
         data["keys"].append(new_entry)
         self._write(data)
 
@@ -603,7 +603,7 @@ class _SlurmSecretManager:
         Raises:
             ValueError: If `key` or `key_id` is empty.
         """
-        new_entry = self._get_new_entry(key, key_id)
+        new_entry = self._build_new_entry(key, key_id)
         self._write({"keys": [new_entry]})
 
         _log_security_event(
@@ -623,7 +623,7 @@ class _SlurmSecretManager:
         return self._file
 
     @staticmethod
-    def _get_new_entry(key: str, key_id: str) -> dict[str, str]:
+    def _build_new_entry(key: str, key_id: str) -> dict[str, str]:
         """Build a new key entry for the `slurm.jwks` key file.
 
         Args:
