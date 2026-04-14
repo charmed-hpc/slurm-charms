@@ -214,9 +214,10 @@ class TestSlurmctldInterface:
                 auth_secret_id = ""
                 if auth_key:
                     auth_key_secret = self.app.add_secret(
-                        {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
+                        {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID},
+                        label=AUTH_KEY_LABEL,
                     )
-                    auth_secret_id=auth_key_secret.get_info().id
+                    auth_secret_id = auth_key_secret.get_info().id
 
                 self.slurmctld.set_controller_data(
                     ControllerData(auth_secret_id=auth_secret_id, jwt_key=jwt_key),
@@ -326,7 +327,9 @@ class TestSlurmctldInterface:
     )
     def test_requirer_on_slurmctld_ready_event(self, requirer_ctx, leader, ready) -> None:
         """Test that the `slurmctld` requirer waits for controller data to be available."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID})
+        auth_key_secret = testing.Secret(
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}
+        )
         jwt_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_JWT_KEY})
 
         slurmctld_integration_id = 1
@@ -403,7 +406,9 @@ class TestSlurmctldInterface:
 
     def test_requirer_get_controller_data(self, requirer_ctx, leader) -> None:
         """Test that `get_controller_data` correctly retrieves and decrypts secret values."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID})
+        auth_key_secret = testing.Secret(
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}
+        )
         jwt_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_JWT_KEY})
 
         slurmctld_integration_id = 1

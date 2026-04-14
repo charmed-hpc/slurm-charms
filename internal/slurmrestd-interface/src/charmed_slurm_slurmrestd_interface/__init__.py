@@ -54,7 +54,9 @@ class SlurmrestdProvider(SlurmctldRequirer):
     """
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
-        super().__init__(charm, integration_name, required_app_data={"auth_secret_id", "slurmconfig"})
+        super().__init__(
+            charm, integration_name, required_app_data={"auth_secret_id", "slurmconfig"}
+        )
 
 
 class SlurmrestdRequirer(SlurmctldProvider):
