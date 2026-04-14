@@ -248,7 +248,7 @@ def test_rotate_auth_key(juju: jubilant.Juju) -> None:
 
     juju.run(slurmctld_unit, "rotate-auth-key")
 
-    # Wait for action to complete and for all Slurm applications to return to ActiveStatus
+    # Wait for action to complete and for all Slurm applications to return to ActiveStatus.
     juju.wait(
         lambda status: jubilant.all_active(status, *SLURM_APPS),
         error=lambda status: jubilant.any_error(status, *SLURM_APPS),
@@ -258,7 +258,7 @@ def test_rotate_auth_key(juju: jubilant.Juju) -> None:
     # Key rotation does not complete until the secret-remove event has completed on slurmctld. This
     # event is triggered after all observers have updated to the new secret revision. There may be
     # a gap where all Slurm applications are in ActiveStatus but secret-remove has not yet run so
-    # the old key is still present on slurmctld. Account for this with tenacity
+    # the old key is still present on slurmctld. Account for this with tenacity.
     attempts = tenacity.Retrying(
         wait=tenacity.wait.wait_exponential(multiplier=2, min=1),
         stop=tenacity.stop_after_attempt(5),

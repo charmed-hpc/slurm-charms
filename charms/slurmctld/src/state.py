@@ -165,7 +165,7 @@ def auth_key_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:
     if num_keys > 1:
         return ConditionEvaluation(
             False,
-            "Authentication key rotation in progress. Waiting for rotation to complete.",
+            "Authentication key rotation in progress. Waiting for rotation to complete",
         )
 
     return ConditionEvaluation(True, "")
