@@ -624,6 +624,11 @@ class _SlurmSecretManager:
         return self._file
 
     def _write(self, data: dict[str, list[dict[str, str]]]) -> None:
+        """Write out slurm.jwks data to a file.
+
+        Args:
+            data: slurm.jwks file data to write out.
+        """
         self._file.write_text(json.dumps(data))
         self._file.chmod(0o600)
         shutil.chown(self._file, self._user, self._group)
