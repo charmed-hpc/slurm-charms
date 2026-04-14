@@ -690,7 +690,7 @@ class SlurmctldCharm(ops.CharmBase):
             # Update key file first to ensure key is available before observers apply new revision
             self.slurmctld.key.add(new_key, new_key_id)
             self._reconfigure()
-        except Exception as e:
+        except (SlurmOpsError, ValueError) as e:
             logger.error("failed to update auth key. reason:\n%s", e)
             event.fail("Failed to update auth key. See `juju debug-log` for details.")
             return
