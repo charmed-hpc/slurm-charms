@@ -41,7 +41,7 @@ from slurmutils import Model, SlurmConfig
 _logger = logging.getLogger(__name__)
 
 # Label for the Juju secret storing the Slurm auth key. Used by multiple Slurm services
-AUTH_KEY_LABEL = "auth-key-secret"
+AUTH_KEY_LABEL = "slurm-auth-key"
 JWT_KEY_TEMPLATE_LABEL = Template("integration-$id-jwt-key-secret")
 
 
