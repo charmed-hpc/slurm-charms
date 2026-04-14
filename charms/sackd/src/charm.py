@@ -16,11 +16,10 @@
 """Charmed operator for `sackd`, Slurm's authentication kiosk service."""
 
 import logging
-from subprocess import CalledProcessError
 
 import ops
-from charmed_hpc_libs.ops import call
-from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
+from charmed_hpc_libs.errors import SystemdError
+from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, systemctl, wait_unless
 from charmed_slurm_sackd_interface import (
     AUTH_KEY_LABEL,
     SackdProvider,
@@ -147,8 +146,8 @@ class SackdCharm(ops.CharmBase):
         # Necessary to load new key from file into the service
         # TODO: replace with self.service.reload()
         try:
-            call("/usr/bin/systemctl", "reload", "sackd.service")
-        except CalledProcessError as e:
+            systemctl("reload", "sackd.service")
+        except SystemdError as e:
             logger.error("failed to reload sackd.service. reason:\n%s", e)
             event.defer()
             raise StopCharm(
