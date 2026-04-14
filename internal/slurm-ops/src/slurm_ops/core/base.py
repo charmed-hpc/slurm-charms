@@ -627,6 +627,11 @@ class _SlurmSecretManager:
         """
         return self._file
 
+    def _write(self, data: dict[str, list[dict[str, str]]]) -> None:
+        self._file.write_text(json.dumps(data))
+        self._file.chmod(0o600)
+        shutil.chown(self._file, self._user, self._group)
+
     @staticmethod
     def _build_new_entry(key: str, key_id: str) -> dict[str, str]:
         """Build a new key entry for the `slurm.jwks` key file.
@@ -656,11 +661,6 @@ class _SlurmSecretManager:
             "kid": key_id,
             "k": key,
         }
-
-    def _write(self, data: dict[str, list[dict[str, str]]]) -> None:
-        self._file.write_text(json.dumps(data))
-        self._file.chmod(0o600)
-        shutil.chown(self._file, self._user, self._group)
 
 
 class SlurmManager(ABC):
