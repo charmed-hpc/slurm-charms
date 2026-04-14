@@ -530,8 +530,8 @@ class _SlurmSecretManager:
         Raises:
             ValueError: If `key` or `key_id` is empty.
         """
-        data = self.get()
         new_entry = self._build_new_entry(key, key_id)
+        data = self.get()
         data["keys"].append(new_entry)
         self._write(data)
 
