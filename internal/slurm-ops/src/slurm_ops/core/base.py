@@ -33,6 +33,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from subprocess import CalledProcessError
 from typing import Any, Protocol
+from uuid import uuid4
 
 import distro
 import yaml
@@ -511,14 +512,18 @@ class _SlurmSecretManager:
         self._user = user
         self._group = group
 
-    def generate(self) -> str:
+    def generate(self) -> tuple[str, str]:
         """Generate cryptographically secure Slurm auth key data.
 
         Returns:
-            A base64-encoded random byte string suitable for use as a Slurm authentication key.
+            A tuple of `(key, key_id)` where `key` is a base64-encoded random byte string suitable
+            for use as a Slurm authentication key, and `key_id` is a unique identifier for the key.
         """
-        key = base64.b64encode(secrets.token_bytes(2048)).decode()
-        return key
+        # Auth key entries must each have a unique ID consistent across all units.
+        # Secret revision number cannot be used as it is not known to secret observers.
+        # Secret `unique_identifier` property is not unique per revision.
+        # Therefore, a newly generated UUID is included with the secret contents.
+        return base64.b64encode(secrets.token_bytes(2048)).decode(), str(uuid4())
 
     def add(self, key: str, key_id: str) -> None:
         """Append a key to the `slurm.jwks` key file.

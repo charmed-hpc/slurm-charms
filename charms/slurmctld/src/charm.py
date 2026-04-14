@@ -18,7 +18,6 @@
 
 import logging
 import secrets
-from uuid import uuid4
 
 import mail
 import ops
@@ -232,12 +231,7 @@ class SlurmctldCharm(ops.CharmBase):
                         content = secret.get_content()
                         self.slurmctld.key.set(content["key"], content["keyid"])
                 except ops.SecretNotFoundError:
-                    key = self.slurmctld.key.generate()
-                    # Auth key entries must each have a unique ID consistent across all units.
-                    # Secret revision number cannot be used as it is not known to secret observers.
-                    # Secret `unique_identifier` property is not unique per revision.
-                    # Therefore, a newly generated UUID is included with the secret contents.
-                    key_id = str(uuid4())
+                    key, key_id = self.slurmctld.key.generate()
                     self.app.add_secret({"key": key, "keyid": key_id}, label=AUTH_KEY_LABEL)
                     self.slurmctld.key.set(key, key_id)
 
@@ -691,8 +685,7 @@ class SlurmctldCharm(ops.CharmBase):
             return
 
         # Update secrets backend with new key revision
-        new_key = self.slurmctld.key.generate()
-        new_key_id = str(uuid4())
+        new_key, new_key_id = self.slurmctld.key.generate()
         try:
             # Update key file first to ensure key is available before observers apply new revision
             self.slurmctld.key.add(new_key, new_key_id)
