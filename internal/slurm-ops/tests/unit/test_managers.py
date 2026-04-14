@@ -221,14 +221,14 @@ class TestManager:
     def test_generate_slurm_valid_key(self, mock_slurm_key) -> None:
         """Test the `<manager>.key.generate()` method produces valid keys."""
         # Verify it can be decoded back from Base64
-        key = mock_slurm_key.key.generate()
+        key, _ = mock_slurm_key.key.generate()
         decoded = base64.b64decode(key)
         assert len(decoded) == 2048
 
     def test_generate_slurm_key_is_unique(self, mock_slurm_key) -> None:
         """Test the `<manager>.key.generate()` method produces unique keys."""
         # Statistically, two keys should never be identical
-        assert mock_slurm_key.key.generate() != mock_slurm_key.key.generate()
+        assert mock_slurm_key.key.generate()[0] != mock_slurm_key.key.generate()[0]
 
     # Test `<manager>.jwt` component.
 
