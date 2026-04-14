@@ -643,7 +643,7 @@ class _SlurmSecretManager:
         Raises:
             ValueError: If `key` or `key_id` is empty.
 
-        Note:
+        See Also:
             The format of the key entry is defined in the Slurm documentation:
             https://slurm.schedmd.com/authentication.html#multiple_key_setup
         """
