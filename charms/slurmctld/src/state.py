@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import ops
 from charmed_hpc_libs.ops.conditions import ConditionEvaluation
 from constants import HA_MOUNT_INTEGRATION_NAME
-from slurm_ops.core.errors import SlurmOpsError
+from slurm_ops import SlurmOpsError
 
 if TYPE_CHECKING:
     from charm import SlurmctldCharm
