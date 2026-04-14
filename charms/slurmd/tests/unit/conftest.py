@@ -41,7 +41,7 @@ def mock_charm(
           otherwise `ops.testing.Context` will fail to locate the `slurmd` charm's
           charmcraft.yaml file.
     """
-    fs.create_file("/etc/slurm/slurm.key", create_missing_dirs=True)
+    fs.create_file("/etc/slurm/slurm.jwks", create_missing_dirs=True)
     fs.create_file("/etc/default/slurmd", create_missing_dirs=True)
     fs.create_dir("/usr/sbin")
     mocker.patch("subprocess.run")

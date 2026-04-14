@@ -21,6 +21,7 @@ import ops
 import pytest
 from charmed_hpc_libs.ops.conditions import refresh, wait_unless
 from charmed_slurm_slurmctld_interface import (
+    AUTH_KEY_LABEL,
     ControllerData,
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
@@ -34,6 +35,7 @@ from slurmutils import SlurmConfig
 
 SLURMCTLD_INTEGRATION_NAME = "slurmctld"
 EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_AUTH_KEY_ID = "12345678-90ab-cdef-1234-567890abcdef"
 EXAMPLE_JWT_KEY = "abc987||"
 EXAMPLE_CONTROLLERS = ["127.0.0.1", "127.0.1.1"]
 EXAMPLE_SLURM_CONFIG = {
@@ -58,9 +60,15 @@ class MockSlurmctldProviderCharm(ops.CharmBase):
         )
 
     def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:
+        if not self.model.unit.is_leader():
+            return
+
+        auth_key_secret = self.app.add_secret(
+            {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
+        )
         self.slurmctld.set_controller_data(
             ControllerData(
-                auth_key=EXAMPLE_AUTH_KEY,
+                auth_secret_id=auth_key_secret.get_info().id,
                 jwt_key=EXAMPLE_JWT_KEY,
                 controllers=EXAMPLE_CONTROLLERS,
                 slurmconfig=EXAMPLE_SLURM_CONFIG,
@@ -154,12 +162,11 @@ class TestSlurmctldInterface:
 
         integration = state.get_relation(slurmctld_integration_id)
         if leader:
-            # Verify that auth_key and jwt_key are redacted in the integration data.
-            assert integration.local_app_data["auth_key"] == '"***"'
+            # Verify jwt_key is redacted in the integration data.
             assert integration.local_app_data["jwt_key"] == '"***"'
 
             # Verify that secret IDs have been set (non-empty).
-            assert integration.local_app_data["auth_key_id"] != '""'
+            assert integration.local_app_data["auth_secret_id"] != '""'
             assert integration.local_app_data["jwt_key_id"] != '""'
 
             # Verify controllers and slurmconfig are set correctly.
@@ -172,10 +179,10 @@ class TestSlurmctldInterface:
     @pytest.mark.parametrize(
         "auth_key,jwt_key",
         (
-            pytest.param(EXAMPLE_AUTH_KEY, "", id="auth-key-only"),
-            pytest.param("", EXAMPLE_JWT_KEY, id="jwt-key-only"),
-            pytest.param(EXAMPLE_AUTH_KEY, EXAMPLE_JWT_KEY, id="both-keys"),
-            pytest.param("", "", id="no-keys"),
+            pytest.param(True, "", id="auth-key-only"),
+            pytest.param(False, EXAMPLE_JWT_KEY, id="jwt-key-only"),
+            pytest.param(True, EXAMPLE_JWT_KEY, id="both-keys"),
+            pytest.param(False, "", id="no-keys"),
         ),
     )
     def test_provider_set_controller_data_secret_handling(
@@ -201,8 +208,19 @@ class TestSlurmctldInterface:
                 )
 
             def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:
+                if not self.model.unit.is_leader():
+                    return
+
+                auth_secret_id = ""
+                if auth_key:
+                    auth_key_secret = self.app.add_secret(
+                        {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID},
+                        label=AUTH_KEY_LABEL,
+                    )
+                    auth_secret_id = auth_key_secret.get_info().id
+
                 self.slurmctld.set_controller_data(
-                    ControllerData(auth_key=auth_key, jwt_key=jwt_key),
+                    ControllerData(auth_secret_id=auth_secret_id, jwt_key=jwt_key),
                     integration_id=event.relation.id,
                 )
 
@@ -222,15 +240,14 @@ class TestSlurmctldInterface:
         if leader:
             integration = state.get_relation(slurmctld_integration_id)
 
-            # auth_key and jwt_key are always redacted after set_controller_data.
-            assert integration.local_app_data["auth_key"] == '"***"'
+            # jwt_key is always redacted after set_controller_data.
             assert integration.local_app_data["jwt_key"] == '"***"'
 
             # Secret IDs are set only when the key was non-empty.
             if auth_key:
-                assert integration.local_app_data["auth_key_id"] != '""'
+                assert integration.local_app_data["auth_secret_id"] != '""'
             else:
-                assert integration.local_app_data["auth_key_id"] == '""'
+                assert integration.local_app_data["auth_secret_id"] == '""'
 
             if jwt_key:
                 assert integration.local_app_data["jwt_key_id"] != '""'
@@ -274,8 +291,7 @@ class TestSlurmctldInterface:
         )
 
         if leader:
-            # Both secrets should have been removed by the leader.
-            assert auth_key_secret.id not in {s.id for s in state.secrets}
+            # Only JWT secret should be removed by the leader.
             assert jwt_key_secret.id not in {s.id for s in state.secrets}
 
     # Test requirer-side of the `slurmctld` interface.
@@ -311,7 +327,9 @@ class TestSlurmctldInterface:
     )
     def test_requirer_on_slurmctld_ready_event(self, requirer_ctx, leader, ready) -> None:
         """Test that the `slurmctld` requirer waits for controller data to be available."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+        auth_key_secret = testing.Secret(
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}
+        )
         jwt_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_JWT_KEY})
 
         slurmctld_integration_id = 1
@@ -325,7 +343,7 @@ class TestSlurmctldInterface:
             remote_app_data=(
                 {
                     "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "jwt_key": '"***"',
                     "jwt_key_id": json.dumps(jwt_key_secret.id),
                     "controllers": json.dumps(EXAMPLE_CONTROLLERS),
@@ -388,7 +406,9 @@ class TestSlurmctldInterface:
 
     def test_requirer_get_controller_data(self, requirer_ctx, leader) -> None:
         """Test that `get_controller_data` correctly retrieves and decrypts secret values."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+        auth_key_secret = testing.Secret(
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}
+        )
         jwt_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_JWT_KEY})
 
         slurmctld_integration_id = 1
@@ -398,8 +418,8 @@ class TestSlurmctldInterface:
             id=slurmctld_integration_id,
             remote_app_name="slurmctld-provider",
             remote_app_data={
-                "auth_key": '"***"',
-                "auth_key_id": json.dumps(auth_key_secret.id),
+                "auth_key": '""',
+                "auth_secret_id": json.dumps(auth_key_secret.id),
                 "jwt_key": '"***"',
                 "jwt_key_id": json.dumps(jwt_key_secret.id),
                 "controllers": json.dumps(EXAMPLE_CONTROLLERS),

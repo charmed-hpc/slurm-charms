@@ -22,6 +22,7 @@ import pytest
 from charmed_hpc_libs.ops.conditions import refresh, wait_unless
 from charmed_slurm_slurmctld_interface import ControllerData
 from charmed_slurm_slurmd_interface import (
+    AUTH_KEY_LABEL,
     ComputeData,
     SlurmctldConnectedEvent,
     SlurmctldReadyEvent,
@@ -37,6 +38,7 @@ from slurmutils import Partition
 
 SLURMD_INTEGRATION_NAME = "slurmd"
 EXAMPLE_AUTH_KEY = "xyz123=="
+EXAMPLE_AUTH_KEY_ID = "12345678-90ab-cdef-1234-567890abcdef"
 EXAMPLE_CONTROLLERS = ["127.0.0.1", "127.0.1.1"]
 EXAMPLE_PARTITION_CONFIG = Partition(partitionname="polaris")
 
@@ -108,9 +110,13 @@ class MockSlurmdRequirerCharm(ops.CharmBase):
         # Assume `remote_app_data` contains partition configuration data.
         assert data.partition.dict() == EXAMPLE_PARTITION_CONFIG.dict()
 
+        auth_key_secret = self.app.add_secret(
+            {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
+        )
+
         self.slurmd.set_controller_data(
             ControllerData(
-                auth_key=EXAMPLE_AUTH_KEY,
+                auth_secret_id=auth_key_secret.get_info().id,
                 controllers=EXAMPLE_CONTROLLERS,
             ),
             integration_id=event.relation.id,
@@ -239,14 +245,12 @@ class TestSlurmdInterface:
             remote_app_name="slurmd-requirer",
             remote_app_data=(
                 {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps(EXAMPLE_CONTROLLERS),
                 }
                 if ready
                 else {
-                    "auth_key": '"***"',
-                    "auth_key_id": json.dumps(auth_key_secret.id),
+                    "auth_secret_id": json.dumps(auth_key_secret.id),
                     "controllers": json.dumps([]),
                 }
             ),
@@ -314,11 +318,8 @@ class TestSlurmdInterface:
             if ready:
                 integration = state.get_relation(slurmd_integration_id)
 
-                # Assert `auth_key` is redacted in the integration data.
-                assert integration.local_app_data["auth_key"] == '"***"'
-
                 # Assert that `auth_key_id` is set to the `auth_key` secret URI.
-                assert integration.local_app_data["auth_key_id"] != '""'
+                assert integration.local_app_data["auth_secret_id"] != '""'
 
                 # Assert that `SlurmdReadyEvent` was emitted only once.
                 occurred = defaultdict(lambda: 0)

@@ -15,6 +15,7 @@
 """Integration interface implementation for the `slurmdbd` interface."""
 
 __all__ = [
+    "AUTH_KEY_LABEL",
     "DatabaseData",
     "SlurmdbdConnectedEvent",
     "SlurmdbdReadyEvent",
@@ -31,6 +32,7 @@ from dataclasses import dataclass
 import ops
 from charmed_hpc_libs.ops.conditions import ConditionEvaluation, leader
 from charmed_slurm_slurmctld_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldProvider,
     SlurmctldReadyEvent,
     SlurmctldRequirer,
@@ -98,7 +100,9 @@ class SlurmdbdProvider(SlurmctldRequirer):
     """
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
-        super().__init__(charm, integration_name, required_app_data={"auth_key_id", "jwt_key_id"})
+        super().__init__(
+            charm, integration_name, required_app_data={"auth_secret_id", "jwt_key_id"}
+        )
 
     @leader
     def _on_relation_created(self, event: ops.RelationCreatedEvent) -> None:

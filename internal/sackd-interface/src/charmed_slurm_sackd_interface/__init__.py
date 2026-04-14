@@ -15,6 +15,7 @@
 """Integration interface implementation for the `sackd` interface."""
 
 __all__ = [
+    "AUTH_KEY_LABEL",
     "SackdConnectedEvent",
     "SackdProvider",
     "SackdRequirer",
@@ -27,6 +28,7 @@ __all__ = [
 import ops
 from charmed_hpc_libs.ops import leader
 from charmed_slurm_slurmctld_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldDisconnectedEvent,
     SlurmctldProvider,
     SlurmctldReadyEvent,
@@ -35,7 +37,7 @@ from charmed_slurm_slurmctld_interface import (
 )
 
 _REQUIRED_APP_DATA = {
-    "auth_key_id": lambda value: value != '""',
+    "auth_secret_id": lambda value: value != '""',
     "controllers": lambda value: value != "[]",
 }
 

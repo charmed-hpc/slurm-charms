@@ -40,6 +40,7 @@ EXAMPLE_OCI_CONFIG = OCIConfig(
     runtimekill="kill -s SIGTERM %p",
     runtimedelete="kill -s SIGKILL %p",
 )
+EXAMPLE_KEY_ENTRY = {"keys": [{"alg": "HS256", "kty": "oct", "kid": "0", "k": "xyz123=="}]}
 
 
 @pytest.fixture
@@ -231,6 +232,7 @@ class TestSlurmctldCharm:
             mocker.patch.object(manager.charm.slurmctld, "is_installed", return_value=True)
             mocker.patch.object(manager.charm.slurmctld.service, "is_active", return_value=True)
             mocker.patch.object(manager.charm.slurmdbd, "is_ready", return_value=True)
+            mocker.patch.object(manager.charm.slurmctld.key, "get", return_value=EXAMPLE_KEY_ENTRY)
             state = manager.run()
 
         mock_add_package.assert_called_once_with("slurm-mail")
@@ -250,6 +252,7 @@ class TestSlurmctldCharm:
             mocker.patch.object(manager.charm.slurmctld, "is_installed", return_value=True)
             mocker.patch.object(manager.charm.slurmctld.service, "is_active", return_value=True)
             mocker.patch.object(manager.charm.slurmdbd, "is_ready", return_value=True)
+            mocker.patch.object(manager.charm.slurmctld.key, "get", return_value=EXAMPLE_KEY_ENTRY)
             state = manager.run()
 
         assert state.unit_status == testing.BlockedStatus(
@@ -269,6 +272,7 @@ class TestSlurmctldCharm:
             mocker.patch.object(manager.charm.slurmctld, "is_installed", return_value=True)
             mocker.patch.object(manager.charm.slurmctld.service, "is_active", return_value=True)
             mocker.patch.object(manager.charm.slurmdbd, "is_ready", return_value=True)
+            mocker.patch.object(manager.charm.slurmctld.key, "get", return_value=EXAMPLE_KEY_ENTRY)
             state = manager.run()
 
         mock_remove_package.assert_called_once_with("slurm-mail")
@@ -288,6 +292,7 @@ class TestSlurmctldCharm:
             mocker.patch.object(manager.charm.slurmctld, "is_installed", return_value=True)
             mocker.patch.object(manager.charm.slurmctld.service, "is_active", return_value=True)
             mocker.patch.object(manager.charm.slurmdbd, "is_ready", return_value=True)
+            mocker.patch.object(manager.charm.slurmctld.key, "get", return_value=EXAMPLE_KEY_ENTRY)
             state = manager.run()
 
         assert state.unit_status == testing.BlockedStatus(
@@ -355,6 +360,7 @@ class TestSlurmctldCharm:
             mocker.patch.object(manager.charm.slurmctld, "is_installed", return_value=True)
             mocker.patch.object(manager.charm.slurmctld.service, "is_active", return_value=True)
             mocker.patch.object(manager.charm.slurmdbd, "is_ready", return_value=True)
+            mocker.patch.object(manager.charm.slurmctld.key, "get", return_value=EXAMPLE_KEY_ENTRY)
             state = manager.run()
 
         assert config_path.read_text().strip() == expected_config_content.strip()

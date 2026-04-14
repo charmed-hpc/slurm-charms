@@ -20,6 +20,8 @@ __all__ = [
 ]
 
 import base64
+import datetime
+import json
 import logging
 import secrets
 import shutil
@@ -31,6 +33,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from subprocess import CalledProcessError
 from typing import Any, Protocol
+from uuid import uuid4
 
 import distro
 import yaml
@@ -501,33 +504,164 @@ class _JWTSecretManager(SecretManager):
         return self._file
 
 
-class _SlurmSecretManager(SecretManager):
-    """Manage the `slurm.key` secret file."""
+class _SlurmSecretManager:
+    """Manage the `slurm.jwks` key file."""
 
     def __init__(self, ops_manager: OpsManager, /, user: str, group: str) -> None:
-        self._file = ops_manager.etc_path / "slurm.key"
+        self._file = ops_manager.etc_path / "slurm.jwks"
         self._user = user
         self._group = group
 
-    def get(self) -> str:
-        """Get the contents of the current `slurm.key` secret file."""
-        return base64.b64encode(self._file.read_bytes()).decode()
+    def generate(self) -> tuple[str, str]:
+        """Generate cryptographically secure Slurm auth key data.
 
-    def set(self, secret: str) -> None:
-        """Set the contents of the `slurm.key` secret file."""
-        self._file.write_bytes(base64.b64decode(secret.encode()))
-        self._file.chmod(0o600)
-        shutil.chown(self._file, self._user, self._group)
+        Returns:
+            A tuple of `(key, key_id)` where `key` is a base64-encoded random byte string suitable
+            for use as a Slurm authentication key, and `key_id` is a unique identifier for the key.
+        """
+        # Auth key entries must each have a unique ID consistent across all units.
+        # Secret revision number cannot be used as it is not known to secret observers.
+        # Secret `unique_identifier` property is not unique per revision.
+        # Therefore, a newly generated UUID is included with the secret contents.
+        return base64.b64encode(secrets.token_bytes(2048)).decode(), str(uuid4())
 
-    def generate(self) -> None:
-        """Generate a new, cryptographically secure `slurm.key` secret."""
-        key = secrets.token_bytes(2048)
-        self.set(base64.b64encode(key).decode())
+    def add(self, key: str, key_id: str) -> None:
+        """Append a key to the `slurm.jwks` key file.
+
+        Args:
+            key: The base64-encoded key material to add.
+            key_id: A unique identifier for the key.
+
+        Raises:
+            ValueError: If `key` or `key_id` is empty.
+        """
+        new_entry = self._build_new_entry(key, key_id)
+        data = self.get()
+        data["keys"].append(new_entry)
+        self._write(data)
+
+        _log_security_event(
+            "INFO",
+            "authn_token_created",
+            "slurm-auth",
+            f"New Slurm authentication key added with key ID: {key_id}",
+        )
+
+    def keep_latest_key(self) -> None:
+        """Preserve only the most recently added key in the `slurm.jwks` key file.
+
+        Removes all previously added keys, keeping only the last entry.
+
+        Raises:
+            SlurmOpsError: If the key file contains no keys.
+        """
+        data = self.get()
+        if not data["keys"]:
+            raise SlurmOpsError("No keys found in slurm.jwks")
+
+        # Most recently added key is last in list
+        last_entry = data["keys"][-1]
+        removed_key_ids = [entry["kid"] for entry in data["keys"][:-1]]
+        self._write({"keys": [last_entry]})
+
+        _log_security_event(
+            "INFO",
+            "authn_token_deleted",
+            "slurm-auth",
+            f"Deleted Slurm authentication key IDs: {removed_key_ids}. Current key ID: {last_entry['kid']}",
+        )
+
+    def get(self) -> dict[str, list[dict[str, str]]]:
+        """Read and validate the `slurm.jwks` key file.
+
+        Returns:
+            A dict with a `"keys"` list. Returns `{"keys": []}` if the file does not exist.
+
+        Raises:
+            SlurmOpsError: If the file exists but cannot be read or contains invalid data.
+        """
+        try:
+            data = json.loads(self._file.read_text())
+        except FileNotFoundError:
+            _logger.warning("%s not found. returning empty keys list", self._file)
+            return {"keys": []}
+        except OSError as e:
+            raise SlurmOpsError(f"Failed to read {self._file}") from e
+        except json.JSONDecodeError as e:
+            raise SlurmOpsError(f"Failed to parse {self._file}") from e
+
+        if not isinstance(data, dict):
+            raise SlurmOpsError(f"Invalid key data in {self._file}: expected a JSON object")
+
+        if not isinstance(data.get("keys"), list):
+            raise SlurmOpsError(f"Invalid key data in {self._file}: 'keys' must be a list")
+
+        return data
+
+    def set(self, key: str, key_id: str) -> None:
+        """Replace the `slurm.jwks` key file with a single key entry.
+
+        Args:
+            key: The base64-encoded key material to set.
+            key_id: A unique identifier for the key.
+
+        Raises:
+            ValueError: If `key` or `key_id` is empty.
+        """
+        new_entry = self._build_new_entry(key, key_id)
+        self._write({"keys": [new_entry]})
+
+        _log_security_event(
+            "INFO",
+            "authn_token_created",
+            "slurm-auth",
+            f"Slurm authentication key set with key ID: {key_id}",
+        )
 
     @property
     def path(self) -> Path:
-        """Get the path to the `slurm.key` secret file."""
+        """Get the path to the `slurm.jwks` secret file."""
         return self._file
+
+    def _write(self, data: dict[str, list[dict[str, str]]]) -> None:
+        """Write out slurm.jwks data to a file.
+
+        Args:
+            data: slurm.jwks file data to write out.
+        """
+        self._file.write_text(json.dumps(data))
+        self._file.chmod(0o600)
+        shutil.chown(self._file, self._user, self._group)
+
+    @staticmethod
+    def _build_new_entry(key: str, key_id: str) -> dict[str, str]:
+        """Build a new key entry for the `slurm.jwks` key file.
+
+        Args:
+            key: The base64-encoded key material.
+            key_id: A unique identifier for the key.
+
+        Returns:
+            A dictionary representing a JWK entry with `alg`, `kty`, `kid`, and `k` fields,
+            as described in the Slurm authentication documentation.
+
+        Raises:
+            ValueError: If `key` or `key_id` is empty.
+
+        See Also:
+            The format of the key entry is defined in the Slurm documentation:
+            https://slurm.schedmd.com/authentication.html#multiple_key_setup
+        """
+        if not key:
+            raise ValueError("Empty key provided")
+        if not key_id:
+            raise ValueError("Empty key ID provided")
+        return {
+            "alg": "HS256",
+            "kty": "oct",
+            "kid": key_id,
+            "k": key,
+        }
 
 
 class SlurmManager(ABC):
@@ -588,3 +722,32 @@ class SlurmManager(ABC):
         self._env_manager.set(
             {f"{self._service.upper()}_OPTIONS": marshal_options(options)}, quote=False
         )
+
+
+def _log_security_event(level: str, event_type: str, event_data: str, description: str) -> None:
+    """Log an OWASP security event.
+
+    Args:
+        level: OWASP log level of the security event (e.g. `"INFO"`, `"WARN"`).
+        event_type: The OWASP event type.
+        event_data: Name of the event data field in OWASP format.
+        description: Human-readable description of the event.
+
+    Note:
+        The `level` argument is the OWASP severity level, not the Python log level.
+        All security events are emitted at `DEBUG` level in the charm logs.
+
+    See Also:
+        https://cheatsheetseries.owasp.org/cheatsheets/Logging_Vocabulary_Cheat_Sheet.html
+    """
+    # Implementation of this function is inspired by the function with the same name in `ops`:
+    # https://github.com/canonical/operator/blob/9affc1e/ops/log.py#L154
+    log_message = {
+        "datetime": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "level": level,
+        "type": "security",
+        "appid": "slurm-charms",
+        "event": f"{event_type}:{event_data}",
+        "description": description,
+    }
+    _logger.debug(json.dumps(log_message))

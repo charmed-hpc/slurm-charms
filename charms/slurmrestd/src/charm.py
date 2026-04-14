@@ -21,6 +21,7 @@ import logging
 import ops
 from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, wait_unless
 from charmed_slurm_slurmrestd_interface import (
+    AUTH_KEY_LABEL,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
     SlurmrestdProvider,
@@ -44,6 +45,7 @@ class SlurmrestdCharm(ops.CharmBase):
         self.slurmrestd = SlurmrestdManager(snap=False)
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.update_status, self._on_update_status)
+        framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         self.slurmctld = SlurmrestdProvider(self, SLURMRESTD_INTEGRATION_NAME)
         framework.observe(
@@ -93,7 +95,7 @@ class SlurmrestdCharm(ops.CharmBase):
         data = self.slurmctld.get_controller_data(event.relation.id)
 
         try:
-            self.slurmrestd.key.set(data.auth_key)
+            self.slurmrestd.key.set(data.auth_key, data.auth_key_id)
             for name, config in data.slurmconfig.items():
                 self.slurmrestd.config.includes[name].dump(config)
             self.slurmrestd.service.enable()
@@ -117,6 +119,34 @@ class SlurmrestdCharm(ops.CharmBase):
             raise StopCharm(
                 ops.BlockedStatus("Failed to stop `slurmrestd`. See `juju debug-log` for details")
             )
+
+    @refresh
+    @block_unless(slurmrestd_installed)
+    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        """Handle when a secret is changed."""
+        if event.secret.label != AUTH_KEY_LABEL:
+            logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
+            return
+
+        content = event.secret.get_content(refresh=True)
+        auth_key = content.get("key")
+        auth_key_id = content.get("keyid")
+        if not auth_key or not auth_key_id:
+            logger.error(
+                "auth key or key ID is empty in secret with label '%s'", event.secret.label
+            )
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
+                )
+            )
+
+        self.slurmrestd.key.set(auth_key, auth_key_id)
+        # Other Slurm charms reload the service here. That is not possible for slurmrestd as the
+        # process shuts down when the reload signal is sent. Restart instead.
+        # TODO: Determine a zero-downtime solution
+        self.slurmrestd.service.restart()
 
 
 if __name__ == "__main__":

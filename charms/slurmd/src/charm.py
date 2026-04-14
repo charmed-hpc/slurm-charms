@@ -24,6 +24,7 @@ import rdma
 from charmed_hpc_libs.errors import SystemdError
 from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
 from charmed_slurm_slurmd_interface import (
+    AUTH_KEY_LABEL,
     ComputeData,
     SlurmctldConnectedEvent,
     SlurmctldDisconnectedEvent,
@@ -71,6 +72,7 @@ class SlurmdCharm(ops.CharmBase):
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.update_status, self._on_update_status)
+        framework.observe(self.on.secret_changed, self._on_secret_changed)
         framework.observe(self.on.set_node_config_action, self._on_set_node_config_action)
 
         self.slurmctld = SlurmdProvider(self, SLURMD_INTEGRATION_NAME)
@@ -155,7 +157,7 @@ class SlurmdCharm(ops.CharmBase):
         """Handle when controller data is ready from the `slurmctld` application."""
         data = self.slurmctld.get_controller_data(event.relation.id)
 
-        self.slurmd.key.set(data.auth_key)
+        self.slurmd.key.set(data.auth_key, data.auth_key_id)
         self.slurmd.conf_server = data.controllers
 
         # Set default state and reason if this compute node is being added to a Slurm cluster.
@@ -192,6 +194,36 @@ class SlurmdCharm(ops.CharmBase):
             raise StopCharm(
                 ops.BlockedStatus("Failed to stop `slurmd`. See `juju debug-log` for details")
             )
+
+    @refresh
+    @block_unless(slurmd_installed)
+    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        """Handle when a secret is changed."""
+        if event.secret.label != AUTH_KEY_LABEL:
+            logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
+            return
+
+        content = event.secret.get_content(refresh=True)
+        auth_key = content.get("key")
+        auth_key_id = content.get("keyid")
+        if not auth_key or not auth_key_id:
+            logger.error(
+                "auth key or key ID is empty in secret with label '%s'", event.secret.label
+            )
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
+                )
+            )
+
+        self.slurmd.key.set(auth_key, auth_key_id)
+
+        # Necessary to load new key from file into the service
+        # FIXME: slurmd reloading is currently broken. Service restart is used as a workaround but
+        # this breaks zero-downtime key rotation. This must be replaced with a reload
+        # See: https://github.com/charmed-hpc/slurm-charms/issues/204
+        self.slurmd.service.restart()
 
     @refresh
     def _on_set_node_config_action(self, event: ops.ActionEvent) -> None:

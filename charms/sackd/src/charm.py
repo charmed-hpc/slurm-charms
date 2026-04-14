@@ -18,8 +18,10 @@
 import logging
 
 import ops
-from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
+from charmed_hpc_libs.errors import SystemdError
+from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, systemctl, wait_unless
 from charmed_slurm_sackd_interface import (
+    AUTH_KEY_LABEL,
     SackdProvider,
     SlurmctldDisconnectedEvent,
     SlurmctldReadyEvent,
@@ -43,6 +45,7 @@ class SackdCharm(ops.CharmBase):
         self.sackd = SackdManager(snap=False)
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.update_status, self._on_update_status)
+        framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         self.slurmctld = SackdProvider(self, SACKD_INTEGRATION_NAME)
         framework.observe(
@@ -90,7 +93,7 @@ class SackdCharm(ops.CharmBase):
         data = self.slurmctld.get_controller_data(event.relation.id)
 
         try:
-            self.sackd.key.set(data.auth_key)
+            self.sackd.key.set(data.auth_key, data.auth_key_id)
             self.sackd.conf_server = data.controllers
             self.sackd.service.enable()
             self.sackd.service.restart()
@@ -114,6 +117,43 @@ class SackdCharm(ops.CharmBase):
             event.defer()
             raise StopCharm(
                 ops.BlockedStatus("Failed to stop `sackd`. See `juju debug-log` for details")
+            )
+
+    @refresh
+    @block_unless(sackd_installed)
+    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        """Handle when a secret is changed."""
+        if event.secret.label != AUTH_KEY_LABEL:
+            logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
+            return
+
+        content = event.secret.get_content(refresh=True)
+        auth_key = content.get("key")
+        auth_key_id = content.get("keyid")
+        if not auth_key or not auth_key_id:
+            logger.error(
+                "auth key or key ID is empty in secret with label '%s'", event.secret.label
+            )
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
+                )
+            )
+
+        self.sackd.key.set(auth_key, auth_key_id)
+
+        # Necessary to load new key from file into the service
+        # TODO: replace with self.service.reload()
+        try:
+            systemctl("reload", "sackd.service")
+        except SystemdError as e:
+            logger.error("failed to reload sackd.service. reason:\n%s", e)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to reload `sackd` configuration. See `juju debug-log` for details"
+                )
             )
 
 
