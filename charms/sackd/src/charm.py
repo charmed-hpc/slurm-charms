@@ -152,7 +152,7 @@ class SackdCharm(ops.CharmBase):
             event.defer()
             raise StopCharm(
                 ops.BlockedStatus(
-                    "Failed to reload sackd.service. See `juju debug-log` for details"
+                    "Failed to reload `sackd` configuration. See `juju debug-log` for details"
                 )
             )
 
