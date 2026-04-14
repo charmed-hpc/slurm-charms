@@ -620,11 +620,7 @@ class _SlurmSecretManager:
 
     @property
     def path(self) -> Path:
-        """Get the path to the `slurm.jwks` secret file.
-
-        Returns:
-            Path to the `slurm.jwks` file.
-        """
+        """Get the path to the `slurm.jwks` secret file."""
         return self._file
 
     def _write(self, data: dict[str, list[dict[str, str]]]) -> None:
