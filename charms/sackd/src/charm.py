@@ -146,15 +146,14 @@ class SackdCharm(ops.CharmBase):
 
         # Necessary to load new key from file into the service
         # TODO: replace with self.service.reload()
-        slurm_service = "sackd.service"
         try:
-            call("/usr/bin/systemctl", "reload", slurm_service)
+            call("/usr/bin/systemctl", "reload", "sackd.service")
         except CalledProcessError as e:
-            logger.exception("failed to reload %s. reason:\n%s", slurm_service, e)
+            logger.error("failed to reload sackd.service. reason:\n%s", e)
             event.defer()
             raise StopCharm(
                 ops.BlockedStatus(
-                    "Failed to reload %s. See `juju debug-log` for details" % slurm_service
+                    "Failed to reload sackd.service. See `juju debug-log` for details"
                 )
             )
 
