@@ -27,6 +27,7 @@ from charmed_slurm_slurmctld_interface import (
 )
 from charmed_slurm_slurmdbd_interface import (
     AUTH_KEY_LABEL,
+    JWT_KEY_LABEL,
     DatabaseData,
     SlurmctldReadyEvent,
     SlurmdbdConnectedEvent,
@@ -106,10 +107,12 @@ class MockSlurmdbdRequirerCharm(ops.CharmBase):
         auth_key_secret = self.app.add_secret(
             {"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}, label=AUTH_KEY_LABEL
         )
+        jwt_key_secret = self.app.add_secret({"key": EXAMPLE_JWT_KEY}, label=JWT_KEY_LABEL)
+
         self.slurmdbd.set_controller_data(
             ControllerData(
                 auth_secret_id=auth_key_secret.get_info().id,
-                jwt_key=EXAMPLE_JWT_KEY,
+                jwt_secret_id=jwt_key_secret.get_info().id,
             ),
             integration_id=event.relation.id,
         )
@@ -195,7 +198,9 @@ class TestSlurmdbdInterface:
     )
     def test_provider_on_slurmctld_ready_event(self, provider_ctx, leader, ready) -> None:
         """Test that the `slurmdbd` provider waits for controller data."""
-        auth_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_AUTH_KEY})
+        auth_key_secret = testing.Secret(
+            tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": EXAMPLE_AUTH_KEY_ID}
+        )
         jwt_key_secret = testing.Secret(tracked_content={"key": EXAMPLE_JWT_KEY})
 
         slurmdbd_integration_id = 1
@@ -203,15 +208,13 @@ class TestSlurmdbdInterface:
             endpoint=SLURMDBD_INTEGRATION_NAME,
             interface="slurmdbd",
             id=slurmdbd_integration_id,
-            remote_app_name="slurmdbd-requirer",
             remote_app_data=(
                 {
                     "auth_secret_id": json.dumps(auth_key_secret.id),
-                    "jwt_key": '"***"',
-                    "jwt_key_id": json.dumps(jwt_key_secret.id),
+                    "jwt_secret_id": json.dumps(jwt_key_secret.id),
                 }
                 if ready
-                else {"auth_secret_id": '""', "jwt_key": '"***"'}
+                else {"dummy": "data"}  # just empty set {} results in inconsistent scenario
             ),
         )
 
@@ -306,11 +309,8 @@ class TestSlurmdbdInterface:
             # Assert that `auth_secret_id` is set to the `auth_key` secret URI.
             assert integration.local_app_data["auth_secret_id"] != '""'
 
-            # Assert `jwt_key` is redacted in the integration data.
-            assert integration.local_app_data["jwt_key"] == '"***"'
-
-            # Assert that `jwt_key_id` is set to the `jwt_key` secret URI.
-            assert integration.local_app_data["jwt_key_id"] != '""'
+            # Assert that `jwt_secret_id` is set to the `jwt_key` secret URI.
+            assert integration.local_app_data["jwt_secret_id"] != '""'
 
             # Assert that `SlurmdbdConnectedEvent` was emitted only once.
             occurred = defaultdict(lambda: 0)
