@@ -157,7 +157,7 @@ class SlurmdCharm(ops.CharmBase):
         """Handle when controller data is ready from the `slurmctld` application."""
         data = self.slurmctld.get_controller_data(event.relation.id)
 
-        self.slurmd.key.set(data.auth_key, data.auth_key_id)
+        self.slurmd.key.set({"key": data.auth_key, "keyid": data.auth_key_id})
         self.slurmd.conf_server = data.controllers
 
         # Set default state and reason if this compute node is being added to a Slurm cluster.
@@ -203,21 +203,17 @@ class SlurmdCharm(ops.CharmBase):
             logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
             return
 
-        content = event.secret.get_content(refresh=True)
-        auth_key = content.get("key")
-        auth_key_id = content.get("keyid")
-        if not auth_key or not auth_key_id:
-            logger.error(
-                "auth key or key ID is empty in secret with label '%s'", event.secret.label
-            )
+        try:
+            content = event.secret.get_content(refresh=True)
+            self.slurmd.key.set(content)
+        except (ops.SecretNotFoundError, ops.ModelError, ValueError) as e:
+            logger.error("failed to retrieve auth key contents. reason:\n%s", e)
             event.defer()
             raise StopCharm(
                 ops.BlockedStatus(
                     "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
                 )
             )
-
-        self.slurmd.key.set(auth_key, auth_key_id)
 
         # Necessary to load new key from file into the service
         # FIXME: slurmd reloading is currently broken. Service restart is used as a workaround but

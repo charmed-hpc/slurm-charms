@@ -93,7 +93,7 @@ class SackdCharm(ops.CharmBase):
         data = self.slurmctld.get_controller_data(event.relation.id)
 
         try:
-            self.sackd.key.set(data.auth_key, data.auth_key_id)
+            self.sackd.key.set({"key": data.auth_key, "keyid": data.auth_key_id})
             self.sackd.conf_server = data.controllers
             self.sackd.service.enable()
             self.sackd.service.restart()
@@ -127,21 +127,17 @@ class SackdCharm(ops.CharmBase):
             logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
             return
 
-        content = event.secret.get_content(refresh=True)
-        auth_key = content.get("key")
-        auth_key_id = content.get("keyid")
-        if not auth_key or not auth_key_id:
-            logger.error(
-                "auth key or key ID is empty in secret with label '%s'", event.secret.label
-            )
+        try:
+            content = event.secret.get_content(refresh=True)
+            self.sackd.key.set(content)
+        except (ops.SecretNotFoundError, ops.ModelError, ValueError) as e:
+            logger.error("failed to retrieve auth key contents. reason:\n%s", e)
             event.defer()
             raise StopCharm(
                 ops.BlockedStatus(
                     "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
                 )
             )
-
-        self.sackd.key.set(auth_key, auth_key_id)
 
         # Necessary to load new key from file into the service
         # TODO: replace with self.service.reload()

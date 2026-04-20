@@ -95,7 +95,7 @@ class SlurmrestdCharm(ops.CharmBase):
         data = self.slurmctld.get_controller_data(event.relation.id)
 
         try:
-            self.slurmrestd.key.set(data.auth_key, data.auth_key_id)
+            self.slurmrestd.key.set({"key": data.auth_key, "keyid": data.auth_key_id})
             for name, config in data.slurmconfig.items():
                 self.slurmrestd.config.includes[name].dump(config)
             self.slurmrestd.service.enable()
@@ -128,13 +128,11 @@ class SlurmrestdCharm(ops.CharmBase):
             logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
             return
 
-        content = event.secret.get_content(refresh=True)
-        auth_key = content.get("key")
-        auth_key_id = content.get("keyid")
-        if not auth_key or not auth_key_id:
-            logger.error(
-                "auth key or key ID is empty in secret with label '%s'", event.secret.label
-            )
+        try:
+            content = event.secret.get_content(refresh=True)
+            self.slurmrestd.key.set(content)
+        except (ops.SecretNotFoundError, ops.ModelError, ValueError) as e:
+            logger.error("failed to retrieve auth key contents. reason:\n%s", e)
             event.defer()
             raise StopCharm(
                 ops.BlockedStatus(
@@ -142,7 +140,6 @@ class SlurmrestdCharm(ops.CharmBase):
                 )
             )
 
-        self.slurmrestd.key.set(auth_key, auth_key_id)
         # Other Slurm charms reload the service here. That is not possible for slurmrestd as the
         # process shuts down when the reload signal is sent. Restart instead.
         # TODO: Determine a zero-downtime solution
