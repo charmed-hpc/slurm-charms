@@ -214,7 +214,7 @@ class TestSlurmdbdInterface:
                     "jwt_secret_id": json.dumps(jwt_key_secret.id),
                 }
                 if ready
-                else {"dummy": "data"}  # just empty set {} results in inconsistent scenario
+                else {"test": "data"}  # just empty set {} results in inconsistent scenario
             ),
         )
 
