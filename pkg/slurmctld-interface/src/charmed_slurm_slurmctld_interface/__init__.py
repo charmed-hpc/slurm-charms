@@ -72,7 +72,7 @@ class ControllerData:
             List of controller addresses for that can be used by Slurm services
             for contacting the `slurmctld` application. The first entry in the list is the
             primary `slurmctld` service. Other entries are failovers.
-        jwt_key: Base64-encoded string representing the Slurm JWT key.
+        jwt_key: String containing the Slurm JWT key material, often a PEM block.
         jwt_secret_id: ID of the Slurm JWT key Juju secret for this integration instance.
         slurmconfig: Mapping containing the `slurm.conf` and other included configuration files.
 
