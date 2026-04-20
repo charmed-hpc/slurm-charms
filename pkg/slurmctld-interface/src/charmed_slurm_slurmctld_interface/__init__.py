@@ -16,6 +16,7 @@
 
 __all__ = [
     "AUTH_KEY_LABEL",
+    "JWT_KEY_LABEL",
     "ControllerData",
     "SlurmctldConnectedEvent",
     "SlurmctldDisconnectedEvent",
@@ -30,19 +31,18 @@ import json
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from string import Template
 from typing import Any
 
 import ops
 from charmed_hpc_libs.interfaces import Interface
-from charmed_hpc_libs.ops import ConditionEvaluation, leader, load_secret, update_secret
+from charmed_hpc_libs.ops import ConditionEvaluation, leader
 from slurmutils import Model, SlurmConfig
 
 _logger = logging.getLogger(__name__)
 
-# Label for the Juju secret storing the Slurm auth key. Used by multiple Slurm services
+# Labels for the Juju secret storing the Slurm auth and JWT keys. Used by multiple Slurm services
 AUTH_KEY_LABEL = "slurm-auth-key"
-JWT_KEY_TEMPLATE_LABEL = Template("integration-$id-jwt-key-secret")
+JWT_KEY_LABEL = "slurm-jwt-key"
 
 
 class _SlurmJSONEncoder(json.JSONEncoder):
@@ -73,13 +73,13 @@ class ControllerData:
             for contacting the `slurmctld` application. The first entry in the list is the
             primary `slurmctld` service. Other entries are failovers.
         jwt_key: Base64-encoded string representing the Slurm JWT key.
-        jwt_key_id: ID of the Slurm JWT key Juju secret for this integration instance.
+        jwt_secret_id: ID of the Slurm JWT key Juju secret for this integration instance.
         slurmconfig: Mapping containing the `slurm.conf` and other included configuration files.
 
     Notes:
         - `sackd` requires:         `auth_secret_id`, `controllers`
         - `slurmd` requires:        `auth_secret_id`, `controllers`
-        - `slurmdbd` requires:      `auth_secret_id`, `jwt_key_id`
+        - `slurmdbd` requires:      `auth_secret_id`, `jwt_secret_id`
         - `slurmrestd` requires:    `auth_secret_id`, `slurmconfig`
     """
 
@@ -88,7 +88,7 @@ class ControllerData:
     auth_secret_id: str = ""
     controllers: list[str] = field(default_factory=list)
     jwt_key: str = ""
-    jwt_key_id: str = ""
+    jwt_secret_id: str = ""
     slurmconfig: dict[str, SlurmConfig] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # noqa D105
@@ -169,14 +169,6 @@ class SlurmctldProvider(Interface):
     @leader
     def _on_relation_broken(self, event: ops.RelationBrokenEvent) -> None:
         """Revoke the departing application's access to Slurm secrets."""
-        if self._stored.unit_departing:
-            return
-
-        if jwt_secret := load_secret(
-            self.charm,
-            label=JWT_KEY_TEMPLATE_LABEL.substitute(id=event.relation.id),
-        ):
-            jwt_secret.remove_all_revisions()
 
     @leader
     def set_controller_data(
@@ -198,17 +190,9 @@ class SlurmctldProvider(Interface):
                 secret = self.model.get_secret(id=data.auth_secret_id)
                 secret.grant(integration)
 
-            if data.jwt_key:
-                secret = update_secret(
-                    self.charm,
-                    JWT_KEY_TEMPLATE_LABEL.substitute(id=integration_id),
-                    {"key": data.jwt_key},
-                )
+            if data.jwt_secret_id:
+                secret = self.model.get_secret(id=data.jwt_secret_id)
                 secret.grant(integration)
-                object.__setattr__(data, "jwt_key_id", secret.id)
-
-        # Redact secrets. "***" indicates that an interface did not unlock a secret.
-        object.__setattr__(data, "jwt_key", "***")
 
         self._save_integration_data(data, self.app, integration_id, encoder=encoder)
 
@@ -284,8 +268,8 @@ class SlurmctldRequirer(Interface):
             auth_key = self.charm.model.get_secret(id=data.auth_secret_id, label=AUTH_KEY_LABEL)
             object.__setattr__(data, "auth_key", auth_key.get_content().get("key"))
             object.__setattr__(data, "auth_key_id", auth_key.get_content().get("keyid"))
-        if data.jwt_key_id:
-            jwt_key = self.charm.model.get_secret(id=data.jwt_key_id)
+        if data.jwt_secret_id:
+            jwt_key = self.charm.model.get_secret(id=data.jwt_secret_id, label=JWT_KEY_LABEL)
             object.__setattr__(data, "jwt_key", jwt_key.get_content().get("key"))
 
         return data
