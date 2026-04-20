@@ -16,6 +16,7 @@
 
 __all__ = [
     # From `core` module
+    "SecretManager",
     "SLURM_GROUP",
     "SLURM_USER",
     "SLURMD_GROUP",
@@ -44,6 +45,7 @@ from .core import (
     SLURMD_USER,
     SLURMRESTD_GROUP,
     SLURMRESTD_USER,
+    SecretManager,
     SlurmOpsError,
 )
 from .sackd import SackdManager

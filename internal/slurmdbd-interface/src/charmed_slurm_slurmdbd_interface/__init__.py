@@ -17,6 +17,7 @@
 __all__ = [
     "AUTH_KEY_LABEL",
     "DatabaseData",
+    "JWT_KEY_LABEL",
     "SlurmdbdConnectedEvent",
     "SlurmdbdReadyEvent",
     "SlurmdbdDisconnectedEvent",
@@ -33,6 +34,7 @@ import ops
 from charmed_hpc_libs.ops.conditions import ConditionEvaluation, leader
 from charmed_slurm_slurmctld_interface import (
     AUTH_KEY_LABEL,
+    JWT_KEY_LABEL,
     SlurmctldProvider,
     SlurmctldReadyEvent,
     SlurmctldRequirer,
@@ -101,7 +103,7 @@ class SlurmdbdProvider(SlurmctldRequirer):
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
         super().__init__(
-            charm, integration_name, required_app_data={"auth_secret_id", "jwt_key_id"}
+            charm, integration_name, required_app_data={"auth_secret_id", "jwt_secret_id"}
         )
 
     @leader

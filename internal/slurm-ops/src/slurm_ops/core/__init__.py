@@ -16,6 +16,7 @@
 
 __all__ = [
     # From `base.py`
+    "SecretManager",
     "SlurmManager",
     # From `config.py`
     "SlurmConfigManager",
@@ -33,7 +34,7 @@ __all__ = [
     "parse_options",
 ]
 
-from .base import SlurmManager
+from .base import SecretManager, SlurmManager
 from .config import SlurmConfigManager
 from .constants import (
     SLURM_GROUP,
