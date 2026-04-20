@@ -40,6 +40,7 @@ from charmed_slurm_sackd_interface import (
 )
 from charmed_slurm_slurmctld_interface import (
     AUTH_KEY_LABEL,
+    JWT_KEY_LABEL,
     ControllerData,
 )
 from charmed_slurm_slurmd_interface import (
@@ -81,7 +82,7 @@ from integrations import SlurmctldPeer, SlurmctldPeerConnectedEvent
 from interface_influxdb import InfluxDB, InfluxDBAvailableEvent, InfluxDBUnavailableEvent
 from psutil import net_if_addrs
 from pydantic import ValidationError
-from slurm_ops import SlurmctldManager, SlurmOpsError, scontrol
+from slurm_ops import SecretManager, SlurmctldManager, SlurmOpsError, scontrol
 from slurmutils import (
     AcctGatherConfig,
     ModelError,
@@ -142,6 +143,7 @@ class SlurmctldCharm(ops.CharmBase):
         framework.observe(self.on.secret_changed, self._on_secret_changed)
         framework.observe(self.on.secret_remove, self._on_secret_remove)
         framework.observe(self.on.rotate_auth_key_action, self._on_rotate_auth_key_action)
+        framework.observe(self.on.rotate_jwt_key_action, self._on_rotate_jwt_key_action)
         framework.observe(self.on.show_current_config_action, self._on_show_current_config_action)
         framework.observe(self.on.set_node_state_action, self._on_set_node_state_action)
 
@@ -216,24 +218,23 @@ class SlurmctldCharm(ops.CharmBase):
             self.slurmctld.service.stop()
             self.slurmctld.service.disable()
 
+            # Ensure key files in place
             if self.unit.is_leader():
-                # Check for existence of keys to avoid erroneous regeneration in the case where a
-                # new unit is elected leader as it is being deployed
-                if not self.slurmctld.jwt.path.exists():
-                    self.slurmctld.jwt.generate()
+                for manager, label, name in [
+                    (self.slurmctld.jwt, JWT_KEY_LABEL, "JWT"),
+                    (self.slurmctld.key, AUTH_KEY_LABEL, "auth"),
+                ]:
+                    try:
+                        secret = self.model.get_secret(label=label)
+                        logger.debug("%s key secret found. skipping generation", name)
 
-                try:
-                    secret = self.model.get_secret(label=AUTH_KEY_LABEL)
-                    logger.debug("auth key secret found. skipping generation")
-
-                    if not self.slurmctld.key.path.exists():
-                        logger.warning("auth key file not found. restoring from secret")
-                        content = secret.get_content()
-                        self.slurmctld.key.set(content["key"], content["keyid"])
-                except ops.SecretNotFoundError:
-                    key, key_id = self.slurmctld.key.generate()
-                    self.app.add_secret({"key": key, "keyid": key_id}, label=AUTH_KEY_LABEL)
-                    self.slurmctld.key.set(key, key_id)
+                        if not manager.path.exists():
+                            logger.warning("%s key file not found. restoring from secret", name)
+                            manager.set(secret.get_content(refresh=True))
+                    except ops.SecretNotFoundError:
+                        content = manager.generate()
+                        self.app.add_secret(content, label=label)
+                        manager.set(content)
 
             self.unit.set_workload_version(self.slurmctld.version())
         except SlurmOpsError as e:
@@ -481,10 +482,11 @@ class SlurmctldCharm(ops.CharmBase):
     def _on_slurmdbd_connected(self, event: SlurmdbdConnectedEvent) -> None:
         """Handle when a new `slurmdbd` application is connected."""
         auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
+        jwt_secret_id = self.model.get_secret(label=JWT_KEY_LABEL).get_info().id
         self.slurmdbd.set_controller_data(
             ControllerData(
                 auth_secret_id=auth_secret_id,
-                jwt_key=self.slurmctld.jwt.get(),
+                jwt_secret_id=jwt_secret_id,
             ),
             integration_id=event.relation.id,
         )
@@ -648,7 +650,7 @@ class SlurmctldCharm(ops.CharmBase):
     @block_unless(slurmctld_installed)
     def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
         """Handle when a secret is changed."""
-        if event.secret.label != AUTH_KEY_LABEL:
+        if event.secret.label not in (AUTH_KEY_LABEL, JWT_KEY_LABEL):
             logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
             return
 
@@ -665,7 +667,9 @@ class SlurmctldCharm(ops.CharmBase):
     def _on_secret_remove(self, event: ops.SecretRemoveEvent) -> None:
         """Handle when a secret is removed."""
         if event.secret.label != AUTH_KEY_LABEL:
-            logger.warning("secret with label '%s' removed. ignoring", event.secret.label)
+            logger.warning(
+                "secret with label '%s' does not require removal. ignoring", event.secret.label
+            )
             return
 
         self.slurmctld.key.keep_latest_key()
@@ -680,28 +684,12 @@ class SlurmctldCharm(ops.CharmBase):
     @refresh
     def _on_rotate_auth_key_action(self, event: ops.ActionEvent) -> None:
         """Rotate the Slurm authentication key across the cluster."""
-        if not self.unit.is_leader():
-            event.fail("Only the leader unit can rotate the authentication key.")
-            return
+        self._rotate_key(event, self.slurmctld.key, AUTH_KEY_LABEL, "auth")
 
-        # Update secrets backend with new key revision
-        new_key, new_key_id = self.slurmctld.key.generate()
-        try:
-            # Update key file first to ensure key is available before observers apply new revision
-            self.slurmctld.key.add(new_key, new_key_id)
-            self._reconfigure()
-        except (SlurmOpsError, ValueError) as e:
-            logger.error("failed to update auth key. reason:\n%s", e)
-            event.fail("Failed to update auth key. See `juju debug-log` for details.")
-            return
-
-        try:
-            secret = self.model.get_secret(label=AUTH_KEY_LABEL)
-            secret.set_content({"key": new_key, "keyid": new_key_id})
-        except (ops.SecretNotFoundError, ModelError) as e:
-            logger.error("failed to publish new auth key secret. reason:\n%s", e)
-            event.fail("Failed to publish new auth key secret. See `juju debug-log` for details.")
-            return
+    @refresh
+    def _on_rotate_jwt_key_action(self, event: ops.ActionEvent) -> None:
+        """Rotate the Slurm JSON Web Tokens (JWT) key across the cluster."""
+        self._rotate_key(event, self.slurmctld.jwt, JWT_KEY_LABEL, "JWT")
 
     def _on_show_current_config_action(self, event: ops.ActionEvent) -> None:
         """Show current slurm.conf."""
@@ -931,7 +919,7 @@ class SlurmctldCharm(ops.CharmBase):
                 auth_secret_id=current.auth_secret_id,
                 controllers=new_endpoints,  # Update only the controllers
                 jwt_key="",
-                jwt_key_id=current.jwt_key_id,
+                jwt_secret_id=current.jwt_secret_id,
                 slurmconfig=current.slurmconfig,
             )
 
@@ -958,6 +946,34 @@ class SlurmctldCharm(ops.CharmBase):
         new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in new_controllers]
         self._merge_controller_data(self.sackd, new_endpoints)
         self._merge_controller_data(self.slurmd, new_endpoints)
+
+    def _rotate_key(
+        self,
+        event: ops.ActionEvent,
+        manager: SecretManager,
+        label: str,
+        name: str,
+    ) -> None:
+        if not self.unit.is_leader():
+            event.fail(f"Only the leader unit can rotate the {name} key.")
+            return
+
+        content = manager.generate()
+        try:
+            manager.apply(content)
+            self._reconfigure()
+        except (SlurmOpsError, ValueError) as e:
+            logger.error("failed to update %s key. reason:\n%s", name, e)
+            event.fail(f"Failed to update {name} key. See `juju debug-log` for details.")
+            return
+
+        try:
+            self.model.get_secret(label=label).set_content(content)
+        except (ops.SecretNotFoundError, ops.ModelError) as e:
+            logger.error("failed to publish new %s key secret. reason:\n%s", name, e)
+            event.fail(
+                f"Failed to publish new {name} key secret. See `juju debug-log` for details."
+            )
 
 
 if __name__ == "__main__":  # noqa

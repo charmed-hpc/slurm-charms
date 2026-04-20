@@ -121,12 +121,23 @@ actions:
   rotate-auth-key:
     description: |
       Perform a cluster-wide rotation of the key used to authenticate Slurm remote procedure calls.
-      See: https://documentation.ubuntu.com/charmed-hpc/latest/explanation/key-rotation/#authentication-key-rotation
+      See: https://documentation.ubuntu.com/charmed-hpc/latest/explanation/key-rotation/#authentication-key-rotation-process
 
       Example usage:
 
       ```bash
       juju run slurmctld/leader rotate-auth-key
+      ```
+
+  rotate-jwt-key:
+    description: |
+      Perform a rotation of the JSON Web Tokens (JWT) key alternative authentication mechanism.
+      See: https://documentation.ubuntu.com/charmed-hpc/latest/explanation/key-rotation/#jwt-key-rotation-process
+
+      Example usage:
+
+      ```bash
+      juju run slurmctld/leader rotate-jwt-key
       ```
 
   show-current-config:
