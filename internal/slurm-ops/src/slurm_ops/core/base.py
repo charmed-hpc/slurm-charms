@@ -629,7 +629,7 @@ class _SlurmSecretManager(SecretManager):
             "INFO",
             "authn_token_created",
             "slurm-auth",
-            f"Slurm authentication key set with key ID: {content["keyid"]}",
+            f"Slurm authentication key set with key ID: {content['keyid']}",
         )
 
     def apply(self, content: dict[str, str]) -> None:
@@ -651,7 +651,7 @@ class _SlurmSecretManager(SecretManager):
             "INFO",
             "authn_token_created",
             "slurm-auth",
-            f"New Slurm authentication key added with key ID: {content["keyid"]}",
+            f"New Slurm authentication key added with key ID: {content['keyid']}",
         )
 
     def keep_latest_key(self) -> None:
