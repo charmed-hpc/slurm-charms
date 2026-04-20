@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import ops
 from charmed_hpc_libs.ops import get_ingress_address
 from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, leader, refresh, wait_unless
+from charmed_slurm_slurmctld_interface import JWT_KEY_LABEL
 from charmed_slurm_slurmdbd_interface import (
     AUTH_KEY_LABEL,
     DatabaseData,
@@ -157,39 +158,40 @@ class SlurmdbdCharm(ops.CharmBase):
         """Handle when controller data is ready from `slurmctld`."""
         data = self.slurmctld.get_controller_data(event.relation.id)
 
-        self.slurmdbd.key.set(data.auth_key, data.auth_key_id)
-        self.slurmdbd.jwt.set(data.jwt_key)
+        self.slurmdbd.key.set({"key": data.auth_key, "keyid": data.auth_key_id})
+        self.slurmdbd.jwt.set({"key": data.jwt_key})
         self._reconfigure()
 
     @refresh
     @block_unless(slurmdbd_installed)
     def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
         """Handle when a secret is changed."""
-        if event.secret.label != AUTH_KEY_LABEL:
+        if event.secret.label == AUTH_KEY_LABEL:
+            manager = self.slurmdbd.key
+        elif event.secret.label == JWT_KEY_LABEL:
+            manager = self.slurmdbd.jwt
+        else:
             logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
             return
 
-        content = event.secret.get_content(refresh=True)
-        auth_key = content.get("key")
-        auth_key_id = content.get("keyid")
-        if not auth_key or not auth_key_id:
+        try:
+            content = event.secret.get_content(refresh=True)
+            manager.set(content)
+        except (ops.SecretNotFoundError, ops.ModelError, ValueError) as e:
             logger.error(
-                "auth key or key ID is empty in secret with label '%s'", event.secret.label
+                "failed to retrieve contents from secret '%s'. reason:\n%s", event.secret.label, e
             )
             event.defer()
             raise StopCharm(
-                ops.BlockedStatus(
-                    "Failed to retrieve Slurm authentication key. See `juju debug-log` for details"
-                )
+                ops.BlockedStatus("Failed to retrieve key. See `juju debug-log` for details")
             )
-
-        self.slurmdbd.key.set(auth_key, auth_key_id)
 
         # Other Slurm charms reload the service here. That is not possible for slurmdbd as the
         # SIGHUP reload signal does not reload the key file. Restart instead.
         # TODO: Determine a zero-downtime solution. Consider filing a Slurm bug requesting slurmdbd
         # reloading match the behavior of sackd, slurmctld and slurmd.
         self.slurmdbd.service.restart()
+        logger.info("%s updated successfully", event.secret.label)
 
     @leader
     @refresh
