@@ -218,7 +218,9 @@ class SlurmctldCharm(ops.CharmBase):
             self.slurmctld.service.stop()
             self.slurmctld.service.disable()
 
-            # Ensure key files in place
+            # Create auth and JWT key Juju Secrets and key files if they do not exist. Use Secret as
+            # source of truth to prevent erroneous overwrites when a new unit is elected application
+            # leader as it is deployed.
             if self.unit.is_leader():
                 for manager, label, name in [
                     (self.slurmctld.jwt, JWT_KEY_LABEL, "JWT"),
