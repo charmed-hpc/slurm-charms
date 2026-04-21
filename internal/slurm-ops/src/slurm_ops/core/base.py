@@ -125,16 +125,16 @@ class OpsManager(Protocol):  # pragma: no cover
 class SecretManager(Protocol):  # pragma: no cover
     """Protocol for defining Slurm secret managers."""
 
-    def get(self) -> str:
-        """Get the contents of the current secret file."""
-        raise NotImplementedError
-
-    def set(self, secret: str) -> None:
-        """Set the contents of the secret file."""
-        raise NotImplementedError
-
-    def generate(self) -> None:
+    def generate(self) -> dict[str, str]:
         """Generate a new, cryptographically secure secret."""
+        raise NotImplementedError
+
+    def set(self, content: Mapping[str, str]) -> None:
+        """Write secret content to the key file, replacing any existing content."""
+        raise NotImplementedError
+
+    def apply(self, content: Mapping[str, str]) -> None:
+        """Apply new secret content to the key file, overwriting or extending existing content."""
         raise NotImplementedError
 
     @property
@@ -473,30 +473,85 @@ class _JWTSecretManager(SecretManager):
     """Manage the `jwt_hs256.key` secret file."""
 
     def __init__(self, ops_manager: OpsManager, /, user: str, group: str) -> None:
+        """Initialize the JWT secret manager.
+
+        Args:
+            ops_manager: The operations manager for the Slurm backend.
+            user: The system user that owns the key.
+            group: The system group that owns the key.
+        """
         self._file = ops_manager.etc_path / "jwt_hs256.key"
         self._user = user
         self._group = group
 
+    def generate(self) -> dict[str, str]:
+        """Generate a new, cryptographically secure `jwt_hs256.key` secret.
+
+        Returns:
+            A dictionary with a single ``"key"`` entry containing the
+            PEM-encoded RSA private key as a string.
+        """
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        key_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode()
+        return {"key": key_bytes}
+
     def get(self) -> str:
-        """Get the contents of the current `jwt_hs256.key` secret file."""
+        """Get the contents of the current `jwt_hs256.key` secret file.
+
+        Returns:
+            The PEM-encoded RSA private key as a string.
+
+        Raises:
+            FileNotFoundError: If the key file does not exist.
+            OSError: If the key file cannot be read.
+        """
         return self._file.read_text()
 
-    def set(self, secret: str) -> None:
-        """Set the contents of the `jwt_hs256.key` secret file."""
-        self._file.write_text(secret)
+    def set(self, content: Mapping[str, str]) -> None:
+        """Replace the `jwt_hs256.key` file with the provided key.
+
+        Args:
+            content: A dictionary with a "key" entry containing a PEM-encoded RSA private key
+            string.
+
+        Raises:
+            OSError: If the key file cannot be written or its permissions cannot be set.
+        """
+        self._file.write_text(content["key"])
         self._file.chmod(0o600)
         shutil.chown(self._file, self._user, self._group)
 
-    def generate(self) -> None:
-        """Generate a new, cryptographically secure `jwt_hs256.key` secret."""
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        self.set(
-            key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption(),
-            ).decode()
+        _log_security_event(
+            "INFO",
+            "authn_token_deleted",
+            "slurm-jwt",
+            "Deleted Slurm JWT key",
         )
+
+        _log_security_event(
+            "INFO",
+            "authn_token_created",
+            "slurm-jwt",
+            "New Slurm JWT key set",
+        )
+
+    def apply(self, content: Mapping[str, str]) -> None:
+        """Apply new JWT key content to the `jwt_hs256.key` secret file, overwriting existing.
+
+        This is equivalent to calling `set`.
+
+        Args:
+            content: A dictionary with a "key" entry containing a PEM-encoded RSA private key
+            string.
+
+        Raises:
+            OSError: If the key file cannot be written or its permissions cannot be set.
+        """
+        self.set(content)
 
     @property
     def path(self) -> Path:
@@ -504,78 +559,40 @@ class _JWTSecretManager(SecretManager):
         return self._file
 
 
-class _SlurmSecretManager:
+class _SlurmSecretManager(SecretManager):
     """Manage the `slurm.jwks` key file."""
 
     def __init__(self, ops_manager: OpsManager, /, user: str, group: str) -> None:
+        """Initialize the Slurm auth key secret manager.
+
+        Args:
+            ops_manager: The operations manager for the Slurm backend.
+            user: The system user that owns the key.
+            group: The system group that owns the key.
+        """
         self._file = ops_manager.etc_path / "slurm.jwks"
         self._user = user
         self._group = group
 
-    def generate(self) -> tuple[str, str]:
+    def generate(self) -> dict[str, str]:
         """Generate cryptographically secure Slurm auth key data.
 
         Returns:
-            A tuple of `(key, key_id)` where `key` is a base64-encoded random byte string suitable
-            for use as a Slurm authentication key, and `key_id` is a unique identifier for the key.
+            A dictionary where the `key` entry is a base64-encoded random byte string suitable for
+            use as a Slurm authentication key, and the `keyid` entry is a unique identifier for the
+            key.
         """
         # Auth key entries must each have a unique ID consistent across all units.
         # Secret revision number cannot be used as it is not known to secret observers.
         # Secret `unique_identifier` property is not unique per revision.
         # Therefore, a newly generated UUID is included with the secret contents.
-        return base64.b64encode(secrets.token_bytes(2048)).decode(), str(uuid4())
-
-    def add(self, key: str, key_id: str) -> None:
-        """Append a key to the `slurm.jwks` key file.
-
-        Args:
-            key: The base64-encoded key material to add.
-            key_id: A unique identifier for the key.
-
-        Raises:
-            ValueError: If `key` or `key_id` is empty.
-        """
-        new_entry = self._build_new_entry(key, key_id)
-        data = self.get()
-        data["keys"].append(new_entry)
-        self._write(data)
-
-        _log_security_event(
-            "INFO",
-            "authn_token_created",
-            "slurm-auth",
-            f"New Slurm authentication key added with key ID: {key_id}",
-        )
-
-    def keep_latest_key(self) -> None:
-        """Preserve only the most recently added key in the `slurm.jwks` key file.
-
-        Removes all previously added keys, keeping only the last entry.
-
-        Raises:
-            SlurmOpsError: If the key file contains no keys.
-        """
-        data = self.get()
-        if not data["keys"]:
-            raise SlurmOpsError("No keys found in slurm.jwks")
-
-        # Most recently added key is last in list
-        last_entry = data["keys"][-1]
-        removed_key_ids = [entry["kid"] for entry in data["keys"][:-1]]
-        self._write({"keys": [last_entry]})
-
-        _log_security_event(
-            "INFO",
-            "authn_token_deleted",
-            "slurm-auth",
-            f"Deleted Slurm authentication key IDs: {removed_key_ids}. Current key ID: {last_entry['kid']}",
-        )
+        return {"key": base64.b64encode(secrets.token_bytes(2048)).decode(), "keyid": str(uuid4())}
 
     def get(self) -> dict[str, list[dict[str, str]]]:
         """Read and validate the `slurm.jwks` key file.
 
         Returns:
-            A dict with a `"keys"` list. Returns `{"keys": []}` if the file does not exist.
+            A dictionary with a `"keys"` list. Returns `{"keys": []}` if the file does not exist.
 
         Raises:
             SlurmOpsError: If the file exists but cannot be read or contains invalid data.
@@ -598,24 +615,70 @@ class _SlurmSecretManager:
 
         return data
 
-    def set(self, key: str, key_id: str) -> None:
+    def set(self, content: Mapping[str, str]) -> None:
         """Replace the `slurm.jwks` key file with a single key entry.
 
         Args:
-            key: The base64-encoded key material to set.
-            key_id: A unique identifier for the key.
+            content: A dictionary containing `key`, the base64-encoded key material to set, and
+            `keyid`, a unique identifier for the key.
 
         Raises:
-            ValueError: If `key` or `key_id` is empty.
+            ValueError: If `key` or `keyid` is empty.
         """
-        new_entry = self._build_new_entry(key, key_id)
+        new_entry = self._build_new_entry(content["key"], content["keyid"])
         self._write({"keys": [new_entry]})
 
         _log_security_event(
             "INFO",
             "authn_token_created",
             "slurm-auth",
-            f"Slurm authentication key set with key ID: {key_id}",
+            f"Slurm authentication key set with key ID: {content['keyid']}",
+        )
+
+    def apply(self, content: Mapping[str, str]) -> None:
+        """Append a key to the `slurm.jwks` key file.
+
+        Args:
+            content: A dictionary containing `key`, the base64-encoded key material to add, and
+            `keyid`, a unique identifier for the key.
+
+        Raises:
+            ValueError: If `key` or `keyid` is empty.
+        """
+        new_entry = self._build_new_entry(content["key"], content["keyid"])
+        data = self.get()
+        data["keys"].append(new_entry)
+        self._write(data)
+
+        _log_security_event(
+            "INFO",
+            "authn_token_created",
+            "slurm-auth",
+            f"New Slurm authentication key added with key ID: {content['keyid']}",
+        )
+
+    def keep_latest_key(self) -> None:
+        """Preserve only the most recently added key in the `slurm.jwks` key file.
+
+        Removes all previously added keys, keeping only the last entry.
+
+        Raises:
+            SlurmOpsError: If the key file contains no keys.
+        """
+        data = self.get()
+        if not data["keys"]:
+            raise SlurmOpsError("No keys found in slurm.jwks")
+
+        # Most recently added key is last in list
+        last_entry = data["keys"][-1]
+        removed_keyids = [entry["kid"] for entry in data["keys"][:-1]]
+        self._write({"keys": [last_entry]})
+
+        _log_security_event(
+            "INFO",
+            "authn_token_deleted",
+            "slurm-auth",
+            f"Deleted Slurm authentication key IDs: {removed_keyids}. Current key ID: {last_entry['kid']}",
         )
 
     @property
@@ -634,19 +697,19 @@ class _SlurmSecretManager:
         shutil.chown(self._file, self._user, self._group)
 
     @staticmethod
-    def _build_new_entry(key: str, key_id: str) -> dict[str, str]:
+    def _build_new_entry(key: str, keyid: str) -> dict[str, str]:
         """Build a new key entry for the `slurm.jwks` key file.
 
         Args:
             key: The base64-encoded key material.
-            key_id: A unique identifier for the key.
+            keyid: A unique identifier for the key.
 
         Returns:
             A dictionary representing a JWK entry with `alg`, `kty`, `kid`, and `k` fields,
             as described in the Slurm authentication documentation.
 
         Raises:
-            ValueError: If `key` or `key_id` is empty.
+            ValueError: If `key` or `keyid` is empty.
 
         See Also:
             The format of the key entry is defined in the Slurm documentation:
@@ -654,12 +717,12 @@ class _SlurmSecretManager:
         """
         if not key:
             raise ValueError("Empty key provided")
-        if not key_id:
+        if not keyid:
             raise ValueError("Empty key ID provided")
         return {
             "alg": "HS256",
             "kty": "oct",
-            "kid": key_id,
+            "kid": keyid,
             "k": key,
         }
 

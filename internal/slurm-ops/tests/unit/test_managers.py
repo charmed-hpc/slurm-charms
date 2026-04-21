@@ -178,13 +178,13 @@ class TestManager:
 
     # Test auth key component.
 
-    def test_add_slurm_key(self, mock_slurm_key) -> None:
-        """Test the `<manager>.key.add(...)` method appends a new key."""
+    def test_apply_slurm_key(self, mock_slurm_key) -> None:
+        """Test the `<manager>.key.apply(...)` method appends a new key."""
         new_key = "xyz123=="
         new_key_id = "abcdef12-3456-7890-abcd-ef1234567890"
         new_key_entry = {"alg": "HS256", "kty": "oct", "kid": new_key_id, "k": new_key}
 
-        mock_slurm_key.key.add(new_key, new_key_id)
+        mock_slurm_key.key.apply({"key": new_key, "keyid": new_key_id})
 
         file_contents = json.loads(mock_slurm_key.key.path.read_text())
         assert len(file_contents["keys"]) == 2
@@ -199,7 +199,7 @@ class TestManager:
             "keys": [{"alg": "HS256", "kty": "oct", "kid": new_key_id, "k": new_key}]
         }
 
-        mock_slurm_key.key.add(new_key, new_key_id)
+        mock_slurm_key.key.apply({"key": new_key, "keyid": new_key_id})
         mock_slurm_key.key.keep_latest_key()
 
         file_contents = json.loads(mock_slurm_key.key.path.read_text())
@@ -213,7 +213,7 @@ class TestManager:
             "keys": [{"alg": "HS256", "kty": "oct", "kid": new_key_id, "k": new_key}]
         }
 
-        mock_slurm_key.key.set(new_key, new_key_id)
+        mock_slurm_key.key.set({"key": new_key, "keyid": new_key_id})
 
         file_contents = json.loads(mock_slurm_key.key.path.read_text())
         assert file_contents == new_key_contents
@@ -221,14 +221,14 @@ class TestManager:
     def test_generate_slurm_valid_key(self, mock_slurm_key) -> None:
         """Test the `<manager>.key.generate()` method produces valid keys."""
         # Verify it can be decoded back from Base64
-        key, _ = mock_slurm_key.key.generate()
-        decoded = base64.b64decode(key)
+        key_dict = mock_slurm_key.key.generate()
+        decoded = base64.b64decode(key_dict["key"])
         assert len(decoded) == 2048
 
     def test_generate_slurm_key_is_unique(self, mock_slurm_key) -> None:
         """Test the `<manager>.key.generate()` method produces unique keys."""
         # Statistically, two keys should never be identical
-        assert mock_slurm_key.key.generate()[0] != mock_slurm_key.key.generate()[0]
+        assert mock_slurm_key.key.generate() != mock_slurm_key.key.generate()
 
     # Test `<manager>.jwt` component.
 
@@ -238,13 +238,14 @@ class TestManager:
 
     def test_set_jwt_key(self, mock_jwt_key) -> None:
         """Test the `<manager>.jwt.set(...)` method."""
-        mock_jwt_key.jwt.set(JWT_KEY)
+        mock_jwt_key.jwt.set({"key": JWT_KEY})
         assert mock_jwt_key.jwt.get() == JWT_KEY
 
     def test_generate_jwt_key(self, mock_jwt_key) -> None:
         """Test the `<manager>.jwt.generate()` method."""
-        mock_jwt_key.jwt.generate()
-        assert mock_jwt_key.jwt.get() != JWT_KEY
+        key_dict = mock_jwt_key.jwt.generate()
+        mock_jwt_key.jwt.set(key_dict)
+        assert mock_jwt_key.jwt.get() == key_dict["key"]
 
     # Test manager properties.
 

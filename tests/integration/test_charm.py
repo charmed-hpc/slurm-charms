@@ -242,7 +242,7 @@ def test_rotate_auth_key(juju: jubilant.Juju) -> None:
 
     logger.info("testing that the `rotate-auth-key` action updates the Slurm authentication key")
 
-    # Gather existing authentication key from `slurmctld/0`.
+    # Gather existing authentication key from controller unit.
     result = juju.exec("sudo cat /etc/slurm/slurm.jwks", unit=slurmctld_unit)
     initial_key_entry = json.loads(result.stdout)
 
@@ -283,12 +283,118 @@ def test_rotate_auth_key(juju: jubilant.Juju) -> None:
             # Check units can communicate with controller
             assert juju.exec("sinfo", unit=sackd_unit).success
             assert juju.exec("sinfo", unit=slurmd_unit).success
-            # Database does not have client tools installed. Query from the controller
+            # Database and API do not have client tools installed. Query from the controller
             assert juju.exec("sacct", unit=slurmctld_unit).success
-            # TODO: confirm slurmrestd connectivity
+            assert juju.exec("scontrol token", unit=slurmctld_unit).success
+
+
+def _api_get(juju: jubilant.Juju, unit: str, token: str, url: str) -> tuple[str, str]:
+    """Execute an authenticated GET against the Slurm REST API and return (status_code, body)."""
+    result = juju.exec(
+        f"export '{token}';"
+        f" curl --silent --show-error"
+        f" --write-out '\nHTTP_RESPONSE_CODE:%{{http_code}}'"
+        f" --header X-SLURM-USER-TOKEN:$SLURM_JWT"
+        f" --request GET '{url}'",
+        unit=unit,
+    )
+    assert (
+        "HTTP_RESPONSE_CODE:" in result.stdout
+    ), f"no status code in response, stdout: {result.stdout} stderr: {result.stderr}"
+    body, status_line = result.stdout.strip().rsplit("HTTP_RESPONSE_CODE:", 1)
+    return status_line.strip(), body
 
 
 @pytest.mark.order(11)
+def test_rotate_jwt_key(juju: jubilant.Juju) -> None:
+    """Test that the `rotate-jwt-key` action updates the Slurm JSON Web Token key across the cluster."""
+    slurmctld_unit = f"{SLURMCTLD_APP_NAME}/0"
+    slurmdbd_unit = f"{SLURMDBD_APP_NAME}/0"
+    slurmrestd_unit = f"{SLURMRESTD_APP_NAME}/0"
+    query_endpoint = "openapi"
+
+    logger.info("testing that the `rotate-jwt-key` action updates the JSON Web Token key")
+
+    # Confirm existing key on controller and database identical and functional before rotation.
+    cat_cmd = "sudo cat /etc/slurm/jwt_hs256.key"
+    initial_key_controller = juju.exec(cat_cmd, unit=slurmctld_unit).stdout
+    initial_key_database = juju.exec(cat_cmd, unit=slurmdbd_unit).stdout
+    assert (
+        initial_key_controller == initial_key_database
+    ), "initial JWT key on controller and database differ"
+
+    # Use sudo to generate token to ensure access to all API endpoints.
+    initial_token = juju.exec(
+        "sudo scontrol token lifespan=infinite", unit=slurmctld_unit
+    ).stdout.strip()
+
+    # Query for list of all API endpoints.
+    address = juju.status().apps[SLURMRESTD_APP_NAME].units[slurmrestd_unit].public_address
+    base_url = f"http://{address}:6820"
+    status_code, body = _api_get(
+        juju, slurmctld_unit, initial_token, f"{base_url}/{query_endpoint}"
+    )
+    assert status_code == "200", f"failed to query API with initial JWT key, got body: {body}"
+    endpoints = json.loads(body)
+    assert "paths" in endpoints, f"initial API response missing 'paths', got: {body}"
+
+    # Find slurm and slurmdbd diagnostic endpoints.
+    # Example: "/slurm/v0.0.41/diag/" and "/slurmdb/v0.0.41/diag/".
+    all_paths = endpoints["paths"].keys()
+    slurm_diag = next(
+        (p for p in all_paths if p.startswith("/slurm/") and p.endswith("/diag/")), None
+    )
+    slurmdb_diag = next(
+        (p for p in all_paths if p.startswith("/slurmdb/") and p.endswith("/diag/")), None
+    )
+    assert slurm_diag is not None, "failed to find slurm diagnostic endpoint"
+    assert slurmdb_diag is not None, "failed to find slurmdb diagnostic endpoint"
+
+    # Query diagnostic endpoints to confirm initial token validity.
+    diag_urls = [f"{base_url}{slurm_diag}", f"{base_url}{slurmdb_diag}"]
+    for url in diag_urls:
+        status_code, body = _api_get(juju, slurmctld_unit, initial_token, url)
+        assert status_code == "200", f"initial JWT key not functional at {url}, got body: {body}"
+
+    juju.run(slurmctld_unit, "rotate-jwt-key")
+
+    # Wait for action to complete and for all Slurm applications to return to ActiveStatus.
+    juju.wait(
+        lambda status: jubilant.all_active(status, *SLURM_APPS),
+        error=lambda status: jubilant.any_error(status, *SLURM_APPS),
+    )
+
+    # Poll until old key removed and new key present.
+    attempts = tenacity.Retrying(
+        wait=tenacity.wait.wait_exponential(multiplier=2, min=1),
+        stop=tenacity.stop_after_attempt(5),
+        reraise=True,
+    )
+    for attempt in attempts:
+        with attempt:
+            new_key_controller = juju.exec(cat_cmd, unit=slurmctld_unit).stdout
+            new_key_database = juju.exec(cat_cmd, unit=slurmdbd_unit).stdout
+            assert (
+                new_key_controller != initial_key_controller
+            ), "JWT key not rotated on controller"
+            assert (
+                new_key_controller == new_key_database
+            ), "JWT key on controller and database differ after rotation"
+
+    # Check old token no longer functional after rotation.
+    status_code, _ = _api_get(juju, slurmctld_unit, initial_token, diag_urls[0])
+    assert status_code != "200", f"old token still valid after rotation (HTTP {status_code})"
+
+    # Check new key functional.
+    new_token = juju.exec(
+        "sudo scontrol token lifespan=infinite", unit=slurmctld_unit
+    ).stdout.strip()
+    for url in diag_urls:
+        status_code, body = _api_get(juju, slurmctld_unit, new_token, url)
+        assert status_code == "200", f"new JWT key not functional at {url}, got body: {body}"
+
+
+@pytest.mark.order(12)
 def test_job_submission(juju: jubilant.Juju) -> None:
     """Test that a job can be successfully submitted to the Slurm cluster."""
     sackd_unit = f"{SACKD_APP_NAME}/0"
@@ -302,7 +408,7 @@ def test_job_submission(juju: jubilant.Juju) -> None:
     assert sackd_result.stdout == slurmd_result.stdout
 
 
-@pytest.mark.order(12)
+@pytest.mark.order(13)
 def test_gpu_job_submission(juju: jubilant.Juju) -> None:
     """Test that a job requesting a GPU can be successfully submitted to the Slurm cluster.
 
