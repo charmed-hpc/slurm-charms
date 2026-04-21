@@ -167,9 +167,9 @@ class SlurmdbdCharm(ops.CharmBase):
     def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
         """Handle when a secret is changed."""
         if event.secret.label == AUTH_KEY_LABEL:
-            manager = self.slurmdbd.key
+            manager, name = self.slurmdbd.key, "auth"
         elif event.secret.label == JWT_KEY_LABEL:
-            manager = self.slurmdbd.jwt
+            manager, name = self.slurmdbd.jwt, "JWT"
         else:
             logger.warning("secret with label '%s' changed. ignoring", event.secret.label)
             return
@@ -183,7 +183,9 @@ class SlurmdbdCharm(ops.CharmBase):
             )
             event.defer()
             raise StopCharm(
-                ops.BlockedStatus("Failed to retrieve key. See `juju debug-log` for details")
+                ops.BlockedStatus(
+                    f"Failed to retrieve {name} key. See `juju debug-log` for details"
+                )
             )
 
         # Other Slurm charms reload the service here. That is not possible for slurmdbd as the
