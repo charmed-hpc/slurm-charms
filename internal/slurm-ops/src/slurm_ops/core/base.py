@@ -129,11 +129,11 @@ class SecretManager(Protocol):  # pragma: no cover
         """Generate a new, cryptographically secure secret."""
         raise NotImplementedError
 
-    def set(self, content: dict[str, str]) -> None:
+    def set(self, content: Mapping[str, str]) -> None:
         """Write secret content to the key file, replacing any existing content."""
         raise NotImplementedError
 
-    def apply(self, content: dict[str, str]) -> None:
+    def apply(self, content: Mapping[str, str]) -> None:
         """Apply new secret content to the key file, overwriting or extending existing content."""
         raise NotImplementedError
 
@@ -473,7 +473,7 @@ class _JWTSecretManager(SecretManager):
     """Manage the `jwt_hs256.key` secret file."""
 
     def __init__(self, ops_manager: OpsManager, /, user: str, group: str) -> None:
-        """Initialise the JWT secret manager.
+        """Initialize the JWT secret manager.
 
         Args:
             ops_manager: The operations manager for the Slurm backend.
@@ -488,7 +488,7 @@ class _JWTSecretManager(SecretManager):
         """Generate a new, cryptographically secure `jwt_hs256.key` secret.
 
         Returns:
-            A dict with a single ``"key"`` entry containing the
+            A dictionary with a single ``"key"`` entry containing the
             PEM-encoded RSA private key as a string.
         """
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -511,11 +511,12 @@ class _JWTSecretManager(SecretManager):
         """
         return self._file.read_text()
 
-    def set(self, content: dict[str, str]) -> None:
+    def set(self, content: Mapping[str, str]) -> None:
         """Replace the `jwt_hs256.key` file with the provided key.
 
         Args:
-            content: A dict with a "key" entry containing a PEM-encoded RSA private key string.
+            content: A dictionary with a "key" entry containing a PEM-encoded RSA private key
+            string.
 
         Raises:
             OSError: If the key file cannot be written or its permissions cannot be set.
@@ -538,13 +539,14 @@ class _JWTSecretManager(SecretManager):
             "New Slurm JWT key set",
         )
 
-    def apply(self, content: dict[str, str]) -> None:
+    def apply(self, content: Mapping[str, str]) -> None:
         """Apply new JWT key content to the `jwt_hs256.key` secret file, overwriting existing.
 
         This is equivalent to calling `set`.
 
         Args:
-            content: A dict with a "key" entry containing a PEM-encoded RSA private key string.
+            content: A dictionary with a "key" entry containing a PEM-encoded RSA private key
+            string.
 
         Raises:
             OSError: If the key file cannot be written or its permissions cannot be set.
@@ -561,7 +563,7 @@ class _SlurmSecretManager(SecretManager):
     """Manage the `slurm.jwks` key file."""
 
     def __init__(self, ops_manager: OpsManager, /, user: str, group: str) -> None:
-        """Initialise the Slurm auth key secret manager.
+        """Initialize the Slurm auth key secret manager.
 
         Args:
             ops_manager: The operations manager for the Slurm backend.
@@ -576,8 +578,9 @@ class _SlurmSecretManager(SecretManager):
         """Generate cryptographically secure Slurm auth key data.
 
         Returns:
-            A dict of where the `key` entry is a base64-encoded random byte string suitable for use
-            as a Slurm authentication key, and the `keyid` entry is a unique identifier for the key.
+            A dictionary where the `key` entry is a base64-encoded random byte string suitable for
+            use as a Slurm authentication key, and the `keyid` entry is a unique identifier for the
+            key.
         """
         # Auth key entries must each have a unique ID consistent across all units.
         # Secret revision number cannot be used as it is not known to secret observers.
@@ -589,7 +592,7 @@ class _SlurmSecretManager(SecretManager):
         """Read and validate the `slurm.jwks` key file.
 
         Returns:
-            A dict with a `"keys"` list. Returns `{"keys": []}` if the file does not exist.
+            A dictionary with a `"keys"` list. Returns `{"keys": []}` if the file does not exist.
 
         Raises:
             SlurmOpsError: If the file exists but cannot be read or contains invalid data.
@@ -612,12 +615,12 @@ class _SlurmSecretManager(SecretManager):
 
         return data
 
-    def set(self, content: dict[str, str]) -> None:
+    def set(self, content: Mapping[str, str]) -> None:
         """Replace the `slurm.jwks` key file with a single key entry.
 
         Args:
-            content: A dict containing `key`, the base64-encoded key material to set, and `keyid`, a
-            unique identifier for the key.
+            content: A dictionary containing `key`, the base64-encoded key material to set, and
+            `keyid`, a unique identifier for the key.
 
         Raises:
             ValueError: If `key` or `keyid` is empty.
@@ -632,12 +635,12 @@ class _SlurmSecretManager(SecretManager):
             f"Slurm authentication key set with key ID: {content['keyid']}",
         )
 
-    def apply(self, content: dict[str, str]) -> None:
+    def apply(self, content: Mapping[str, str]) -> None:
         """Append a key to the `slurm.jwks` key file.
 
         Args:
-            content: A dict containing `key`, the base64-encoded key material to add, and `keyid`, a
-            unique identifier for the key.
+            content: A dictionary containing `key`, the base64-encoded key material to add, and
+            `keyid`, a unique identifier for the key.
 
         Raises:
             ValueError: If `key` or `keyid` is empty.
