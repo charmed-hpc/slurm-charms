@@ -14,6 +14,12 @@
 
 """Constants used within the `slurm-ops` package."""
 
+NODE_EXPORTER_COLLECTORS = {"systemd"}
+NODE_EXPORTER_METRICS_PATH = "/metrics"
+NODE_EXPORTER_PLUGS = {"hardware-observe", "mount-observe", "network-observe", "system-observe"}
+NODE_EXPORTER_PORT = 9100
+NODE_EXPORTER_SCRAPE_INTERVAL = "60s"
+
 SLURM_USER = "slurm"
 SLURM_GROUP = SLURM_USER
 SLURMD_USER = "root"
