@@ -96,7 +96,7 @@ class TestSlurmdCharm:
                 )
             else:
                 assert (
-                    ops.MaintenanceStatus("No GPUs found. Continuing")
+                    ops.MaintenanceStatus("No GPUs detected. Skipping driver installation")
                     in mock_charm.unit_status_history
                 )
 
@@ -106,7 +106,7 @@ class TestSlurmdCharm:
         else:
             assert len(state.deferred) > 0
             assert state.unit_status == ops.BlockedStatus(
-                "`slurmd` is not installed. See `juju debug-log` for details"
+                "Failed to install `slurmd`. See `juju debug-log` for details"
             )
 
     def test_on_config_changed(self, mock_charm, leader) -> None:
