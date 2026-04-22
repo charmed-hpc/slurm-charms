@@ -99,6 +99,7 @@ external-libraries = [
     { lib = "grafana-agent.cos_agent", version = "0.20" },
     { lib = "filesystem-client.mount_info", version = "0.1" },
     { lib = "smtp-integrator.smtp", version = "0.19" },
+    { lib = "prometheus_k8s.prometheus_scrape", version = "0.58" }
 ]
 binary-packages = [
     "pydantic-core",
