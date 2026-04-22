@@ -1,4 +1,4 @@
-# Copyright 2025 Vantage Compute Corporation
+# Copyright 2025-2026 Vantage Compute Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,5 +15,6 @@
 """Constants used within the `sackd` charmed operator."""
 
 SACKD_INTEGRATION_NAME = "slurmctld"
+PROMETHEUS_SCRAPE_INTEGRATION_NAME = "metrics-endpoint"
 
 SACKD_PORT = 6818
