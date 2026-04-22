@@ -16,5 +16,5 @@ dependencies = [
 libraries = [
     "operator-libs-linux.apt",
     "operator-libs-linux.systemd",
-    "grafana-agent.cos_agent",
+    "prometheus_k8s.prometheus_scrape"
 ]

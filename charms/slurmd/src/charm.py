@@ -21,8 +21,8 @@ import logging
 import gpu
 import ops
 import rdma
-from charmed_hpc_libs.errors import SystemdError
-from charmed_hpc_libs.ops.conditions import StopCharm, block_unless, refresh, wait_unless
+from charmed_hpc_libs.errors import SnapError, SystemdError
+from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, wait_unless
 from charmed_slurm_slurmd_interface import (
     AUTH_KEY_LABEL,
     ComputeData,
@@ -32,11 +32,20 @@ from charmed_slurm_slurmd_interface import (
     SlurmdProvider,
     controller_ready,
 )
-from charms.grafana_agent.v0.cos_agent import COSAgentProvider
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from config import ConfigManager
-from constants import SLURMD_INTEGRATION_NAME, SLURMD_PORT
+from constants import PROMETHEUS_SCRAPE_INTEGRATION_NAME, SLURMD_INTEGRATION_NAME, SLURMD_PORT
+from cosl import JujuTopology
 from pydantic import ValidationError
-from slurm_ops import SlurmdManager, SlurmOpsError
+from slurm_ops import (
+    NODE_EXPORTER_COLLECTORS,
+    NODE_EXPORTER_METRICS_PATH,
+    NODE_EXPORTER_PLUGS,
+    NODE_EXPORTER_PORT,
+    NODE_EXPORTER_SCRAPE_INTERVAL,
+    SlurmdManager,
+    SlurmOpsError,
+)
 from slurmutils import ModelError, Node
 from state import check_slurmd, reboot_if_required, slurmd_installed
 
@@ -89,7 +98,29 @@ class SlurmdCharm(ops.CharmBase):
             self._on_slurmctld_disconnected,
         )
 
-        self._grafana_agent = COSAgentProvider(self)
+        topology = JujuTopology.from_charm(self)
+        self.metrics_endpoint = MetricsEndpointProvider(
+            self,
+            PROMETHEUS_SCRAPE_INTEGRATION_NAME,
+            jobs=[
+                {
+                    "job_name": f"juju_{topology.identifier}_node-exporter",
+                    "metrics_path": NODE_EXPORTER_METRICS_PATH,
+                    "scrape_interval": NODE_EXPORTER_SCRAPE_INTERVAL,
+                    "static_configs": [
+                        {"targets": [f"*:{NODE_EXPORTER_PORT}"]},
+                    ],
+                    "relabel_configs": [
+                        {
+                            "source_labels": ["juju_unit"],
+                            "target_label": "node",
+                            "regex": r"(\S+)\/(\d+)",  # Match unit name.
+                            "replacement": "${1}-${2}",
+                        }
+                    ],
+                }
+            ],
+        )
 
     @refresh
     def _on_install(self, event: ops.InstallEvent) -> None:
@@ -103,33 +134,71 @@ class SlurmdCharm(ops.CharmBase):
               running kernel pending replacement by a kernel version on reboot.
         """
         reboot_if_required(self, now=True)
-        self.unit.status = ops.MaintenanceStatus("Provisioning compute node")
 
+        self.unit.status = ops.MaintenanceStatus("Installing `slurmd`")
         try:
-            self.unit.status = ops.MaintenanceStatus("Installing `slurmd`")
             self.slurmd.install()
-
-            self.unit.status = ops.MaintenanceStatus("Installing RDMA packages")
-            rdma.install()
-
-            self.unit.status = ops.MaintenanceStatus("Detecting if machine is GPU-equipped")
-            gpu_enabled = gpu.autoinstall()
-            if gpu_enabled:
-                self.unit.status = ops.MaintenanceStatus("Successfully installed GPU drivers")
-            else:
-                self.unit.status = ops.MaintenanceStatus("No GPUs found. Continuing")
-
             self.slurmd.service.stop()
             self.slurmd.service.disable()
             self.slurmd.conf = self.slurmd.build_node()
             self.slurmd.dynamic = True
             self.slurmd.name = self.unit.name.replace("/", "-")
+            self.unit.open_port("tcp", SLURMD_PORT)
             self.unit.set_workload_version(self.slurmd.version())
-        except (SlurmOpsError, gpu.GPUOpsError) as e:
+        except SlurmOpsError as e:
             logger.error(e.message)
             event.defer()
+            raise StopCharm(
+                ops.BlockedStatus("Failed to install `slurmd`. See `juju debug-log` for details")
+            )
 
-        self.unit.open_port("tcp", SLURMD_PORT)
+        self.unit.status = ops.MaintenanceStatus("Installing GPU drivers")
+        try:
+            gpu_enabled = gpu.autoinstall()
+            if gpu_enabled:
+                self.unit.status = ops.MaintenanceStatus("Successfully installed GPU drivers")
+            else:
+                self.unit.status = ops.MaintenanceStatus(
+                    "No GPUs detected. Skipping driver installation"
+                )
+        except gpu.GPUOpsError as e:
+            logger.error(e.message)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to install GPU drivers. See `juju debug-log` for details"
+                )
+            )
+
+        self.unit.status = ops.MaintenanceStatus("Installing RDMA drivers")
+        try:
+            rdma.install()
+        except rdma.RDMAOpsError as e:
+            logger.error(e.message)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to install RDMA drivers. See `juju debug-log` for details"
+                )
+            )
+
+        self.unit.status = ops.MaintenanceStatus("Installing `node-exporter`")
+        try:
+            self.slurmd.node_exporter.install()
+            for plug in NODE_EXPORTER_PLUGS:
+                self.slurmd.node_exporter.connect(plug)
+            self.slurmd.node_exporter.set_web_listen_address(f":{NODE_EXPORTER_PORT}")
+            self.slurmd.node_exporter.set_collectors(NODE_EXPORTER_COLLECTORS)
+            self.slurmd.node_exporter.service.enable()
+        except SnapError as e:
+            logger.error(e.message)
+            event.defer()
+            raise StopCharm(
+                ops.BlockedStatus(
+                    "Failed to install `node-exporter`. See `juju debug-log` for details"
+                )
+            )
+
         reboot_if_required(self)
 
     @refresh
