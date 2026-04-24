@@ -29,13 +29,11 @@ from charmed_slurm_sackd_interface import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from constants import PROMETHEUS_SCRAPE_INTEGRATION_NAME, SACKD_INTEGRATION_NAME, SACKD_PORT
-from cosl import JujuTopology
 from slurm_ops import (
     NODE_EXPORTER_COLLECTORS,
-    NODE_EXPORTER_METRICS_PATH,
     NODE_EXPORTER_PLUGS,
     NODE_EXPORTER_PORT,
-    NODE_EXPORTER_SCRAPE_INTERVAL,
+    NODE_EXPORTER_SCRAPE_CONFIG,
     SackdManager,
     SlurmOpsError,
 )
@@ -67,28 +65,8 @@ class SackdCharm(ops.CharmBase):
             self._on_slurmctld_disconnected,
         )
 
-        topology = JujuTopology.from_charm(self)
         self.metrics_endpoint = MetricsEndpointProvider(
-            self,
-            PROMETHEUS_SCRAPE_INTEGRATION_NAME,
-            jobs=[
-                {
-                    "job_name": f"juju_{topology.identifier}_node-exporter",
-                    "metrics_path": NODE_EXPORTER_METRICS_PATH,
-                    "scrape_interval": NODE_EXPORTER_SCRAPE_INTERVAL,
-                    "static_configs": [
-                        {"targets": [f"*:{NODE_EXPORTER_PORT}"]},
-                    ],
-                    "relabel_configs": [
-                        {
-                            "source_labels": ["juju_unit"],
-                            "target_label": "node",
-                            "regex": r"(\S+)\/(\d+)",  # Match unit name.
-                            "replacement": "${1}-${2}",
-                        }
-                    ],
-                }
-            ],
+            self, PROMETHEUS_SCRAPE_INTEGRATION_NAME, jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
         )
 
     @refresh
@@ -100,35 +78,31 @@ class SackdCharm(ops.CharmBase):
               so the service is stopped and disabled. The service is re-enabled after being
               integrated with a `slurmctld` application.
         """
-        self.unit.status = ops.MaintenanceStatus("Installing `sackd`")
         try:
+            self.unit.status = ops.MaintenanceStatus("Installing `sackd`")
             self.sackd.install()
             self.sackd.service.stop()
             self.sackd.service.disable()
             self.unit.open_port("tcp", SACKD_PORT)
             self.unit.set_workload_version(self.sackd.version())
-        except SlurmOpsError as e:
-            logger.error(e.message)
-            event.defer()
-            raise StopCharm(
-                ops.BlockedStatus("Failed to install `sackd`. See `juju debug-log` for details")
-            )
 
-        self.unit.status = ops.MaintenanceStatus("Installing `node-exporter`")
-        try:
+            self.unit.status = ops.MaintenanceStatus("Installing `node-exporter`")
             self.sackd.node_exporter.install()
             for plug in NODE_EXPORTER_PLUGS:
                 self.sackd.node_exporter.connect(plug)
             self.sackd.node_exporter.set_web_listen_address(f":{NODE_EXPORTER_PORT}")
             self.sackd.node_exporter.set_collectors(NODE_EXPORTER_COLLECTORS)
             self.sackd.node_exporter.service.enable()
-        except SnapError as e:
+        except (SlurmOpsError, SnapError) as e:
+            error_message = {
+                SlurmOpsError: "Failed to install `sackd`",
+                SnapError: "Failed to install `node-exporter`",
+            }
+
             logger.error(e.message)
             event.defer()
             raise StopCharm(
-                ops.BlockedStatus(
-                    "Failed to install `node-exporter`. See `juju debug-log` for details"
-                )
+                ops.BlockedStatus(f"{error_message[type(e)]}. See `juju debug-log` for details")
             )
 
     @refresh

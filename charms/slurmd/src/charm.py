@@ -35,14 +35,12 @@ from charmed_slurm_slurmd_interface import (
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from config import ConfigManager
 from constants import PROMETHEUS_SCRAPE_INTEGRATION_NAME, SLURMD_INTEGRATION_NAME, SLURMD_PORT
-from cosl import JujuTopology
 from pydantic import ValidationError
 from slurm_ops import (
     NODE_EXPORTER_COLLECTORS,
-    NODE_EXPORTER_METRICS_PATH,
     NODE_EXPORTER_PLUGS,
     NODE_EXPORTER_PORT,
-    NODE_EXPORTER_SCRAPE_INTERVAL,
+    NODE_EXPORTER_SCRAPE_CONFIG,
     SlurmdManager,
     SlurmOpsError,
 )
@@ -98,28 +96,8 @@ class SlurmdCharm(ops.CharmBase):
             self._on_slurmctld_disconnected,
         )
 
-        topology = JujuTopology.from_charm(self)
         self.metrics_endpoint = MetricsEndpointProvider(
-            self,
-            PROMETHEUS_SCRAPE_INTEGRATION_NAME,
-            jobs=[
-                {
-                    "job_name": f"juju_{topology.identifier}_node-exporter",
-                    "metrics_path": NODE_EXPORTER_METRICS_PATH,
-                    "scrape_interval": NODE_EXPORTER_SCRAPE_INTERVAL,
-                    "static_configs": [
-                        {"targets": [f"*:{NODE_EXPORTER_PORT}"]},
-                    ],
-                    "relabel_configs": [
-                        {
-                            "source_labels": ["juju_unit"],
-                            "target_label": "node",
-                            "regex": r"(\S+)\/(\d+)",  # Match unit name.
-                            "replacement": "${1}-${2}",
-                        }
-                    ],
-                }
-            ],
+            self, PROMETHEUS_SCRAPE_INTEGRATION_NAME, jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
         )
 
     @refresh
@@ -135,8 +113,8 @@ class SlurmdCharm(ops.CharmBase):
         """
         reboot_if_required(self, now=True)
 
-        self.unit.status = ops.MaintenanceStatus("Installing `slurmd`")
         try:
+            self.unit.status = ops.MaintenanceStatus("Installing `slurmd`")
             self.slurmd.install()
             self.slurmd.service.stop()
             self.slurmd.service.disable()
@@ -145,15 +123,8 @@ class SlurmdCharm(ops.CharmBase):
             self.slurmd.name = self.unit.name.replace("/", "-")
             self.unit.open_port("tcp", SLURMD_PORT)
             self.unit.set_workload_version(self.slurmd.version())
-        except SlurmOpsError as e:
-            logger.error(e.message)
-            event.defer()
-            raise StopCharm(
-                ops.BlockedStatus("Failed to install `slurmd`. See `juju debug-log` for details")
-            )
 
-        self.unit.status = ops.MaintenanceStatus("Installing GPU drivers")
-        try:
+            self.unit.status = ops.MaintenanceStatus("Installing GPU drivers")
             gpu_enabled = gpu.autoinstall()
             if gpu_enabled:
                 self.unit.status = ops.MaintenanceStatus("Successfully installed GPU drivers")
@@ -161,42 +132,29 @@ class SlurmdCharm(ops.CharmBase):
                 self.unit.status = ops.MaintenanceStatus(
                     "No GPUs detected. Skipping driver installation"
                 )
-        except gpu.GPUOpsError as e:
-            logger.error(e.message)
-            event.defer()
-            raise StopCharm(
-                ops.BlockedStatus(
-                    "Failed to install GPU drivers. See `juju debug-log` for details"
-                )
-            )
 
-        self.unit.status = ops.MaintenanceStatus("Installing RDMA drivers")
-        try:
+            self.unit.status = ops.MaintenanceStatus("Installing RDMA drivers")
             rdma.install()
-        except rdma.RDMAOpsError as e:
-            logger.error(e.message)
-            event.defer()
-            raise StopCharm(
-                ops.BlockedStatus(
-                    "Failed to install RDMA drivers. See `juju debug-log` for details"
-                )
-            )
 
-        self.unit.status = ops.MaintenanceStatus("Installing `node-exporter`")
-        try:
+            self.unit.status = ops.MaintenanceStatus("Installing `node-exporter`")
             self.slurmd.node_exporter.install()
             for plug in NODE_EXPORTER_PLUGS:
                 self.slurmd.node_exporter.connect(plug)
             self.slurmd.node_exporter.set_web_listen_address(f":{NODE_EXPORTER_PORT}")
             self.slurmd.node_exporter.set_collectors(NODE_EXPORTER_COLLECTORS)
             self.slurmd.node_exporter.service.enable()
-        except SnapError as e:
-            logger.error(e.message)
+        except (SlurmOpsError, gpu.GPUOpsError, rdma.RDMAOpsError, SnapError) as e:
+            error_message = {
+                SlurmOpsError: "Failed to install `slurmd`",
+                gpu.GPUOpsError: "Failed to install GPU drivers",
+                rdma.RDMAOpsError: "Failed to install RDMA drivers",
+                SnapError: "Failed to install `node-exporter`",
+            }
+
             event.defer()
+            logger.error(e.message)
             raise StopCharm(
-                ops.BlockedStatus(
-                    "Failed to install `node-exporter`. See `juju debug-log` for details"
-                )
+                ops.BlockedStatus(f"{error_message[type(e)]}. See `juju debug-log` for details")
             )
 
         reboot_if_required(self)

@@ -22,10 +22,9 @@ __all__ = [
     "SlurmConfigManager",
     # From `constants.py`
     "NODE_EXPORTER_COLLECTORS",
-    "NODE_EXPORTER_METRICS_PATH",
     "NODE_EXPORTER_PLUGS",
     "NODE_EXPORTER_PORT",
-    "NODE_EXPORTER_SCRAPE_INTERVAL",
+    "NODE_EXPORTER_SCRAPE_CONFIG",
     "SLURM_USER",
     "SLURM_GROUP",
     "SLURMD_USER",
@@ -43,10 +42,9 @@ from .base import SecretManager, SlurmManager
 from .config import SlurmConfigManager
 from .constants import (
     NODE_EXPORTER_COLLECTORS,
-    NODE_EXPORTER_METRICS_PATH,
     NODE_EXPORTER_PLUGS,
     NODE_EXPORTER_PORT,
-    NODE_EXPORTER_SCRAPE_INTERVAL,
+    NODE_EXPORTER_SCRAPE_CONFIG,
     SLURM_GROUP,
     SLURM_USER,
     SLURMD_GROUP,
