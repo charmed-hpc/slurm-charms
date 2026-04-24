@@ -36,6 +36,11 @@ parts:
       - git
 
 provides:
+  metrics-endpoint:
+    description: |
+      Provides application metrics to COS Prometheus instance.
+    interface: prometheus_scrape
+    optional: true
   slurmctld:
     interface: sackd
     limit: 1

@@ -30,6 +30,7 @@ import textwrap
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from functools import cached_property
 from pathlib import Path
 from subprocess import CalledProcessError
 from typing import Any, Protocol
@@ -40,6 +41,7 @@ import yaml
 from charmed_hpc_libs.errors import SnapError, SystemdError
 from charmed_hpc_libs.ops import (
     EnvManager,
+    NodeExporterManager,
     ServiceManager,
     SnapServiceManager,
     SystemctlServiceManager,
@@ -746,6 +748,11 @@ class SlurmManager(ABC):
     def hostname(self) -> str:
         """Get the hostname of the machine the managed Slurm service is running on."""
         return socket.gethostname().split(".")[0]
+
+    @cached_property
+    def node_exporter(self) -> NodeExporterManager:
+        """Get the `node-exporter` lifecycle manager."""
+        return NodeExporterManager()
 
     @property
     @abstractmethod

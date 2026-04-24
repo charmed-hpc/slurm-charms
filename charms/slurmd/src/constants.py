@@ -15,5 +15,6 @@
 """Constants used within the `slurmd` charmed operator."""
 
 SLURMD_INTEGRATION_NAME = "slurmctld"
+PROMETHEUS_SCRAPE_INTEGRATION_NAME = "metrics-endpoint"
 
 SLURMD_PORT = 6818

@@ -16,6 +16,10 @@
 
 __all__ = [
     # From `core` module
+    "NODE_EXPORTER_COLLECTORS",
+    "NODE_EXPORTER_PLUGS",
+    "NODE_EXPORTER_PORT",
+    "NODE_EXPORTER_SCRAPE_CONFIG",
     "SecretManager",
     "SLURM_GROUP",
     "SLURM_USER",
@@ -39,6 +43,10 @@ __all__ = [
 ]
 
 from .core import (
+    NODE_EXPORTER_COLLECTORS,
+    NODE_EXPORTER_PLUGS,
+    NODE_EXPORTER_PORT,
+    NODE_EXPORTER_SCRAPE_CONFIG,
     SLURM_GROUP,
     SLURM_USER,
     SLURMD_GROUP,

@@ -24,7 +24,7 @@ dependencies = [
     "psutil == 7.2.1",
     "pydantic ~= 2.0",
     "rpds-py ~= 0.23.1",
-    "cosl < 1.0.0,>= 0.0.50",
+    "cosl ~= 1.0",
     "hpc-libs[all]",
     "charmed-hpc-libs[all] >= 0.1.0",
     "slurm-ops",
@@ -99,6 +99,7 @@ external-libraries = [
     { lib = "grafana-agent.cos_agent", version = "0.20" },
     { lib = "filesystem-client.mount_info", version = "0.1" },
     { lib = "smtp-integrator.smtp", version = "0.19" },
+    { lib = "prometheus_k8s.prometheus_scrape", version = "0.58" }
 ]
 binary-packages = [
     "pydantic-core",

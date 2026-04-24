@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 import logging
 
 import ops
-from charmed_hpc_libs.errors import SystemdError
+from charmed_hpc_libs.errors import SnapError, SystemdError
 from charmed_hpc_libs.ops import StopCharm, block_unless, refresh, systemctl, wait_unless
 from charmed_slurm_sackd_interface import (
     AUTH_KEY_LABEL,
@@ -27,8 +27,16 @@ from charmed_slurm_sackd_interface import (
     SlurmctldReadyEvent,
     controller_ready,
 )
-from constants import SACKD_INTEGRATION_NAME, SACKD_PORT
-from slurm_ops import SackdManager, SlurmOpsError
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from constants import PROMETHEUS_SCRAPE_INTEGRATION_NAME, SACKD_INTEGRATION_NAME, SACKD_PORT
+from slurm_ops import (
+    NODE_EXPORTER_COLLECTORS,
+    NODE_EXPORTER_PLUGS,
+    NODE_EXPORTER_PORT,
+    NODE_EXPORTER_SCRAPE_CONFIG,
+    SackdManager,
+    SlurmOpsError,
+)
 from state import check_sackd, sackd_installed
 
 logger = logging.getLogger(__name__)
@@ -57,6 +65,10 @@ class SackdCharm(ops.CharmBase):
             self._on_slurmctld_disconnected,
         )
 
+        self.metrics_endpoint = MetricsEndpointProvider(
+            self, PROMETHEUS_SCRAPE_INTEGRATION_NAME, jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
+        )
+
     @refresh
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Install `sackd` after charm is deployed on unit.
@@ -66,20 +78,32 @@ class SackdCharm(ops.CharmBase):
               so the service is stopped and disabled. The service is re-enabled after being
               integrated with a `slurmctld` application.
         """
-        self.unit.status = ops.MaintenanceStatus("Installing `sackd`")
         try:
+            self.unit.status = ops.MaintenanceStatus("Installing `sackd`")
             self.sackd.install()
             self.sackd.service.stop()
             self.sackd.service.disable()
+            self.unit.open_port("tcp", SACKD_PORT)
             self.unit.set_workload_version(self.sackd.version())
-        except SlurmOpsError as e:
+
+            self.unit.status = ops.MaintenanceStatus("Installing `node-exporter`")
+            self.sackd.node_exporter.install()
+            for plug in NODE_EXPORTER_PLUGS:
+                self.sackd.node_exporter.connect(plug)
+            self.sackd.node_exporter.set_web_listen_address(f":{NODE_EXPORTER_PORT}")
+            self.sackd.node_exporter.set_collectors(NODE_EXPORTER_COLLECTORS)
+            self.sackd.node_exporter.service.enable()
+        except (SlurmOpsError, SnapError) as e:
+            error_message = {
+                SlurmOpsError: "Failed to install `sackd`",
+                SnapError: "Failed to install `node-exporter`",
+            }
+
             logger.error(e.message)
             event.defer()
             raise StopCharm(
-                ops.BlockedStatus("Failed to install `sackd`. See `juju debug-log` for details")
+                ops.BlockedStatus(f"{error_message[type(e)]}. See `juju debug-log` for details")
             )
-
-        self.unit.open_port("tcp", SACKD_PORT)
 
     @refresh
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:

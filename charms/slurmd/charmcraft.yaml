@@ -48,11 +48,13 @@ parts:
       - pkgconf
 
 provides:
+  metrics-endpoint:
+    description: |
+      Provides application metrics to COS Prometheus instance.
+    interface: prometheus_scrape
+    optional: true
   slurmctld:
     interface: slurmd
-    limit: 1
-  cos-agent:
-    interface: cos_agent
     limit: 1
 
 config:
