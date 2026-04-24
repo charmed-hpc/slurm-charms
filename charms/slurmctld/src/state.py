@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import ops
 from charmed_hpc_libs.ops.conditions import ConditionEvaluation
-from constants import HA_MOUNT_INTEGRATION_NAME
+from constants import HA_MOUNT_INTEGRATION_NAME, HA_MOUNT_LOCATION
 from slurm_ops import SlurmOpsError
 
 if TYPE_CHECKING:
@@ -82,24 +82,15 @@ def shared_state_mounted(charm: "SlurmctldCharm") -> ConditionEvaluation:
     if charm.unit.is_leader() and not charm.model.relations.get(HA_MOUNT_INTEGRATION_NAME):
         return ConditionEvaluation(True, "")
 
-    failure = ConditionEvaluation(
-        False, "A shared file system must be provided to enable `slurmctld` high availability"
+    mounted = Path(HA_MOUNT_LOCATION).is_mount()
+    return ConditionEvaluation(
+        mounted,
+        (
+            "A shared file system must be provided to enable `slurmctld` high availability"
+            if not mounted
+            else ""
+        ),
     )
-
-    if not charm.slurmctld.config.path.exists():
-        return failure
-
-    config = charm.slurmctld.config.load()
-    if not config.state_save_location:
-        return failure
-
-    # Check the *parent* as StateSaveLocation is a subdirectory under the shared filesystem in HA
-    # That is, with "HA_MOUNT_LOCATION/checkpoint" we check if "HA_MOUNT_LOCATION" is a mount
-    state_save_parent = Path(config.state_save_location).parent
-    if not state_save_parent.is_mount():
-        return failure
-
-    return ConditionEvaluation(True, "")
 
 
 def peer_ready(charm: "SlurmctldCharm") -> ConditionEvaluation:

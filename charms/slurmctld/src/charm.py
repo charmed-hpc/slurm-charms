@@ -252,7 +252,7 @@ class SlurmctldCharm(ops.CharmBase):
         self.unit.open_port("tcp", PROMETHEUS_EXPORTER_PORT)
 
     @refresh
-    @wait_unless(shared_state_mounted)
+    @wait_unless(shared_state_mounted, config_ready)
     def _on_leader_elected(self, event: ops.LeaderElectedEvent) -> None:
         """Refresh controller lists on leader re-election."""
         if not self.model.relations.get(HA_MOUNT_INTEGRATION_NAME):
@@ -407,6 +407,7 @@ class SlurmctldCharm(ops.CharmBase):
         self.slurmctld_peer.update_controller_peer_app_data(cluster_name=cluster_name)
 
     @refresh
+    @wait_unless(config_ready)
     def _on_slurmctld_changed(self, event) -> None:
         """Handle when `slurmctld` units join or leave."""
         # Only a slurm.conf update needed - no other conf files are affected.
@@ -494,7 +495,7 @@ class SlurmctldCharm(ops.CharmBase):
         )
 
     @refresh
-    @wait_unless(database_ready, all_units_observed)
+    @wait_unless(database_ready, all_units_observed, config_ready)
     @block_unless(slurmctld_installed)
     def _on_slurmdbd_ready(self, event: SlurmdbdReadyEvent) -> None:
         """Handle when database data is ready from a `slurmdbd` application."""
