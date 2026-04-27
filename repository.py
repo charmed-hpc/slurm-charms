@@ -58,7 +58,7 @@ class BuildTool:
         def reader(pipe):
             with pipe:
                 for line in pipe:
-                    line.replace(str(BUILD_PATH), str(CHARMS_PATH))
+                    line = line.replace(str(BUILD_PATH), str(CHARMS_PATH))
                     print(line, end="")
 
         kwargs["text"] = True
