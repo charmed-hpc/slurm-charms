@@ -27,6 +27,7 @@ __all__ = [
     "SLURMD_USER",
     "SLURMRESTD_GROUP",
     "SLURMRESTD_USER",
+    "UNIT_TO_NODE_NAME_RELABEL_CONFIG",
     "SlurmOpsError",
     # From `sackd.py`
     "SackdManager",
@@ -53,6 +54,7 @@ from .core import (
     SLURMD_USER,
     SLURMRESTD_GROUP,
     SLURMRESTD_USER,
+    UNIT_TO_NODE_NAME_RELABEL_CONFIG,
     SecretManager,
     SlurmOpsError,
 )
