@@ -96,8 +96,11 @@ class SlurmdCharm(ops.CharmBase):
             self._on_slurmctld_disconnected,
         )
 
+        # FIXME: Only enable `dcgm` scrape job if GPU is present on the node.
         self.metrics_endpoint = MetricsEndpointProvider(
-            self, PROMETHEUS_SCRAPE_INTEGRATION_NAME, jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
+            self,
+            PROMETHEUS_SCRAPE_INTEGRATION_NAME,
+            jobs=[NODE_EXPORTER_SCRAPE_CONFIG, gpu.DCGM_EXPORTER_SCRAPE_CONFIG],
         )
 
     @refresh
@@ -144,6 +147,9 @@ class SlurmdCharm(ops.CharmBase):
             self.slurmd.node_exporter.set_collectors(NODE_EXPORTER_COLLECTORS)
             self.slurmd.node_exporter.service.enable()
         except (SlurmOpsError, gpu.GPUOpsError, rdma.RDMAOpsError, SnapError) as e:
+            # FIXME: Investigate how to provide more granular status messages
+            #   such as when it's the `dcgm-exporter` snap that fails to install
+            #   and not the Nvidia drivers.
             error_message = {
                 SlurmOpsError: "Failed to install `slurmd`",
                 gpu.GPUOpsError: "Failed to install GPU drivers",

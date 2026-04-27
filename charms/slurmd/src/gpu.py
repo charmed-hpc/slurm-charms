@@ -20,8 +20,20 @@ import logging
 import apt_pkg  # pyright: ignore [reportMissingImports]
 import charms.operator_libs_linux.v0.apt as apt
 import UbuntuDrivers.detect  # pyright: ignore [reportMissingImports]
+from charmed_hpc_libs.errors import SnapError
+from charmed_hpc_libs.ops import DCGMManager
+from slurm_ops import UNIT_TO_NODE_NAME_RELABEL_CONFIG
 
 _logger = logging.getLogger(__name__)
+
+DCGM_EXPORTER_PORT = 9101
+DCGM_EXPORTER_SCRAPE_CONFIG = {
+    "job_name": "dcgm-exporter",
+    "metrics_path": "/metrics",
+    "scrape_interval": "60s",
+    "static_configs": [{"targets": [f"*:{DCGM_EXPORTER_PORT}"]}],
+    "relabel_configs": [UNIT_TO_NODE_NAME_RELABEL_CONFIG],
+}
 
 
 class GPUOpsError(Exception):
@@ -96,5 +108,16 @@ def autoinstall() -> bool:
         apt.add_package(install_packages)
     except (apt.PackageNotFoundError, apt.PackageError) as e:
         raise GPUOpsError(f"failed to install packages {install_packages}. reason: {e}")
+
+    _logger.info("installing `dcgm` snap")
+    try:
+        dcgm = DCGMManager()
+        dcgm.install()
+        dcgm.set_dcgm_exporter_address(f":{DCGM_EXPORTER_PORT}")
+        # Restart `dcgm-exporter` if it's already running to apply new port configuration.
+        dcgm.exporter.restart()
+        dcgm.exporter.enable()
+    except SnapError as e:
+        raise GPUOpsError(f"failed to install and start `dcgm-exporter` service. reason: {e}")
 
     return True
