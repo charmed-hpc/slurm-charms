@@ -98,8 +98,12 @@ class SlurmdCharm(ops.CharmBase):
         )
 
         scrape_jobs = [NODE_EXPORTER_SCRAPE_CONFIG]
-        if self.gpu.dcgm.exporter.is_active():
-            scrape_jobs.append(DCGM_EXPORTER_SCRAPE_CONFIG)
+        # FIXME: Replace with `is_installed` once method is added to `SlurmOpsManager`.
+        try:
+            if self.gpu.dcgm.exporter.is_active():
+                scrape_jobs.append(DCGM_EXPORTER_SCRAPE_CONFIG)
+        except SnapError:
+            pass
         self.metrics_endpoint = MetricsEndpointProvider(
             self,
             PROMETHEUS_SCRAPE_INTEGRATION_NAME,
