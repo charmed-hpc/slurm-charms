@@ -31,6 +31,7 @@ __all__ = [
     "SLURMD_GROUP",
     "SLURMRESTD_USER",
     "SLURMRESTD_GROUP",
+    "UNIT_TO_NODE_NAME_RELABEL_CONFIG",
     # From `errors.py`
     "SlurmOpsError",
     # From `options.py`
@@ -51,6 +52,7 @@ from .constants import (
     SLURMD_USER,
     SLURMRESTD_GROUP,
     SLURMRESTD_USER,
+    UNIT_TO_NODE_NAME_RELABEL_CONFIG,
 )
 from .errors import SlurmOpsError
 from .options import marshal_options, parse_options

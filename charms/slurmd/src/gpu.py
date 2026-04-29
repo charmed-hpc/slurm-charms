@@ -12,16 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Manage GPU driver installation on compute node."""
+"""Manage the Nvidia GPU lifecycle on individual compute nodes."""
+
+__all__ = ["DCGM_EXPORTER_SCRAPE_CONFIG", "GPUOpsError", "NvidiaGPUManager"]
 
 import logging
+from functools import cached_property
 
 # ubuntu-drivers requires apt_pkg for package operations
 import apt_pkg  # pyright: ignore [reportMissingImports]
-import charms.operator_libs_linux.v0.apt as apt
 import UbuntuDrivers.detect  # pyright: ignore [reportMissingImports]
+from charmed_hpc_libs.errors import SnapError
+from charmed_hpc_libs.ops import DCGMManager
+from charmlibs import apt
+from slurm_ops import UNIT_TO_NODE_NAME_RELABEL_CONFIG
 
 _logger = logging.getLogger(__name__)
+
+DCGM_EXPORTER_PORT = 9101
+DCGM_EXPORTER_SCRAPE_CONFIG = {
+    "job_name": "dcgm-exporter",
+    "metrics_path": "/metrics",
+    "scrape_interval": "60s",
+    "static_configs": [{"targets": [f"*:{DCGM_EXPORTER_PORT}"]}],
+    "relabel_configs": [UNIT_TO_NODE_NAME_RELABEL_CONFIG],
+}
 
 
 class GPUOpsError(Exception):
@@ -33,28 +48,27 @@ class GPUOpsError(Exception):
         return self.args[0]
 
 
-class GPUDriverDetector:
-    """Detects GPU driver and kernel packages appropriate for the current hardware."""
+class NvidiaGPUManager:
+    """Manage Nvidia GPU resources on Slurm compute nodes."""
 
-    def __init__(self):
-        """Initialize detection interfaces."""
-        apt_pkg.init()
+    @cached_property
+    def dcgm(self) -> DCGMManager:
+        """Get the DCGM (Nvidia's Data Center GPU Manager) lifecycle manager."""
+        return DCGMManager()
 
-    def _system_gpgpu_driver_packages(self) -> dict:
-        """Detect the available GPGPU drivers for this node."""
-        return UbuntuDrivers.detect.system_gpgpu_driver_packages()
+    def autoinstall(self) -> bool:
+        """Autodetect available GPUs and install drivers.
 
-    def _get_linux_modules_metapackage(self, driver) -> str:
-        """Retrieve the modules metapackage for the combination of current kernel and given driver.
+        Returns:
+            True if drivers were installed, False otherwise.
 
-        For example, linux-modules-nvidia-535-server-aws for driver nvidia-driver-535-server
+        Raises:
+            GPUOpsError: Raised if error is encountered during package install.
         """
-        return UbuntuDrivers.detect.get_linux_modules_metapackage(apt_pkg.Cache(None), driver)
+        _logger.info("detecting GPUs and installing drivers")
 
-    def system_packages(self) -> list[str]:
-        """Return a list of GPU drivers and kernel module packages for this node."""
-        packages = self._system_gpgpu_driver_packages()
-
+        apt_pkg.init()
+        packages = UbuntuDrivers.detect.system_gpgpu_driver_packages()
         # Gather list of driver and kernel modules to install.
         install_packages = []
         for driver_package in packages:
@@ -66,35 +80,32 @@ class GPUDriverDetector:
 
                 # Retrieve modules metapackage for combination of current kernel and recommended driver,
                 # For example, linux-modules-nvidia-535-server-aws
-                modules_metapackage = self._get_linux_modules_metapackage(driver_package)
+                modules_metapackage = UbuntuDrivers.detect.get_linux_modules_metapackage(
+                    apt_pkg.Cache(None), driver_package
+                )
 
                 # Add to list of packages to install
                 install_packages += [driver_metapackage, modules_metapackage]
 
-        return [p for p in install_packages if p]
+        targets = [p for p in install_packages if p]
+        if len(targets) == 0:
+            _logger.info("no GPU drivers requiring installation")
+            return False
 
+        _logger.info("installing GPU driver packages: %s", targets)
+        try:
+            apt.add_package(targets)
+        except (apt.PackageNotFoundError, apt.PackageError) as e:
+            raise GPUOpsError(f"failed to install packages {targets}. reason: {e}")
 
-def autoinstall() -> bool:
-    """Autodetect available GPUs and install drivers.
+        _logger.info("installing `dcgm` snap")
+        try:
+            self.dcgm.install()
+            self.dcgm.set_dcgm_exporter_address(f":{DCGM_EXPORTER_PORT}")
+            # Restart `dcgm-exporter` if it's already running to apply new port configuration.
+            self.dcgm.exporter.restart()
+            self.dcgm.exporter.enable()
+        except SnapError as e:
+            raise GPUOpsError(f"failed to install and start `dcgm-exporter` service. reason: {e}")
 
-    Returns:
-        True if drivers were installed, False otherwise.
-
-    Raises:
-        GPUOpsError: Raised if error is encountered during package install.
-    """
-    _logger.info("detecting GPUs and installing drivers")
-    detector = GPUDriverDetector()
-    install_packages = detector.system_packages()
-
-    if len(install_packages) == 0:
-        _logger.info("no GPU drivers requiring installation")
-        return False
-
-    _logger.info("installing GPU driver packages: %s", install_packages)
-    try:
-        apt.add_package(install_packages)
-    except (apt.PackageNotFoundError, apt.PackageError) as e:
-        raise GPUOpsError(f"failed to install packages {install_packages}. reason: {e}")
-
-    return True
+        return True

@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,6 +44,19 @@ def mock_charm(
     fs.create_file("/etc/slurm/slurm.jwks", create_missing_dirs=True)
     fs.create_file("/etc/default/slurmd", create_missing_dirs=True)
     fs.create_dir("/usr/sbin")
+    # TODO: Simplify charm lifecycle patches once Observer pattern is implemented.
+    #   The `dcgm-exporter` manager must be patched to prevent a computer crashing
+    #   memory leak that is triggered by the unit tests when creating the scenario
+    #   `Context` object for the `SlurmdCharm` object. Deeper investigation shows that
+    #   mocking `subprocess.run` does not play nicely with `pyfakefs`, and this seems to be where
+    #   the memory leak is originating from. It is specifically triggered when `ops.main`
+    #   is called by `Scenario` and the `SlurmdCharm` object's `__init__` method is called.
+    #   The suspicion is that either `pyfakefs` or the `subprocess.run` mock is causing
+    #   unbounded data duplication in memory when creating the fake filesystem.
+    mocker.patch(
+        "charmed_hpc_libs.ops.machine.nvidia.DCGMManager.exporter",
+        new_callable=mocker.PropertyMock(),
+    )
     mocker.patch("subprocess.run")
 
     return mock_ctx

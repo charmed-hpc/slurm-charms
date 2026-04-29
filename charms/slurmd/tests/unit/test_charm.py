@@ -77,7 +77,9 @@ class TestSlurmdCharm:
             mocker.patch("rdma.install")
 
             # Patch `gpu` module.
-            mocker.patch("gpu.autoinstall", lambda: mock_gpu_autoinstall_success)
+            mocker.patch(
+                "gpu.NvidiaGPUManager.autoinstall", lambda _: mock_gpu_autoinstall_success
+            )
 
             state = manager.run()
 
