@@ -98,7 +98,8 @@ class SlurmdCharm(ops.CharmBase):
         )
 
         scrape_jobs = [NODE_EXPORTER_SCRAPE_CONFIG]
-        # FIXME: Replace with `is_installed` once method is added to `SlurmOpsManager`.
+        # FIXME: https://github.com/charmed-hpc/hpc-libs/issues/133
+        #  Replace with `is_installed` once method is added to `SnapOpsManager`.
         try:
             if self.gpu.dcgm.exporter.is_active():
                 scrape_jobs.append(DCGM_EXPORTER_SCRAPE_CONFIG)
@@ -154,12 +155,13 @@ class SlurmdCharm(ops.CharmBase):
             self.slurmd.node_exporter.set_collectors(NODE_EXPORTER_COLLECTORS)
             self.slurmd.node_exporter.service.enable()
         except (SlurmOpsError, GPUOpsError, rdma.RDMAOpsError, SnapError) as e:
-            # FIXME: Investigate how to provide more granular status messages
-            #   such as when it's the `dcgm-exporter` snap that fails to install
-            #   and not the Nvidia drivers.
+            # FIXME: https://github.com/charmed-hpc/hpc-libs/issues/134
+            #  Investigate how to provide more granular status messages
+            #  such as when it's the `dcgm-exporter` snap that fails to install
+            #  and not the Nvidia drivers.
             error_message = {
                 SlurmOpsError: "Failed to install `slurmd`",
-                GPUOpsError: "Failed to install GPU drivers",
+                GPUOpsError: "Failed to install GPU packages",
                 rdma.RDMAOpsError: "Failed to install RDMA drivers",
                 SnapError: "Failed to install `node-exporter`",
             }
