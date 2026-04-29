@@ -46,7 +46,7 @@ def mock_charm(
     fs.create_dir("/usr/sbin")
     # TODO: Simplify charm lifecycle patches once Observer pattern is implemented.
     #   The `dcgm-exporter` manager must be patched to prevent a computer crashing
-    #   memory leak will that is triggered by the unit tests when creating the scenario
+    #   memory leak that is triggered by the unit tests when creating the scenario
     #   `Context` object for the `SlurmdCharm` object. Deeper investigation shows that
     #   mocking `subprocess.run` does not play nicely with `pyfakefs`, and this seems to be where
     #   the memory leak is originating from. It is specifically triggered when `ops.main`
