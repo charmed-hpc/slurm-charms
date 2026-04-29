@@ -110,7 +110,7 @@ groups:
             LABELS = {{ $labels }}
 
       - alert: SlurmNodesNotResponding
-        expr: slurm_nodes_noresp{%%juju_topology%%} > 0
+        expr: slurm_nodes_noresp > 0
         for: 5m
         labels:
           severity: critical
