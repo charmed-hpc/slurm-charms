@@ -19,7 +19,7 @@ groups:
         expr: node_systemd_unit_state{name="slurmd.service", state="inactive"} != 0
         for: 5m
         labels:
-          severity: critical
+          severity: warning
         annotations:
           summary: `slurmd` service on compute node {{ $labels.node }} is inactive
           description: |

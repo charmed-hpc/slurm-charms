@@ -48,10 +48,12 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Critical XID errors detected on GPU {{ $labels.gpu }} on compute node {{ $labels.node }}
+          summary: XID errors detected on GPU {{ $labels.gpu }} on compute node {{ $labels.node }}
           description: |
             GPU {{ $labels.gpu }} on compute node {{ $labels.node }} is reporting critical XID errors.
             This may lead to users seeing application crashes or data corruption.
+
+            XID error number: {{ value }}
 
             Possible causes:
 
