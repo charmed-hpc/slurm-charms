@@ -1,0 +1,70 @@
+# Copyright 2026 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+groups:
+  - name: SlurmLoginNode
+    rules:
+      - alert: SlurmLoginNodeSackdServiceIsInactive
+        expr: node_systemd_unit_state{name="sackd.service", state="inactive"} != 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: `slurmd` service on login node {{ $labels.node }} is inactive
+          description: |
+            The Slurm authentication and credential kiosk service, `sackd`, has been inactive for
+            more than 5 minutes on login node {{ $labels.node }}.
+
+            Possible Causes:
+
+              - The `sackd` service was stopped manually or failed to start after a reboot.
+              - A configuration or packaging change prevented the service from starting correctly.
+              - The login node is under resource pressure or experiencing host-level issues.
+              - Supporting authentication or credential services required by `sackd` are unavailable.
+
+            Potential Remediation steps:
+
+              - Check service status and logs with `systemctl status sackd` and `journalctl -u sackd -n 200`.
+              - Verify recent changes to `sackd` configuration, dependencies, or packages and roll back if needed.
+              - Restart the service with `systemctl restart sackd` and confirm it remains active.
+              - Check login node resource usage and host health if the service repeatedly stops.
+
+            LABELS={{ $labels }}
+
+      - alert: SlurmLoginNodeSackdServiceHasFailed
+        expr: node_systemd_unit_state{name="sackd.service", state="failed"} != 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: `sackd` service on login node {{ $labels.node }} has failed
+          description: |
+            The Slurm authentication and credential kiosk service, `sackd`, has failed
+            on login node {{ $labels.node }}.
+
+            Possible causes:
+
+              - The `sackd` service crashed due to an unhandled error or malformed configuration.
+              - A dependency such as networking, authentication, or credential handling failed.
+              - Disk, memory, or permission issues prevented the service from running correctly.
+              - A recent update introduced an incompatibility or startup regression.
+
+            Potential remediation steps:
+
+              - Inspect the failure reason with `systemctl status sackd` and `journalctl -u sackd -n 200`.
+              - Review recent configuration or package changes and revert or correct them if necessary.
+              - Restart the service with `systemctl restart sackd` after addressing the root cause.
+              - Investigate host health, permissions, and available resources on the login node.
+
+            LABELS={{ $labels }}

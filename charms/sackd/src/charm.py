@@ -66,7 +66,10 @@ class SackdCharm(ops.CharmBase):
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(
-            self, PROMETHEUS_SCRAPE_INTEGRATION_NAME, jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
+            self,
+            PROMETHEUS_SCRAPE_INTEGRATION_NAME,
+            alert_rules_path="./src/cos/alert_rules/prometheus",
+            jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
         )
 
     @refresh
