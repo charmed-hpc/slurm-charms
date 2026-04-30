@@ -108,6 +108,7 @@ class SlurmdCharm(ops.CharmBase):
         self.metrics_endpoint = MetricsEndpointProvider(
             self,
             PROMETHEUS_SCRAPE_INTEGRATION_NAME,
+            alert_rules_path="./src/cos/alert_rules/prometheus",
             jobs=scrape_jobs,
         )
 

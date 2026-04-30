@@ -21,7 +21,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: `slurmd` service on login node {{ $labels.node }} is inactive
+          summary: `sackd` service on login node {{ $labels.node }} is inactive
           description: |
             The Slurm authentication and credential kiosk service, `sackd`, has been inactive for
             more than 5 minutes on login node {{ $labels.node }}.
