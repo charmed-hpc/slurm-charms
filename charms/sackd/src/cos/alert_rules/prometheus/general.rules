@@ -21,10 +21,10 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: `sackd` service on login node {{ $labels.node }} is inactive
+          summary: `sackd` service on login node {{ $labels.juju_unit_slurm_name }} is inactive
           description: |
             The Slurm authentication and credential kiosk service, `sackd`, has been inactive for
-            more than 5 minutes on login node {{ $labels.node }}.
+            more than 5 minutes on login node {{ $labels.juju_unit_slurm_name }}.
 
             Possible Causes:
 
@@ -48,10 +48,10 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: `sackd` service on login node {{ $labels.node }} has failed
+          summary: `sackd` service on login node {{ $labels.juju_unit_slurm_name }} has failed
           description: |
             The Slurm authentication and credential kiosk service, `sackd`, has failed
-            on login node {{ $labels.node }}.
+            on login node {{ $labels.juju_unit_slurm_name }}.
 
             Possible causes:
 

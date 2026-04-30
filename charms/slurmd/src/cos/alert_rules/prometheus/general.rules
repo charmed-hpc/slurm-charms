@@ -21,10 +21,10 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: `slurmd` service on compute node {{ $labels.node }} is inactive
+          summary: `slurmd` service on compute node {{ $labels.juju_unit_slurm_name }} is inactive
           description: |
             The Slurm compute node service, `slurmd`, has been inactive for more than 5 minutes
-            on compute node {{ $labels.node }}.
+            on compute node {{ $labels.juju_unit_slurm_name }}.
 
             Possible causes:
 
@@ -47,10 +47,10 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: `slurmd` service on compute node {{ $labels.node }} has failed
+          summary: `slurmd` service on compute node {{ $labels.juju_unit_slurm_name }} has failed
           description: |
             The Slurm compute node service, `slurmd`, has failed on compute node
-            {{ $labels.node }}.
+            {{ $labels.juju_unit_slurm_name }}.
 
             Possible causes:
 
