@@ -14,13 +14,13 @@
 
 """Constants used within the `slurm-ops` package."""
 
-# Dynamically create the "node" label using the unit name and ID number.
-# This "node" label matches nodes' registered names in Slurm. This relabeling
+# Dynamically create the "juju_unit_slurm_name" label using the unit name and ID number.
+# This "juju_unit_slurm_name" label matches units' registered names in Slurm. This relabeling
 # makes it easier to match scraped `node-exporter` metrics with Slurm exporter metrics
 # in Prometheus alert rules.
 UNIT_TO_NODE_NAME_RELABEL_CONFIG = {
     "source_labels": ["juju_unit"],
-    "target_label": "node",
+    "target_label": "juju_unit_slurm_name",
     "regex": r"(\S+)\/(\d+)",
     "replacement": "${1}-${2}",
 }
