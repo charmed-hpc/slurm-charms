@@ -1,0 +1,81 @@
+# Copyright 2026 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+groups:
+  - name: SlurmJobs
+    rules:
+      - alert: SlurmJobsHighFailureRate
+        expr: sum(increase(slurm_jobs_failed)) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High rate of failed Slurm jobs
+          description: |
+            More than 10 jobs have failed in the last 15 minutes.
+
+            Possible causes:
+
+              - Application or job-specific errors such as crashes, uncaught exceptions, or incorrect exit codes.
+              - Resource exhaustion on nodes like OOM kills, disk full, or I/O errors causing job termination.
+              - Node hardware or configuration failures such as network, drivers, or environment issues.
+              - Misconfigured job resource requests leading to failures when resources are unavailable.
+              - Dependency or environment changes on compute nodes like missing libraries or broken mounts.
+
+            Potential remediation steps:
+
+              - Inspect failed job details with `sacct -S now-15minutes -o JobID,State,ExitCode,Reason` or
+                review job-specific logs to determine the cause of failure.
+              - Check node health and states with `sinfo` and `scontrol show node` to identify hardware or
+                configuration issues causing job failures.
+              - If failures are due to misconfigured job resources, update job submission
+                scripts to request appropriate resources and resubmit.
+              - For application-specific errors, review application logs and dependency availability on
+                target nodes.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmJobsPendingForTooLong
+        expr: slurm_jobs_pending > 10
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: Multiple jobs have been pending for more than 1 hour.
+          description: |
+            More than 10 jobs have been pending for longer than 1 hour.
+
+            Possible causes:
+
+              - Insufficient available resources such as memory, CPU, or GPUs to satisfy job requirements.
+              - Jobs requesting rare resources or node features that are not currently available.
+              - Partition or nodes are drained, down, or in maintenance mode.
+              - Large backlog of jobs or low-priority submissions delaying scheduling.
+              - Job holds or unmet job dependencies preventing dispatch.
+              - Scheduler or database performance issues impacting scheduling throughput.
+
+            Potential remediation steps:
+
+              - Inspect pending jobs with `squeue -t PD -o "%all"` or `squeue -p <partition>` to see reasons
+                for pending state (e.g., Resources, Priority, Dependency).
+              - Check if resource requests (memory, CPUs, GPUs) exceed available capacity and consider
+                directing users to reduce requests or submit jobs to other partitions.
+              - Review partition and node state with `sinfo` to ensure there are sufficient available nodes.
+              - If many jobs are low priority, consider adjusting job priorities or using backfill/scheduling
+                policies to improve throughput.
+              - Investigate for scheduler or database issues (check `slurmctld` and `slurmdbd` logs) that
+                could prevent job scheduling.
+
+            LABELS = {{ $labels }}
+

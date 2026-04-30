@@ -1,0 +1,166 @@
+# Copyright 2026 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+groups:
+  - name: SlurmScheduler
+    rules:
+      - alert: SlurmTooManyFailedDbdMessages
+        expr: max_over_time(slurm_slurmdbd_queue_size[1m]) > 5000
+        for: 1s
+        labels:
+          severity: critical
+        annotations:
+          summary: Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} cannot reach the Slurm database
+          description: |
+            The maximum amount of pending messages from the Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }}
+            to the Slurm database exceeded 5000 in the past minute. This may indicate that the Slurm controller
+            cannot contact the Slurm database service `slurmdbd` or its backing database.
+
+            Possible causes:
+
+              - `slurmdbd` service is down, unresponsive, or overloaded.
+              - Backing MySQL database is down, experiencing high load, or is unreachable.
+              - Network partitioning or firewall rules between `slurmctld` and `slurmdbd`.
+              - Authentication/permission problems between controller and database.
+              - Rapid backlog of controller messages due to a burst of events or faulty workloads.
+
+            Potential remediation steps:
+
+              - Check `slurmdbd` service status on the database host and restart it if necessary.
+                For example, use `systemctl status slurmdbd` and `journalctl -u slurmdbd -n 200`.
+              - Verify the backing database is healthy and reachable. Check database logs, replication status,
+                and connection limits.
+              - Confirm network connectivity and firewall rules between controller(s) and `slurmdbd`.
+              - Inspect `slurmctld` logs for errors related to database communication and authentication.
+              - If backlog persists after services are healthy, consider temporarily pausing job submissions
+                or addressing the source of the message storm.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmNodesDrainingTooLong
+        expr: slurm_nodes_drain > 0
+        for: 3h
+        labels:
+          severity: warning
+        annotations:
+          summary: Compute node(s) have been draining for more than 3 hours
+          description: |
+            Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+            compute node(s) that have been draining for more than 3 hours. This may indicate that
+            the nodes either need to be returned to service, or there are long-running jobs assigned
+            to these nodes that still need to complete.
+
+            Possible causes:
+
+              - Nodes drained for maintenance or operator action and not yet returned to service.
+              - Long-running or stuck jobs preventing the node from leaving the 'drain' state.
+              - Hardware or configuration issues detected that caused automated draining.
+
+            Potential remediation steps:
+
+              - Inspect reasons for drain with `sinfo --list-reasons` and `scontrol show node <node>`.
+              - Check for running jobs on the drained nodes (`squeue -w <node>`) and determine if they can be
+                cancelled, requeued, or allowed to finish.
+              - If drains were accidental or already resolved, return nodes to service with the existing
+                command: `juju run <slurm-controller>/leader set-node-state nodes=<draining-nodes> state=idle`.
+              - Investigate node health (system logs, `journalctl -u slurmd`, `dmesg`) and address hardware
+                or configuration issues before returning the node to service.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmNodesFailing
+        expr: slurm_nodes_fail > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Compute node(s) are failing or have failed
+          description: |
+            Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+            compute node(s) reporting as 'FAIL' for more than 5 minutes. Nodes enter the FAIL state
+            when Slurm detects that they are expected to fail soon due to hardware or configuration issues.
+            These nodes will be drained and removed from the scheduling pool to prevent job failures.
+            Immediate investigation is recommended to identify and resolve the underlying cause.
+
+            Possible causes:
+
+              - Hardware failures like memory errors, disk issues, or NIC problems detected by the node.
+              - System software faults or kernel panics causing nodes to report failure.
+              - Filesystem or storage errors causing jobs to fail or nodes to be marked unhealthy.
+
+            Potential remediation steps:
+
+              - Inspect node-specific details with `scontrol show node <node>` and `sinfo --list-reasons`.
+              - Review system logs on the node (`journalctl -u slurmd`, `dmesg`, `/var/log/syslog`) for hardware
+                or kernel errors.
+              - Run hardware diagnostics, remediate faulty components, or replace affected nodes.
+              - After addressing underlying issues, return nodes to service if appropriate.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmNodesNotResponding
+        expr: slurm_nodes_noresp > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Compute node(s) are not responding
+          description: |
+            {{ $value }} compute node(s) are not responding to communication attempts from
+            the Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} for
+            more than 5 minutes.
+
+            Possible causes:
+
+              - The `slurmd` service has crashed or is not running on the affected node(s).
+              - Network issues (routing, firewall, or switch problems) preventing communication.
+              - Resource saturation on the node like high load or memory pressure causing the daemon to be
+                unresponsive.
+
+            Potential remediation steps:
+
+              - Check `slurmd` status on affected nodes (`systemctl status slurmd` and `journalctl -u slurmd`).
+              - Test basic network connectivity (ping, ssh) between controller and nodes and verify firewall rules.
+              - Review node load and resource usage (`top`, `free`, `iostat`) and resolve resource exhaustion.
+              - If `slurmd` is crashed, try restarting the service and investigate underlying causes.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmNodesInUnknownState
+        expr: slurm_nodes_unknown > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Compute node(s) state is unknown
+          description: |
+            Slurm controller {{ $labels.juju_model }}:{{ $labels.juju_unit }} has {{ $value }}
+            node(s) reporting as 'UNKNOWN' for more than 5 minutes. Nodes in this state have
+            not yet reported their status to the Slurm controller. This may indicate a
+            communication issue between the node and the Slurm controller's `slurmctld` service.
+
+            Possible causes:
+
+              - `slurmd` not running or failing to register with `slurmctld`.
+              - Network or connectivity issues preventing status updates.
+              - Misconfiguration of node hostnames or DNS causing controller to be unable to resolve nodes.
+
+            Potential remediation steps:
+
+              - Verify `slurmd` is running on the affected nodes and check its logs (`journalctl -u slurmd`).
+              - Confirm network connectivity and name resolution between controller and nodes.
+              - Inspect node configuration and ensure node is correctly registered with `slurmctld`.
+              - Restart `slurmd` on affected nodes if necessary and monitor for recovery.
+
+            LABELS = {{ $labels }}

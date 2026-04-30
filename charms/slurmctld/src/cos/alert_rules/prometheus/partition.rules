@@ -1,0 +1,102 @@
+# Copyright 2026 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+groups:
+  - name: SlurmPartition
+    rules:
+      - alert: SlurmPartitionNearingFull
+        expr: slurm_partition_nodes_idle / slurm_partition_nodes < 0.1 and slurm_partition_nodes > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Partition is nearly full
+          description: |
+            Partition '{{ $labels.partition }}' has less than 10% of its nodes idle.
+
+            Users submitting jobs to this partition may experience longer queue times while
+            jobs wait for nodes to become available.
+
+            Possible causes:
+
+              - High cluster utilization due to many concurrent user jobs or a burst of submissions.
+              - Several nodes are down, drained, or in maintenance, reducing available capacity.
+              - Jobs requesting excessive node counts or entire-node allocations.
+
+            Potential remediation steps:
+
+              - Review node and partition status with `sinfo -p {{ $labels.partition }}` to identify
+                down or drained nodes.
+              - Encourage users to reduce requested node counts or use smaller partitions where possible.
+              - Consider adding temporary capacity or returning drained nodes to service after verifying health.
+              - Use scheduling policies or backfill to improve utilization and reduce perceived queue times.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmPartitionMaxMemoryLimit
+        expr: slurm_partition_nodes_mem_alloc / slurm_partition_nodes_mem_avail > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Partition memory is 90% allocated or more
+          description: |
+            Partition '{{ $labels.partition }}' has allocated more than 90% of its available memory.
+
+            Users submitting jobs to this partition may experience longer queue times while
+            jobs wait for memory to become available.
+
+            Possible causes:
+
+              - Memory-intensive jobs consuming most node memory (large in-memory workloads).
+              - Jobs with memory leaks or runaway memory usage.
+              - System or daemon processes consuming unexpected amounts of memory on nodes.
+
+            Potential remediation steps:
+
+              - Inspect node memory usage with `ssh <node> free -h` or `top`/`htop` to identify processes
+                consuming large memory.
+              - Encourage users to reduce job memory requests or adjust application memory usage.
+              - Reboot or restart services on nodes exhibiting runaway memory usage after investigation.
+              - Consider adding nodes or increasing memory capacity for this partition if sustained.
+
+            LABELS = {{ $labels }}
+
+      - alert: SlurmPartitionMaxCPULimit
+        expr: slurm_partition_nodes_cpus_alloc / slurm_partition_cpus > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Partition CPUs are 90% allocated or more
+          description: |
+            Partition '{{ $labels.partition }}' has allocated more than 90% of its available CPU capacity.
+
+            Users submitting jobs to this partition may experience longer queue times while
+            jobs wait for CPU resources to become available.
+
+            Possible causes:
+
+              - CPU-bound workloads consuming most CPU resources across the partition.
+              - Jobs requesting more CPUs than necessary or wrong task/cpu configuration.
+              - Background or system processes consuming CPU on one or more nodes.
+
+            Potential remediation steps:
+
+              - Inspect node CPU usage with `ssh <node> top -b -n1` or `mpstat` to identify hot processes.
+              - Encourage users to reduce requested CPU counts or adjust their parallelism settings.
+              - Check for misconfigured jobs or lingering system processes and restart services if needed.
+              - Add compute capacity to the partition or rebalance workload across other partitions.
+
+            LABELS = {{ $labels }}
