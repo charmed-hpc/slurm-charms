@@ -1,0 +1,73 @@
+# Copyright 2026 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+groups:
+  - name: SlurmComputeNodeNvidiaGPU
+    rules:
+      - alert: SlurmComputeNodeNvidiaGPUIsOverheating
+        expr: DCGM_FI_DEV_GPU_TEMP > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: GPU {{ $labels.gpu }} is overheating on compute node {{ $labels.node }}
+          description: |
+            GPU {{ $labels.gpu }} on compute node {{ $labels.node }} has exceeded 90°C.
+            The current temperature is {{ $value }}°C.
+
+            Possible causes:
+
+              - Restricted airflow, blocked vents, or a failed cooling fan in the server.
+              - High ambient temperature or excessive workload on the GPU.
+              - GPU heatsink, thermal paste, or chassis cooling degradation.
+              - A host-level issue causing sustained high utilization or thermal throttling.
+
+            Potential remediation steps:
+
+              - Check node cooling and airflow, including fans, vents, and rack temperature.
+              - Reduce GPU workload or pause jobs on the affected node while it cools down.
+              - Inspect system and GPU logs for thermal warnings and hardware faults.
+              - If temperatures remain high, drain the node and investigate the hardware before returning it to service.
+
+            LABELS={{ $labels }}
+
+      - alert: SlurmComputeNodeGPUXIDErrorsDetected
+        expr: rate(DCGM_FI_DEV_XID_ERRORS[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Critical XID errors detected on GPU {{ $labels.gpu }} on compute node {{ $labels.node }}
+          description: |
+            GPU {{ $labels.gpu }} on compute node {{ $labels.node }} is reporting critical XID errors.
+            This may lead to users seeing application crashes or data corruption.
+
+            Possible causes:
+
+              - A GPU driver reset, kernel fault, or CUDA runtime failure.
+              - Failing or unstable GPU hardware causing XID error reports.
+              - PCIe bus issues, power instability, or firmware problems.
+              - Application bugs or workloads that trigger driver-level errors.
+
+            Potential remediation steps:
+
+              - Check `dmesg`, `/var/log/syslog`, and NVIDIA DCGM logs for the XID code and context.
+              - Verify driver, firmware, and CUDA stack versions are compatible and up to date.
+              - Drain the node if errors persist, then restart the GPU driver or reboot the host as appropriate.
+              - Run vendor diagnostics or replace the GPU if the hardware continues to report XID errors.
+
+            You can consult XID error catalogue to obtain further context about specific XID error codes:
+            https://docs.nvidia.com/deploy/xid-errors/analyzing-xid-catalog.html
+
+            LABELS={{ $labels }}
