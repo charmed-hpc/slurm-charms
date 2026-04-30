@@ -21,9 +21,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: GPU {{ $labels.gpu }} is overheating on compute node {{ $labels.node }}
+          summary: GPU {{ $labels.gpu }} is overheating on compute node {{ $labels.juju_unit_slurm_name }}
           description: |
-            GPU {{ $labels.gpu }} on compute node {{ $labels.node }} has exceeded 90°C.
+            GPU {{ $labels.gpu }} on compute node {{ $labels.juju_unit_slurm_name }} has exceeded 90°C.
             The current temperature is {{ $value }}°C.
 
             Possible causes:
@@ -48,9 +48,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: XID errors detected on GPU {{ $labels.gpu }} on compute node {{ $labels.node }}
+          summary: XID errors detected on GPU {{ $labels.gpu }} on compute node {{ $labels.juju_unit_slurm_name }}
           description: |
-            GPU {{ $labels.gpu }} on compute node {{ $labels.node }} is reporting critical XID errors.
+            GPU {{ $labels.gpu }} on compute node {{ $labels.juju_unit_slurm_name }} is reporting critical XID errors.
             This may lead to users seeing application crashes or data corruption.
 
             XID error number: {{ value }}
