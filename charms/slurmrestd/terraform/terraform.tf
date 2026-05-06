@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "application" {
-  description = "The deployed slurmrestd application resource."
-  value       = juju_application.slurmrestd
-}
-
-output "provides" {
-  description = "Map of provides endpoint names."
-  value = {
-    slurmctld = "slurmctld"
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    juju = {
+      source  = "juju/juju"
+      version = "~> 1.0"
+    }
   }
 }
