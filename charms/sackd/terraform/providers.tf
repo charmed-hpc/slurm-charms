@@ -1,4 +1,4 @@
-# Copyright 2024-2026 Canonical Ltd.
+# Copyright 026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,15 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "application" {
-  description = "The deployed sackd application resource."
-  value       = juju_application.sackd
-}
-
-output "provides" {
-  description = "Map of provides endpoint names."
-  value = {
-    metrics_endpoint = "metrics-endpoint"
-    slurmctld        = "slurmctld"
-  }
-}
+provider "juju" {}
