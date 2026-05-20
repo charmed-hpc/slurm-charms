@@ -25,7 +25,6 @@ dependencies = [
     "pydantic ~= 2.0",
     "rpds-py ~= 0.23.1",
     "cosl ~= 1.0",
-    "hpc-libs[all]",
     "charmed-hpc-libs[all] >= 0.1.0",
     "slurm-ops",
     "charmed-slurm-slurmctld-interface",
@@ -85,7 +84,6 @@ charmed-slurm-slurmd-interface = { workspace = true }
 charmed-slurm-slurmdbd-interface = { workspace = true }
 charmed-slurm-slurmrestd-interface = { workspace = true }
 ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
-hpc-libs = { git = "https://github.com/charmed-hpc/hpc-libs", rev = "9fba44f1729eba44be5577f679e5c03f588bcfff" }
 
 [tool.uv]
 dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
