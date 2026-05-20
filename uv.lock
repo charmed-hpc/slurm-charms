@@ -429,19 +429,6 @@ wheels = [
 ]
 
 [[package]]
-name = "hpc-libs"
-version = "0.1.2"
-source = { git = "https://github.com/charmed-hpc/hpc-libs?rev=9fba44f1729eba44be5577f679e5c03f588bcfff#9fba44f1729eba44be5577f679e5c03f588bcfff" }
-
-[package.optional-dependencies]
-all = [
-    { name = "ops" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "slurmutils" },
-]
-
-[[package]]
 name = "idna"
 version = "3.15"
 source = { registry = "https://pypi.org/simple" }
