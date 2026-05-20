@@ -21,7 +21,7 @@ which provide some useful commands that will help you while hacking on `slurm-ch
 
 ```shell
 # Create a development environment
-just env
+just setup
 
 # Upgrade uv.lock with the latest dependencies
 just upgrade
@@ -62,26 +62,30 @@ required tests. You can run the required tests locally using `just`:
 
 ```shell
 # Apply formatting standards to code
-just repo fmt
+just fmt
 
 # Check code against coding style standards
-just repo lint
+just lint
 
 # Run static type checks
-just repo typecheck
+just typecheck
+
+# Run formatting, linting, and type checks sequentially
+just check
 
 # Run unit tests
-just repo unit
+just unit
 
 # Run minimally required integration test suite (matches CI)
-just repo integration
+just integration
 
 # [Recommended] Run full integration tests suite
-just repo integration -- --run-high-availability
+just integration -- --run-high-availability
 ```
 
-Note: CI will check only `just repo integration`. However, we strongly recommend running
-`just repo integration -- --run-high-availability` locally before submitting, as the full suite
+Note: CI enforces the required checks above and uses `just integration` for the
+baseline integration test suite. However, we strongly recommend running
+`just integration -- --run-high-availability` locally before submitting, as the full suite
 includes additional coverage to catch more complex cases relating to charm scaling.
 
 ## Maintenance information
