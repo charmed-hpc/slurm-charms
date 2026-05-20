@@ -32,95 +32,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  inclusive-naming-check:
-    name: Inclusive naming check
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Run tests
-        uses: get-woke/woke-action@v0
-        with:
-          fail-on-error: true
-
-  commitlint:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-      - name: Install commitlint
-        run: npm install -D @commitlint/cli @commitlint/config-conventional
-      - name: Validate PR commits with commitlint
-        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install `just`
-        run: sudo snap install just --classic
-      - name: Install `uv`
-        run: sudo snap install astral-uv --classic
-      - name: Install Charmcraft
-        run: sudo snap install charmcraft --classic --channel latest/stable
-      - name: Run linters
-        run: just repo lint
+  ci:
+    uses: charmed-hpc/.github/.github/workflows/charmed-hpc-ci.yaml@main
+    with:
+      run-test: false
+      setup-commands: &setup_cmds |
+        sudo snap install astral-uv --classic --channel latest/stable
+        sudo snap install charmcraft --classic --channel latest/stable
 
   unit-test:
     name: Unit tests
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install `just`
-        run: sudo snap install just --classic
-      - name: Install `uv`
-        run: sudo snap install astral-uv --classic
-      - name: Install Charmcraft
-        run: sudo snap install charmcraft --classic --channel latest/stable
-      - name: Run unit tests
-        run: just repo unit
-
-  type-check:
-    name: Static type checking
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install `just`
-        run: sudo snap install just --classic
-      - name: Install `uv`
-        run: sudo snap install astral-uv --classic
-      - name: Install Charmcraft
-        run: sudo snap install charmcraft --classic --channel latest/stable
-      - name: Run tests
-        run: just repo typecheck
+      - uses: actions/checkout@v4
+      - uses: charmed-hpc/.github/.github/actions/setup-just@main
+      - run: *setup_cmds
+      - run: just unit
 
   integration-test:
+    name: Integration tests (LXD) | ${{ matrix.bases }}
+    needs: [ci, unit-test]
     strategy:
       fail-fast: true
       matrix:
-        bases:
-          - ubuntu@24.04
-    name: Integration tests (LXD) | ${{ matrix.bases }}
+        bases: [ubuntu@24.04]
     # xlarge runner used for nightly and HA-enabled tests. Standard ubuntu runner otherwise
     runs-on: ${{ (github.event_name == 'schedule' || inputs.enable_ha) && 'self-hosted-linux-amd64-noble-xlarge' || 'ubuntu-24.04' }}
-    needs:
-      - inclusive-naming-check
-      - lint
-      - unit-test
-      - type-check
     steps:
       - name: Remove unnecessary files
         run: |
@@ -140,14 +77,10 @@ jobs:
           # Remove unnecessary runner tools
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install `just`
-        run: sudo snap install just --classic
-      - name: Install `uv`
-        run: sudo snap install astral-uv --classic
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
+      - uses: actions/checkout@v4
+      - uses: charmed-hpc/.github/.github/actions/setup-just@main
+      - run: *setup_cmds
+      - uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
           juju-channel: 3.6/stable
@@ -158,5 +91,4 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_ha }}" == "true" ]]; then
             ARGS+=("--run-high-availability")
           fi
-
-          just repo integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}
+          just integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}

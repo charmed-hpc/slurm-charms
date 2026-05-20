@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,11 +23,50 @@ uv_run := "uv run --frozen --extra dev"
 default:
     @just help
 
+# Prepare the local environment
+setup: env
+
+# Clean project directory
+clean: lock
+    {{uv_run}} repository.py clean
+
+# Apply static checks
+check: fmt lint typecheck
+
+# Run tests for specified targets, or all tests if none specified
+test *targets:
+    #!/usr/bin/env bash
+    if [ "{{targets}}" = "" ]; then
+        just test-all
+        exit 0
+    fi
+
+    for target in {{targets}}; do
+        if just --show $target > /dev/null 2>&1; then
+            echo "Running $target tests..."
+            just $target
+        else
+            echo "Error: test target '$target' not found." >&2
+            exit 1
+        fi
+    done
+
+# Run all test suites
+test-all: unit integration
+
+# Run unit tests
+unit *args: lock
+    {{uv_run}} repository.py unit {{args}}
+
+# Run integration tests
+integration *args: lock
+    {{uv_run}} repository.py integration {{args}}
+
 # Regenerate uv.lock
 lock:
     uv lock
 
-# Create a development environment
+# Create a uv development environment
 env: lock
     uv sync --extra dev
 
@@ -35,6 +74,17 @@ env: lock
 upgrade:
     uv lock --upgrade
 
+# Apply formatting standards
+fmt: lock
+    {{uv_run}} repository.py fmt
+
+# Check files against style standards
+lint: lock
+    {{uv_run}} repository.py lint
+
+# Perform type checking
+typecheck: lock
+    {{uv_run}} repository.py typecheck
 
 # Run action on monorepo. For a full list of actions, run `just repo`
 repo *args: lock
