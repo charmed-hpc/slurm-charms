@@ -42,6 +42,12 @@ variable "constraints" {
   default     = null
 }
 
+variable "machines" {
+  description = "List of machine IDs to place units on."
+  type        = set(string)
+  default     = []
+}
+
 variable "model_uuid" {
   description = "UUID of the Juju model to deploy the charm into."
   type        = string

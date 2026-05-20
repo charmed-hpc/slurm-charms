@@ -23,6 +23,7 @@ for the Juju Terraform provider.
 | `channel`     | string      | Channel of the charm to deploy from.                                     | `"latest/edge"`  |          |
 | `config`      | map(string) | Map of charm configuration options.                                      | `{}`             |          |
 | `constraints` | string      | Constraints to apply to the deployed application.                        | `null`           |          |
+| `machines`    | set(string) | List of machine IDs to place units on.                                   | `[]`             |          |
 | `model_uuid`  | string      | UUID of the Juju model to deploy the charm into.                         |                  |    Y     |
 | `revision`    | number      | Revision of the charm to deploy. Null deploys the latest on the channel. | `null`           |          |
 | `units`       | number      | Number of application units to deploy.                                   | `1`              |          |
