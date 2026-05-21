@@ -48,7 +48,7 @@ The `requires` output exposes the following endpoint names:
 | Key           | Endpoint name  |
 |---------------|----------------|
 | `influxdb`    | `influxdb`     |
-| `login_node`  | `login-node`   |
+| `sackd`       | `sackd`        |
 | `oci_runtime` | `oci-runtime`  |
 | `slurmd`      | `slurmd`       |
 | `slurmdbd`    | `slurmdbd`     |

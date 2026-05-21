@@ -40,7 +40,7 @@ requires:
     interface: slurmdbd
   slurmrestd:
     interface: slurmrestd
-  login-node:
+  sackd:
     interface: sackd
   influxdb:
     interface: influxdb-api

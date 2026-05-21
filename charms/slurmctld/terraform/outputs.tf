@@ -29,7 +29,7 @@ output "requires" {
   description = "Map of requires endpoint names."
   value = {
     influxdb    = "influxdb"
-    login_node  = "login-node"
+    sackd       = "sackd"
     oci_runtime = "oci-runtime"
     slurmd      = "slurmd"
     slurmdbd    = "slurmdbd"
