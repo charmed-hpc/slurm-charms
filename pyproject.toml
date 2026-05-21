@@ -42,7 +42,6 @@ dev = [
     "cryptography~=46.0.5",
     "distro == 1.9.0",
     "python-dotenv~=1.2.2",
-    "dbus-fast >= 1.90.2",
     "pyfakefs == 5.10.1",
     "coverage[toml]",
 
