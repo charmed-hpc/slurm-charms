@@ -25,5 +25,6 @@ resource "juju_application" "slurmd" {
 
   config      = var.config
   constraints = var.constraints
+  machines    = var.machines
   units       = var.units
 }
