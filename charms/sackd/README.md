@@ -24,7 +24,7 @@ $ juju deploy slurmctld --channel edge
 $ juju deploy slurmd --channel edge
 $ juju deploy sackd --channel edge
 $ juju integrate slurmctld:slurmd slurmd:slurmctld
-$ juju integrate slurmctld:login-node sackd:slurmctld
+$ juju integrate slurmctld:sackd sackd:slurmctld
 ```
 
 ## Project & Community

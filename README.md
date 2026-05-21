@@ -29,7 +29,7 @@ juju deploy slurmrestd --channel edge
 juju deploy mysql --channel 8.0/stable
 juju deploy mysql-router slurmdbd-mysql-router --channel dpe/edge
 
-juju integrate sackd:login-node slurmctld:login-node
+juju integrate sackd:slurmctld slurmctld:sackd
 juju integrate slurmctld:slurmd slurmd:slurmctld
 juju integrate slurmctld:slurmdbd slurmdbd:slurmctld
 juju integrate slurmctld:slurmrestd slurmrestd:slurmctld
