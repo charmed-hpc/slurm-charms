@@ -45,15 +45,15 @@ The `provides` output exposes the following endpoint names:
 
 The `requires` output exposes the following endpoint names:
 
-| Key           | Endpoint name  |
-|---------------|----------------|
-| `influxdb`    | `influxdb`     |
-| `login_node`  | `login-node`   |
-| `oci_runtime` | `oci-runtime`  |
-| `slurmd`      | `slurmd`       |
-| `slurmdbd`    | `slurmdbd`     |
-| `slurmrestd`  | `slurmrestd`   |
-| `smtp`        | `smtp`         |
+| Key           | Endpoint name |
+|---------------|---------------|
+| `influxdb`    | `influxdb`    |
+| `sackd`       | `sackd`       |
+| `oci_runtime` | `oci-runtime` |
+| `slurmd`      | `slurmd`      |
+| `slurmdbd`    | `slurmdbd`    |
+| `slurmrestd`  | `slurmrestd`  |
+| `smtp`        | `smtp`        |
 
 ## Usage
 
