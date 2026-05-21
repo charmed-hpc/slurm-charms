@@ -39,8 +39,6 @@ dependencies = [
 dev = [
     # Tests
     "ops[testing] ~= 3.0",
-    "cryptography~=46.0.5",
-    "distro == 1.9.0",
     "python-dotenv~=1.2.2",
     "pyfakefs == 5.10.1",
     "coverage[toml]",
