@@ -8,43 +8,66 @@ for the Juju Terraform provider.
 
 ## Requirements
 
-This module requires a Juju model to be available. Refer to the [usage](#usage)
-section for more details.
+- Terraform >= 1.0
+- Juju Terraform provider >= 1.0.0, < 2.0.0
+- An existing Juju model
 
 ## API
 
 ### Inputs
 
-This module offers the following configurable units:
-
-| Name          | Type        | Description                                              | Default      | Required |
-|---------------|-------------|----------------------------------------------------------|--------------|:--------:|
-| `app_name`    | string      | Application name                                         | slurmctld    |          |
-| `base`        | string      | Base version to use for deployed machine                 | ubuntu@24.04 |          |
-| `channel`     | string      | Channel that charm is deployed from                      | latest/edge  |          |
-| `config`      | map(string) | Map of charm configuration options to pass at deployment | {}           |          |
-| `constraints` | string      | Constraints for the charm deployment                     | ""           |          |
-| `model_name`  | string      | Name of the model to deploy the charm to                 |              |    Y     |
-| `revision`    | number      | Revision number of charm to deploy                       | null         |          |
-| `units`       | number      | Number of units to deploy                                | 1            |          |
+| Name          | Type        | Description                                                              | Default           | Required |
+|---------------|-------------|--------------------------------------------------------------------------|-------------------|:--------:|
+| `app_name`    | string      | Name of the Juju application deployed from this charm.                   | `"slurmctld"`     |          |
+| `base`        | string      | Base operating system to use for the deployed application.               | `"ubuntu@24.04"`  |          |
+| `channel`     | string      | Channel of the charm to deploy from.                                     | `"latest/edge"`   |          |
+| `config`      | map(string) | Map of charm configuration options.                                      | `{}`              |          |
+| `constraints` | string      | Constraints to apply to the deployed application.                        | `null`            |          |
+| `machines`    | set(string) | List of machine IDs to place units on.                                   | `[]`              |          |
+| `model_uuid`  | string      | UUID of the Juju model to deploy the charm into.                         |                   |    Y     |
+| `revision`    | number      | Revision of the charm to deploy. Null deploys the latest on the channel. | `null`            |          |
+| `units`       | number      | Number of application units to deploy.                                   | `1`               |          |
 
 ### Outputs
 
-After applying, the module exports the following outputs:
+| Name          | Description                              |
+|---------------|------------------------------------------|
+| `application` | The deployed `juju_application` resource |
+| `provides`    | Map of `provides` endpoint names         |
+| `requires`    | Map of `requires` endpoint names         |
 
-| Name       | Description                 |
-|------------|-----------------------------|
-| `app_name` | Application name            |
-| `provides` | Map of `provides` endpoints |
-| `requires` | Map of `requires` endpoints |
+The `provides` output exposes the following endpoint names:
+
+| Key         | Endpoint name |
+|-------------|---------------|
+| `cos_agent` | `cos-agent`   |
+| `mount`     | `mount`       |
+
+The `requires` output exposes the following endpoint names:
+
+| Key           | Endpoint name  |
+|---------------|----------------|
+| `influxdb`    | `influxdb`     |
+| `login_node`  | `login-node`   |
+| `oci_runtime` | `oci-runtime`  |
+| `slurmd`      | `slurmd`       |
+| `slurmdbd`    | `slurmdbd`     |
+| `slurmrestd`  | `slurmrestd`   |
+| `smtp`        | `smtp`         |
 
 ## Usage
 
-Users should ensure that Terraform is aware of the Juju model dependency of the
-charm module.
+Ensure that Terraform is aware of the Juju model dependency of the charm module.
 
-To deploy this module with its required dependency, you can run
-the following command:
+```hcl
+module "slurmctld" {
+  source     = "git::https://github.com/canonical/slurm-charms//charms/slurmctld/terraform"
+  model_uuid = juju_model.my_model.uuid
+}
+```
+
+To deploy this module with its required dependency, you can run the following
+command:
 
 ```shell
 terraform apply -var="model_uuid=<MODEL_UUID>" -auto-approve

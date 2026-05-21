@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "application" {
-  description = "The deployed sackd application resource."
-  value       = juju_application.sackd
-}
-
-output "provides" {
-  description = "Map of provides endpoint names."
-  value = {
-    metrics_endpoint = "metrics-endpoint"
-    slurmctld        = "slurmctld"
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    juju = {
+      source  = "juju/juju"
+      version = "~> 1.0"
+    }
   }
 }

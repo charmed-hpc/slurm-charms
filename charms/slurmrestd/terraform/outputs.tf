@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "app_name" {
-  value = juju_application.slurmrestd.name
+output "application" {
+  description = "The deployed slurmrestd application resource."
+  value       = juju_application.slurmrestd
 }
 
 output "provides" {
+  description = "Map of provides endpoint names."
   value = {
     slurmctld = "slurmctld"
   }
