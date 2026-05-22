@@ -16,32 +16,39 @@
 name = "slurm-charms"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = [
-    "ops ~= 3.0",
-    "slurmutils<2.0.0,>=1.1.1",
-    "influxdb == 5.3.2",
-    "nvidia-ml-py == 12.560.30",
-    "psutil == 7.2.1",
-    "pydantic ~= 2.0",
-    "rpds-py ~= 0.23.1",
-    "cosl ~= 1.0",
+
+[project.optional-dependencies]
+dev = [
+    # repository.py
+    "rtoml ~= 0.0",
+
+    # Development
     "charmed-hpc-libs[all] >= 0.1.0",
-    "slurm-ops",
+    "charmlibs-apt ~= 1.0",
     "charmed-slurm-slurmctld-interface",
     "charmed-slurm-oci-runtime-interface",
     "charmed-slurm-sackd-interface",
     "charmed-slurm-slurmd-interface",
     "charmed-slurm-slurmdbd-interface",
     "charmed-slurm-slurmrestd-interface",
-]
+    "cosl ~= 1.0",
+    "cryptography ~= 48.0",
+    "distro ~= 1.0",
+    "influxdb == 5.3.2",
+    "nvidia-ml-py == 12.560.30",
+    "ops ~= 3.0",
+    "psutil ~= 7.0",
+    "pydantic ~= 2.0",
+    "slurm-ops",
+    "slurmutils<2.0.0,>=1.1.1",
 
-[project.optional-dependencies]
-dev = [
     # Tests
+    "charmed-hpc-libs[all] >= 0.1.0",
     "ops[testing] ~= 3.0",
     "python-dotenv~=1.2.2",
     "pyfakefs == 5.10.1",
     "coverage[toml]",
+    "psutil ~= 7.0",
 
     # Integration
     "aiosmtpd == 1.4.6",
@@ -79,10 +86,15 @@ charmed-slurm-sackd-interface = { workspace = true }
 charmed-slurm-slurmd-interface = { workspace = true }
 charmed-slurm-slurmdbd-interface = { workspace = true }
 charmed-slurm-slurmrestd-interface = { workspace = true }
-ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "554b91edfd3699625dbed90f679abb31a897b76e" }
+python-apt = { git = "https://git.launchpad.net/python-apt", rev = "d44043b6df5cb010f3496fc31033c0b6e1f4f021" }
+ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "df01d1c365a9ec82656283fbc360fd420ffcf1e3" }
+
 
 [tool.uv]
-dependency-metadata = [{ name = "ubuntu-drivers-common", version = "0.10.0" }]
+dependency-metadata = [
+    { name = "python-apt", version = "3.1.0" },
+    { name = "ubuntu-drivers-common", version = "0.10.3" }
+]
 
 [tool.repository]
 external-libraries = [
@@ -92,11 +104,6 @@ external-libraries = [
     { lib = "filesystem-client.mount_info", version = "0.1" },
     { lib = "smtp-integrator.smtp", version = "0.19" },
     { lib = "prometheus_k8s.prometheus_scrape", version = "0.58" }
-]
-binary-packages = [
-    "pydantic-core",
-    "rpds-py",
-    "cryptography"
 ]
 
 # Testing tools configuration
@@ -140,6 +147,7 @@ lint.extend-ignore = [
     "D413",
 ]
 lint.ignore = ["E501", "D107"]
+lint.mccabe.max-complexity = 15
 lint.per-file-ignores = { "**/tests/*" = [
     "D100",
     "D101",
@@ -148,6 +156,3 @@ lint.per-file-ignores = { "**/tests/*" = [
     "D104",
 ] }
 extend-exclude = ["__pycache__", "*.egg_info"]
-
-[tool.ruff.lint.mccabe]
-max-complexity = 15

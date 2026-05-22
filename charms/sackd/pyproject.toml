@@ -3,9 +3,9 @@ name = "sackd"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops",
+    "ops ~= 3.0",
     "charmed-hpc-libs[ops] >= 0.1.0",
-    "cosl",
+    "cosl ~= 1.0",
     "charmed-slurm-sackd-interface",
     "slurm-ops"
 ]

@@ -3,12 +3,14 @@ name = "slurmd"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops",
-    "slurmutils",
+    "ops ~= 3.0",
+    "slurmutils<2.0.0,>=1.1.1",
     "ubuntu-drivers-common",
     "charmed-hpc-libs[ops] >= 0.1.0",
     "charmed-slurm-slurmd-interface",
-    "cosl",
+    "cosl ~= 1.0",
+    "pydantic ~= 2.0",
+    "python-apt",
     "slurm-ops",
 ]
 
@@ -16,4 +18,14 @@ dependencies = [
 libraries = [
     "operator-libs-linux.apt",
     "prometheus_k8s.prometheus_scrape"
+]
+
+[tool.uv.sources]
+python-apt = { git = "https://git.launchpad.net/python-apt", rev = "d44043b6df5cb010f3496fc31033c0b6e1f4f021" }
+ubuntu-drivers-common = { git = "https://github.com/canonical/ubuntu-drivers-common", rev = "df01d1c365a9ec82656283fbc360fd420ffcf1e3" }
+
+[tool.uv]
+dependency-metadata = [
+    { name = "python-apt", version = "3.1.0" },
+    { name = "ubuntu-drivers-common", version = "0.10.3" }
 ]
