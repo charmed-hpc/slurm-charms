@@ -1,4 +1,18 @@
-name: Pull Request Backporting using Git Backporting
+# Copyright 2024-2026 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Pull request backporting using git backporting
 
 on:
   pull_request_target:
@@ -13,27 +27,7 @@ permissions:
   pull-requests: write # so it can create pull requests
 
 jobs:
-  backporting:
-    name: "Backporting"
-    # Only react to merged PRs for security reasons.
-    # See https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target.
-    if: >
-      github.event.pull_request.merged
-      && (
-        github.event.action == 'closed'
-          && contains(github.event.pull_request.labels.*.name, 'backport')
-        || (
-          github.event.action == 'labeled'
-          && contains(github.event.label.name, 'backport')
-        )
-      )
-    runs-on: ubuntu-latest
-    steps:
-      - name: Backporting
-        uses: kiegroup/git-backporting@8c412dcb1fe477d5d362fa447e5fb7864d3de271 # main
-        with:
-          target-branch: experimental
-          pull-request: ${{ github.event.pull_request.url }}
-          auth: ${{ secrets.GITHUB_TOKEN }}
-          enable-err-notification: true
-          auto-no-squash: true
+  backport:
+    uses: charmed-hpc/.github/.github/workflows/backport.yaml@main
+    with:
+      branches: '["25.11"]'
