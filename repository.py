@@ -183,22 +183,6 @@ class Repository:
         except KeyError:
             self.external_libraries = []
 
-        try:
-            binary_packages = project["tool"]["repository"]["binary-packages"]
-
-            resolved_binary_packages = {
-                bin_pkg: package["version"]
-                for bin_pkg in binary_packages
-                for package in uv_lock["package"]
-                if package["name"] == bin_pkg
-            }
-        except KeyError:
-            resolved_binary_packages = {}
-        except StopIteration:
-            raise RepositoryError("Could not find package in the lock file")
-        except OSError:
-            raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`")
-
         self.internal_libraries = []
         for charm in CHARMS_PATH.iterdir():
             path = charm / "lib"
@@ -235,7 +219,6 @@ class Repository:
                     path,
                     libraries=self.libraries,
                     packages=self.packages,
-                    binary_packages=resolved_binary_packages,
                     uv_lock=uv_lock,
                 )
             )
@@ -256,7 +239,6 @@ def load_charm(
     *,
     libraries: Collection[CharmLibrary],
     packages: Collection[Package],
-    binary_packages: Mapping[str, str],
     uv_lock: Mapping[str, Any],
 ) -> Charm | None:
     try:
@@ -288,10 +270,6 @@ def load_charm(
             if pkg_dep["name"] not in deps:
                 deps.add(pkg_dep["name"])
                 pending.append(pkg_dep["name"])
-
-    metadata["parts"]["charm"]["charm-binary-python-packages"] = [
-        f"{package}=={version}" for package, version in binary_packages.items() if package in deps
-    ]
 
     libs = []
     try:
@@ -401,32 +379,31 @@ def stage_charm(
             copy(src, dest)
 
     if not dry_run:
-        UV.run_command(
-            [
-                "--quiet",
-                "export",
-                "--package",
-                charm.name,
-                "--frozen",
-                "--no-hashes",
-                "--no-emit-workspace",
-                "--format=requirements-txt",
-                "-o",
-                str(charm.build_path / "requirements.txt"),
-            ]
-        )
+        with open(charm.build_path / "pyproject.toml", "r") as fin:
+            pyproject = rtoml.load(fin)
 
-    if not dry_run:
-        with open(charm.build_path / "requirements.txt", "+a") as f:
-            print("# ===== Local packages =====", file=f)
-            for pkg in charm.packages:
-                filename = f"{pkg.name.replace('-', '_')}-{pkg.version}.tar.gz"
-                src = BUILD_PATH / "dist" / filename
-                dest = charm.build_path / "dist" / filename
-                logger.debug("Copying %s to %s", src, dest)
-                if not dry_run:
-                    copy(src, dest)
-                print(f"./dist/{filename}", file=f)
+        for pkg in charm.packages:
+            filename = f"{pkg.name.replace('-', '_')}-{pkg.version}.tar.gz"
+            src = BUILD_PATH / "dist" / filename
+            dest = charm.build_path / "dist" / filename
+            logger.debug("Copying %s to %s", src, dest)
+            copy(src, dest)
+
+            # Remove any package names from the dependencies fields that conflicts
+            # with local, vendored packages. Replace removed package name with the file path
+            # of the local equivalent package.
+            try:
+                pyproject["project"]["dependencies"].remove(pkg.name)
+            except ValueError:
+                pass
+
+            # Inject local subpackage into charm dependencies.
+            pyproject["project"]["dependencies"].append(
+                f"{pkg.name} @ file:///${{PROJECT_ROOT}}/dist/{filename}"
+            )
+
+        with open(charm.build_path / "pyproject.toml", "wt") as fout:
+            rtoml.dump(pyproject, fout)
 
     logger.info("staged charm %s at %s", charm.path.name, charm.build_path)
 
