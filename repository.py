@@ -11,13 +11,13 @@ import os
 import shutil
 import subprocess
 import sys
-import tomllib
 from collections.abc import Collection, Mapping, MutableSequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Thread
 from typing import Any
 
+import rtoml
 import yaml
 
 ROOT_DIR = Path(__file__).parent.resolve()
@@ -164,14 +164,14 @@ class Repository:
         """Load the monorepo information."""
         UV.run_command(["lock", "--quiet"])
         try:
-            with (ROOT_DIR / PYPROJECT_FILE).open(mode="rb") as f:
-                project = tomllib.load(f)
+            with open(ROOT_DIR / PYPROJECT_FILE, mode="r") as fin:
+                project = rtoml.load(fin)
         except OSError:
             raise RepositoryError(f"Failed to read file `{ROOT_DIR / PYPROJECT_FILE}`")
 
         try:
-            with (ROOT_DIR / LOCK_FILE).open(mode="rb") as f:
-                uv_lock = tomllib.load(f)
+            with open(ROOT_DIR / LOCK_FILE) as fin:
+                uv_lock = rtoml.load(fin)
         except OSError:
             raise RepositoryError("Failed to read uv.lock file")
 
@@ -260,8 +260,8 @@ def load_charm(
     uv_lock: Mapping[str, Any],
 ) -> Charm | None:
     try:
-        with (charm / PYPROJECT_FILE).open(mode="rb") as f:
-            project = tomllib.load(f)
+        with open(charm / PYPROJECT_FILE, mode="r") as fin:
+            project = rtoml.load(fin)
     except NotADirectoryError:
         logger.info("skipping %s because it is not a charm directory", charm)
         return None
@@ -319,8 +319,8 @@ def load_charm(
 
 def load_package(package: Path) -> Package | None:
     try:
-        with (package / PYPROJECT_FILE).open(mode="rb") as f:
-            metadata = tomllib.load(f)
+        with open(package / PYPROJECT_FILE, mode="r") as fin:
+            metadata = rtoml.load(fin)
     except NotADirectoryError:
         logger.info("skipping %s because it is not a package directory", package)
         return None
