@@ -24,13 +24,14 @@ dev = [
 
     # Development
     "charmed-hpc-libs[all] >= 0.1.0",
-    "charmlibs-apt ~= 1.0",
+    "slurm-ops",
     "charmed-slurm-slurmctld-interface",
     "charmed-slurm-oci-runtime-interface",
     "charmed-slurm-sackd-interface",
     "charmed-slurm-slurmd-interface",
     "charmed-slurm-slurmdbd-interface",
     "charmed-slurm-slurmrestd-interface",
+    "charmlibs-apt ~= 1.0",
     "cosl ~= 1.0",
     "cryptography ~= 48.0",
     "distro ~= 1.0",
@@ -98,7 +99,6 @@ dependency-metadata = [
 
 [tool.repository]
 external-libraries = [
-    { lib = "operator-libs-linux.apt", version = "0.16" },
     { lib = "data-platform-libs.data_interfaces", version = "0.41" },
     { lib = "grafana-agent.cos_agent", version = "0.20" },
     { lib = "filesystem-client.mount_info", version = "0.1" },
