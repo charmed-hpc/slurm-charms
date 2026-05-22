@@ -15,6 +15,5 @@ dependencies = [
 [tool.repository]
 libraries = [
     "operator-libs-linux.apt",
-    "operator-libs-linux.systemd",
     "prometheus_k8s.prometheus_scrape"
 ]
