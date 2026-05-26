@@ -27,7 +27,7 @@ PUBLIC_PKGS_PATH = ROOT_DIR / "pkg"
 PRIVATE_PKGS_PATH = ROOT_DIR / "internal"
 PYPROJECT_FILE = "pyproject.toml"
 CHARMCRAFT_FILE = "charmcraft.yaml"
-LOCK_FILE = "uv.lock"
+LOCK_FILE = ROOT_DIR / "uv.lock"
 LIBS_CHARM_PATH = BUILD_PATH / "libs"
 
 
@@ -170,7 +170,7 @@ class Repository:
             raise RepositoryError(f"Failed to read file `{ROOT_DIR / PYPROJECT_FILE}`")
 
         try:
-            with open(ROOT_DIR / LOCK_FILE) as fin:
+            with open(LOCK_FILE) as fin:
                 uv_lock = rtoml.load(fin)
         except OSError:
             raise RepositoryError("Failed to read uv.lock file")
@@ -351,6 +351,10 @@ def stage_charm(
         except OSError:
             raise RepositoryError(f"Failed to write file `{charm.build_path / CHARMCRAFT_FILE}`")
 
+        # Inject uv lockfile into build directories. The lockfile is used by `charmcraft` to determine
+        # the version of charm dependencies to pull in.
+        shutil.copy(LOCK_FILE, charm.build_path)
+
         # Create a version file and pack it into the charm. This is dynamically generated to ensure
         # that the git revision of the charm is always recorded in this version file.
         git_hash = (
@@ -371,14 +375,13 @@ def stage_charm(
         version_file = Path(charm.build_path / "version")
         version_file.write_text(git_hash)
 
-    for lib in charm.libraries:
-        src = LIBS_CHARM_PATH / "lib" / "charms" / lib.path
-        dest = charm.build_path / "lib" / "charms" / lib.path
-        logger.debug("Copying %s to %s", lib, dest)
-        if not dry_run:
-            copy(src, dest)
+        for lib in charm.libraries:
+            src = LIBS_CHARM_PATH / "lib" / "charms" / lib.path
+            dest = charm.build_path / "lib" / "charms" / lib.path
+            logger.debug("Copying %s to %s", lib, dest)
+            if not dry_run:
+                copy(src, dest)
 
-    if not dry_run:
         with open(charm.build_path / "pyproject.toml", "r") as fin:
             pyproject = rtoml.load(fin)
 

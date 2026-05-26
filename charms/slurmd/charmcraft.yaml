@@ -52,8 +52,12 @@ parts:
       - libkmod-dev
       - libpci-dev
       - pkgconf
+    override-build: |
+      # Regenerate lockfile to use vendored subpackages from `slurm-charms`.
+      uv lock
+      craftctl default
     build-environment:
-      - UV_FROZEN: "false"  # Generate charm lockfile at build time.
+      - UV_FROZEN: "false"  # Allow lockfile to be updated in `override-build`.
 
 provides:
   metrics-endpoint:
