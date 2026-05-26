@@ -52,12 +52,16 @@ platforms:
 
 parts:
   charm:
-    build-packages:
-      - git
-    charm-binary-python-packages:
-      - cryptography ~= 44.0.0
-      - rpds-py ~= 0.23.1
-
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+    override-build: |
+      # Regenerate lockfile to use vendored subpackages from `slurm-charms`.
+      uv lock
+      craftctl default
+    build-environment:
+      - UV_FROZEN: "false"  # Allow lockfile to be updated in `override-build`.
 
 config:
   options:

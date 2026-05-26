@@ -3,11 +3,12 @@ name = "slurmdbd"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops",
-    "slurmutils",
+    "ops ~= 3.0",
+    "slurmutils<2.0.0,>=1.1.1",
     "charmed-hpc-libs[ops] >= 0.1.0",
     "charmed-slurm-slurmdbd-interface",
-    "cosl",
+    "cosl ~= 1.0",
+    "pydantic ~= 2.0",
     "slurm-ops"
 ]
 
