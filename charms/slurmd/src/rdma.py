@@ -17,7 +17,7 @@
 import logging
 from pathlib import Path
 
-import charms.operator_libs_linux.v0.apt as apt
+from charmlibs import apt
 
 _logger = logging.getLogger(__name__)
 
