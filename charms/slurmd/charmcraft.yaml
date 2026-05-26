@@ -40,12 +40,24 @@ platforms:
 
 parts:
   charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
     build-packages:
+      # Required to build `python-apt` and `ubuntu-drivers-common`.
       - git
+      - libapt-pkg-dev
       - libdrm-dev
       - libkmod-dev
       - libpci-dev
       - pkgconf
+    override-build: |
+      # Regenerate lockfile to use vendored subpackages from `slurm-charms`.
+      uv lock
+      craftctl default
+    build-environment:
+      - UV_FROZEN: "false"  # Allow lockfile to be updated in `override-build`.
 
 provides:
   metrics-endpoint:

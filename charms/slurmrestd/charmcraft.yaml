@@ -29,8 +29,16 @@ platforms:
 
 parts:
   charm:
-    build-packages:
-      - git
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+    override-build: |
+      # Regenerate lockfile to use vendored subpackages from `slurm-charms`.
+      uv lock
+      craftctl default
+    build-environment:
+      - UV_FROZEN: "false"  # Allow lockfile to be updated in `override-build`.
 
 provides:
   slurmctld:

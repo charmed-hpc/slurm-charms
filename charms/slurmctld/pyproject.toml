@@ -3,10 +3,11 @@ name = "slurmctld"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops",
-    "slurmutils",
-    "influxdb",
-    "psutil",
+    "ops ~= 3.0",
+    "slurmutils<2.0.0,>=1.1.1",
+    "influxdb == 5.3.2",
+    "pydantic ~= 2.0",
+    "psutil ~= 7.0",
     "charmed-hpc-libs[ops] >= 0.1.0",
     "charmed-slurm-slurmctld-interface",
     "charmed-slurm-oci-runtime-interface",
@@ -15,7 +16,7 @@ dependencies = [
     "charmed-slurm-slurmdbd-interface",
     "charmed-slurm-slurmrestd-interface",
     "charmlibs-apt",
-    "cosl",
+    "cosl ~= 1.0",
     "slurm-ops",
 ]
 
