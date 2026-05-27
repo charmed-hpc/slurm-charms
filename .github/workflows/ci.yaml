@@ -22,8 +22,8 @@ on:
         default: false
   pull_request:
     branches:
-      - main
-      - experimental
+      - "main"
+      - "track/25.11"
   schedule:
     - cron: '0 3 * * *' # 03:00 UTC nightly
 
