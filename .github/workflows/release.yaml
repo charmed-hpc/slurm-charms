@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Release to latest/edge
+name: Release to Charmhub
 
 on:
   push:
     branches:
-      - main
+      - "main"  # latest/edge
+      - "track/*"  # <track>/edge
 
 jobs:
   ci-tests:
@@ -25,8 +26,8 @@ jobs:
     with:
       enable_ha: true
 
-  release-to-charmhub:
-    name: Release to Charmhub
+  release-charm:
+    name: Release charm
     needs:
       - ci-tests
     runs-on: ubuntu-24.04
