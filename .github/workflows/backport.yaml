@@ -30,4 +30,4 @@ jobs:
   backport:
     uses: charmed-hpc/.github/.github/workflows/backport.yaml@main
     with:
-      branches: '["25.11"]'
+      branches: '["track/25.11"]'
