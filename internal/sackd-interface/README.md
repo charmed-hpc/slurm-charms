@@ -6,7 +6,7 @@ This package provides the integration interface implementation for the `sackd` i
 It enables charmed applications providing the `sackd` service (Slurm auth and cred kiosk daemon)
 to exchange Slurm management data with charmed applications that require the `sackd` service.
 
-The `sackd` requirer provides controller data (authentication secret and controller addresses) to
+The `sackd` requirer supplies controller data (authentication secret and controller addresses) to
 the `sackd` provider through the integration databag. The `sackd` provider validates that required fields
 are present before considering the integration ready.
 
@@ -49,11 +49,7 @@ actual key material.
 - Is expected to emit `SackdConnectedEvent` when a new `sackd` application is connected.
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `controllers` fields populated.
 
-## Integration data
-
-[[Source]](src/charmed_slurm_sackd_interface/__init__.py)
-
-### Example
+## Example integration data
 
 ```yaml
 provider:
@@ -66,7 +62,7 @@ requirer:
   unit: {}
 ```
 
-## Examples
+## Example usages
 
 ### Provider charm
 

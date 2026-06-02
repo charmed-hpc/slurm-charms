@@ -51,11 +51,7 @@ configuration - an `OCIConfig` structure from `slurmutils` - in its application 
 - Is expected to call `get_oci_runtime_data` to retrieve `OCIRuntimeData`.
 - Is expected to only process events as the application leader.
 
-## Integration data
-
-[[Source]](src/charmed_slurm_oci_runtime_interface/__init__.py)
-
-### Example
+## Example integration data
 
 ```yaml
 provider:
@@ -70,7 +66,7 @@ requirer:
   unit: {}
 ```
 
-## Examples
+## Example usages
 
 ### Provider charm
 

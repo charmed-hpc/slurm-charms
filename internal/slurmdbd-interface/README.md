@@ -3,10 +3,11 @@
 ## Usage
 
 This package provides the integration interface implementation for the `slurmdbd` interface.
-It enables `slurmdbd` (Slurm database daemon) applications to exchange data with the `slurmctld`
-(Slurm central management daemon) controller, such as authentication, JWT secrets, and hostnames.
+It enables charmed applications that provide the `slurmdbd` service (Slurm database daemon)
+to exchange its hostname configuration and Slurm management data with charmed applications
+that require the `slurmdbd` service.
 
-The `slurmdbd` requirer provides controller data (authentication secret and JWT secret)
+The `slurmdbd` requirer supplies controller data (authentication secret and JWT secret)
 to the `slurmdbd` provider. In turn, the `slurmdbd` provider publishes its hostname so that
 `slurmctld` can contact the database service.
 
@@ -59,11 +60,7 @@ The `slurmdbd` provider sets its hostname on its own application databag.
 - Is expected to call `get_database_data` to retrieve `DatabaseData`.
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `jwt_secret_id` fields populated.
 
-## Integration data
-
-[[Source]](src/charmed_slurm_slurmdbd_interface/__init__.py)
-
-### Example
+## Example integration data
 
 ```yaml
 provider:
@@ -77,7 +74,7 @@ requirer:
   unit: {}
 ```
 
-## Examples
+## Example usages
 
 ### Provider charm
 

@@ -5,10 +5,10 @@
 
 ## Usage
 
-This package provides the base integration interface implementation for the other Slurm interfaces.
+This package provides the base building blocks for Slurm-related integration interface implementations.
 It defines the `SlurmctldProvider` and `SlurmctldRequirer` base classes that all other Slurm integration
-interfaces inherit from, along with common data structures, events, and utilities shared across
-Slurm-related integrations.
+interfaces inherit from, along with common data structures, events, and utilities shared across Slurm-related
+integrations.
 
 Authentication and JWT keys are stored as Juju Secrets, and the `slurmctld` provider grants access to
 those secrets on a per-integration basis. When an integration is broken, the provider revokes the departing
@@ -62,11 +62,7 @@ The requirer resolves secret IDs into their content when reading controller data
 - Is expected to emit `SlurmctldDisconnectedEvent` when the relation is broken (unless the local unit is departing).
 - Is expected to call `get_controller_data` to retrieve `ControllerData` and resolve secrets into their plaintext values.
 
-## Integration data
-
-[[Source]](src/charmed_slurm_slurmctld_interface/__init__.py)
-
-### Example
+## Example integration data
 
 ```yaml
 provider:
@@ -81,7 +77,7 @@ requirer:
   unit: {}
 ```
 
-## Examples
+## Example usages
 
 ### Requirer charm
 

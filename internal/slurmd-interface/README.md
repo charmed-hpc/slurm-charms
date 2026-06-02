@@ -3,11 +3,11 @@
 ## Usage
 
 This package provides the integration interface implementation for the `slurmd` interface.
-It enables charmed applications providing the `slurmd` service (Slurm compute daemon)
+It enables charmed applications that provide the `slurmd` service (Slurm compute daemon)
 to exchange partition and Slurm management data with charmed applications that require the
 `slurmd` service.
 
-The `slurmd` requirer provides controller data (authentication secret and controller addresses) to
+The `slurmd` requirer supplies controller data (authentication secret and controller addresses) to
 the `slurmd` provider. In turn, the `slurmd` provider publishes its partition configuration so
 that the `slurmd` requirer can incorporate compute nodes into the cluster configuration.
 
@@ -61,11 +61,7 @@ as a JSON-serialized `Partition` object from `slurmutils`.
 - Is expected to call `get_compute_data` to retrieve `ComputeData`.
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `controllers` fields populated.
 
-## Integration data
-
-[[Source]](src/charmed_slurm_slurmd_interface/__init__.py)
-
-### Example
+## Example integration data
 
 ```yaml
 provider:
@@ -79,7 +75,7 @@ requirer:
   unit: {}
 ```
 
-## Examples
+## Example usages
 
 ### Provider charm
 

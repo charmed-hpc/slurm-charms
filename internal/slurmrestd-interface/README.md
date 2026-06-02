@@ -3,10 +3,10 @@
 ## Usage
 
 This package provides the integration interface implementation for the `slurmrestd` interface.
-It enables `slurmrestd` (Slurm REST API daemon) applications to exchange data with
-`slurmctld` (Slurm central management daemon), including authentication secrets and the Slurm configuration.
+It enables charmed applications providing the `slurmrestd` service (Slurm REST API daemon)
+to exchange Slurm management data with charmed applications that require the `slurmrestd` service.
 
-The `slurmrestd` requirer provides controller data (authentication secret and Slurm configuration) to the
+The `slurmrestd` requirer supplies controller data (authentication secret and Slurm configuration) to the
 `slurmrestd` provider. The `slurmrestd` provider does not send data back; it only consumes controller
 data to configure the REST API daemon.
 
@@ -48,11 +48,7 @@ The `slurmrestd` provider consumes this data but does not write to its own appli
 - Is expected to emit `SlurmrestdConnectedEvent` when a new `slurmrestd` application is connected (leader only).
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `slurmconfig` fields populated.
 
-## Integration data
-
-[[Source]](src/charmed_slurm_slurmrestd_interface/__init__.py)
-
-### Example
+## Example integration data
 
 ```yaml
 provider:
@@ -65,7 +61,7 @@ requirer:
   unit: {}
 ```
 
-## Examples
+## Example usages
 
 ### Provider charm
 
