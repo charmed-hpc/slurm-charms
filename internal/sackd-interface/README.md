@@ -2,11 +2,17 @@
 
 ## Usage
 
-This package provides the integration interface implementation for the `sackd` interface. It enables `sackd`
-(Slurm authentication and credential kiosk daemon) applications to receive controller data from `slurmctld`,
-including authentication secrets and controller addresses.
+This package provides the integration interface implementation for the `sackd` interface.
+It enables charmed applications providing the `sackd` service (Slurm auth and cred kiosk daemon)
+to exchange Slurm management data with charmed applications that require the `sackd` service.
 
-To install, add `charmed-slurm-sackd-interface` to your Python dependencies _pyproject.toml_.
+The `sackd` requirer provides controller data (authentication secret and controller addresses) to
+the `sackd` provider through the integration databag. The `sackd` provider validates that required fields
+are present before considering the integration ready.
+
+## Installation
+
+Add `charmed-slurm-sackd-interface` to your Python dependencies _pyproject.toml_.
 Then in your Python code, import as:
 
 ```python
@@ -19,20 +25,17 @@ from charmed_slurm_sackd_interface import (
 
 ## Direction
 
-The `sackd` interface implements a provider/requirer pattern.
-The Provider is the `sackd` application that receives controller data from `slurmctld`.
-The Requirer is the `slurmctld` application that provides authentication secrets and controller addresses to `sackd`.
-
 ```mermaid
-flowchart TD
+flowchart BT
     Requirer -- auth_secret_id, controllers --> Provider
 ```
 
 ## Behavior
 
-The `slurmctld` requirer provides controller data (authentication secret and controller addresses) to
-the `sackd` provider through the relation databag. The `sackd` provider validates that required fields
-are present before considering the integration ready.
+Data is exchanged through the Juju integration application databag. The `sackd` requirer sets `auth_secret_id`
+and `controllers` on its application databag. The authentication key itself is stored as a Juju Secret,
+with only the secret ID in the databag. The `sackd` provider resolves the secret to retrieve the
+actual key material.
 
 ### Provider
 
@@ -47,11 +50,6 @@ are present before considering the integration ready.
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `controllers` fields populated.
 
 ## Integration data
-
-Data is exchanged through the Juju integration application databag. The `slurmctld` requirer sets `auth_secret_id`
-and `controllers` on its application databag. The authentication key itself is stored as a Juju Secret,
-with only the secret ID in the databag. The `sackd` provider resolves the secret to retrieve the
-actual key material.
 
 [[Source]](src/charmed_slurm_sackd_interface/__init__.py)
 

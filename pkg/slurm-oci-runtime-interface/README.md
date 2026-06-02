@@ -7,9 +7,13 @@
 
 This package provides the integration interface implementation for the `slurm_oci_runtime` interface.
 It enables OCI runtime charms - for example, Apptainer - to share their runtime configuration
-with the `slurmctld` application, which uses it to generate the `oci.conf` configuration file.
+with `slurm_oci_runtime` requirers like the `slurmctld` application. The `slurm_oci_runtime` requirer
+consumes this data to manage the `oci.conf` configuration file. When the integration is broken,
+the requirer is notified so it can remove the OCI runtime configuration.
 
-To install, add `charmed-slurm-oci-runtime-interface` to your Python dependencies.
+# Installation
+
+Add `charmed-slurm-oci-runtime-interface` to your Python dependencies.
 Then in your Python code, import as:
 
 ```python
@@ -22,10 +26,6 @@ from charmed_slurm_oci_runtime_interface import (
 
 ## Direction
 
-The `slurm_oci_runtime` interface implements a provider/requirer pattern.
-The Provider is the OCI runtime application that shares its runtime configuration with `slurmctld`.
-The Requirer is the `slurmctld` application that consumes OCI runtime configuration to build `oci.conf`.
-
 ```mermaid
 flowchart TD
     Provider -- ociconfig --> Requirer
@@ -33,9 +33,9 @@ flowchart TD
 
 ## Behavior
 
-The OCI runtime provider publishes its configuration data once installed and ready. The `slurmctld`
-requirer consumes this data to manage the `oci.conf` configuration file. When the integration is broken,
-the requirer is notified so it can remove the OCI runtime configuration.
+Data is exchanged through the Juju integration application databag. The OCI runtime provider places its
+configuration - an `OCIConfig` structure from `slurmutils` - in its application databag. The
+`slurmctld` requirer reads this data to construct the `oci.conf` configuration file.
 
 ### Provider
 
@@ -52,13 +52,6 @@ the requirer is notified so it can remove the OCI runtime configuration.
 - Is expected to only process events as the application leader.
 
 ## Integration data
-
-Data is exchanged through the Juju integration application databag. The OCI runtime provider places its
-configuration - an `OCIConfig` structure from `slurmutils` - in its application databag. The
-`slurmctld` requirer reads this data to construct the `oci.conf` file.
-
-Additionally, `slurmctld` provides controller data such as authentication secrets or Slurm configuration
-back to the OCI runtime provider through the same integration, using the inherited `slurmctld` base interface.
 
 [[Source]](src/charmed_slurm_oci_runtime_interface/__init__.py)
 

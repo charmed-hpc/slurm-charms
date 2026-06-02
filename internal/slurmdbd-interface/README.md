@@ -3,10 +3,16 @@
 ## Usage
 
 This package provides the integration interface implementation for the `slurmdbd` interface.
-It enables `slurmdbd` (Slurm database daemon) applications to exchange data with the `slurmctld` controller.
-`slurmdbd` receives authentication and JWT secrets, and provides its hostname back to `slurmctld`.
+It enables `slurmdbd` (Slurm database daemon) applications to exchange data with the `slurmctld`
+(Slurm central management daemon) controller, such as authentication, JWT secrets, and hostnames.
 
-To install, add `charmed-slurm-slurmdbd-interface` to your Python dependencies.
+The `slurmdbd` requirer provides controller data (authentication secret and JWT secret)
+to the `slurmdbd` provider. In turn, the `slurmdbd` provider publishes its hostname so that
+`slurmctld` can contact the database service.
+
+## Installation
+
+Add `charmed-slurm-slurmdbd-interface` to your Python dependencies.
 Then in your Python code, import as:
 
 ```python
@@ -21,21 +27,20 @@ from charmed_slurm_slurmdbd_interface import (
 
 ## Direction
 
-The `slurmdbd` interface implements a provider/requirer pattern.
-The Provider is the `slurmdbd` application that provides its hostname to `slurmctld` and receives controller data.
-The Requirer is the `slurmctld` application that provides authentication and JWT secrets and consumes the database hostname from `slurmdbd`.
-
 ```mermaid
 flowchart TD
-    Provider -- hostname --> Requirer
-    Requirer -- auth_secret_id, jwt_secret_id --> Provider
+    A[Provider]
+    B[Requirer]
+
+    A -- hostname --> B
+    B -- auth_secret_id, jwt_secret_id --> A
 ```
 
 ## Behavior
 
-The `slurmctld` requirer provides controller data (authentication secret and JWT secret)
-to the `slurmdbd` provider. In turn, the `slurmdbd` provider publishes its hostname so that
-`slurmctld` can contact the database service.
+Data is exchanged through the Juju integration application databag in both directions. The `slurmdbd` requirer
+sets controller data including Juju Secret IDs for authentication and JWT keys on its application databag.
+The `slurmdbd` provider sets its hostname on its own application databag.
 
 ### Provider
 
@@ -55,10 +60,6 @@ to the `slurmdbd` provider. In turn, the `slurmdbd` provider publishes its hostn
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `jwt_secret_id` fields populated.
 
 ## Integration data
-
-Data is exchanged through the Juju integration application databag in both directions. The `slurmctld` requirer
-sets controller data including Juju Secret IDs for authentication and JWT keys on its application databag.
-The `slurmdbd` provider sets its hostname on its own application databag.
 
 [[Source]](src/charmed_slurm_slurmdbd_interface/__init__.py)
 

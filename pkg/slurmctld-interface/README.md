@@ -5,15 +5,25 @@
 
 ## Usage
 
-This package provides the base integration interface implementation for the `slurmctld` interface.
+This package provides the base integration interface implementation for the other Slurm interfaces.
 It defines the `SlurmctldProvider` and `SlurmctldRequirer` base classes that all other Slurm integration
 interfaces inherit from, along with common data structures, events, and utilities shared across
 Slurm-related integrations.
 
-Charms that implement a new Slurm service integration should depend on this package and extend
-`SlurmctldProvider` or `SlurmctldRequirer` as appropriate.
+Authentication and JWT keys are stored as Juju Secrets, and the `slurmctld` provider grants access to
+those secrets on a per-integration basis. When an integration is broken, the provider revokes the departing
+application's access to secrets.
 
-To install, add `charmed-slurm-slurmctld-interface` to your Python dependencies.
+`slurmctld` requirers listen for integration lifecycle events and emit higher-level events to
+signal when controller data becomes available or is removed.
+
+Charms that implement a new Slurm service integration should depend on this package and extend
+`SlurmctldProvider` or `SlurmctldRequirer` as appropriate. `SlurmctldProvider` and `SlurmctldRequirer`
+should not be used directly in charm code.
+
+## Installation
+
+Add `charmed-slurm-slurmctld-interface` to your Python dependencies.
 Then in your Python code, import as:
 
 ```python
@@ -28,11 +38,6 @@ from charmed_slurm_slurmctld_interface import (
 
 ## Direction
 
-The `slurmctld` interface implements a provider/requirer pattern.
-The Provider is the `slurmctld` application that shares controller configuration, authentication keys,
-and JWT keys with other Slurm services. The Requirer is any Slurm service application such as
-`slurmd`, `slurmdbd`, `slurmrestd`, or `sackd` that needs controller data to operate.
-
 ```mermaid
 flowchart TD
     Provider -- auth_secret_id, controllers, jwt_secret_id, slurmconfig --> Requirer
@@ -40,13 +45,9 @@ flowchart TD
 
 ## Behavior
 
-The `slurmctld` provider sets controller data on the application databag for each related integration.
-Authentication and JWT keys are stored as Juju Secrets, and the provider grants access to those secrets
-on a per-integration basis. When an integration is broken, the provider revokes the departing
-application's access to secrets.
-
-The requirer listens for relation lifecycle events and emits higher-level events to
-signal when controller data becomes available or is removed.
+Data is exchanged through the Juju integration application databag. Sensitive fields like `auth_secret_id`
+and `jwt_secret_id` are stored as Juju Secrets; only the secret IDs are placed in the integration databag.
+The requirer resolves secret IDs into their content when reading controller data.
 
 ### Provider
 
@@ -62,10 +63,6 @@ signal when controller data becomes available or is removed.
 - Is expected to call `get_controller_data` to retrieve `ControllerData` and resolve secrets into their plaintext values.
 
 ## Integration data
-
-Data is exchanged through the Juju integration application databag. Sensitive fields like `auth_key` and `jwt_key`
-are stored as Juju Secrets; only the secret IDs are placed in the databag. The requirer
-resolves secret IDs into their content when reading controller data.
 
 [[Source]](src/charmed_slurm_slurmctld_interface/__init__.py)
 

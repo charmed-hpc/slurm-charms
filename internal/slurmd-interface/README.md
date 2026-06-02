@@ -3,11 +3,17 @@
 ## Usage
 
 This package provides the integration interface implementation for the `slurmd` interface.
-It enables `slurmd` (Slurm compute daemon) applications to exchange data with the `slurmctld` controller.
-`slurmd` receives authentication secrets and controller addresses, and provides partition
-configuration back to `slurmctld`.
+It enables charmed applications providing the `slurmd` service (Slurm compute daemon)
+to exchange partition and Slurm management data with charmed applications that require the
+`slurmd` service.
 
-To install, add `charmed-slurm-slurmd-interface` to your Python dependencies.
+The `slurmd` requirer provides controller data (authentication secret and controller addresses) to
+the `slurmd` provider. In turn, the `slurmd` provider publishes its partition configuration so
+that the `slurmd` requirer can incorporate compute nodes into the cluster configuration.
+
+## Installation
+
+Add `charmed-slurm-slurmd-interface` to your Python dependencies.
 Then in your Python code, import as:
 
 ```python
@@ -22,21 +28,21 @@ from charmed_slurm_slurmd_interface import (
 
 ## Direction
 
-The `slurmd` interface implements a provider/requirer pattern.
-The Provider is the `slurmd` application that provides partition data to `slurmctld` and receives controller data.
-The Requirer is the `slurmctld` application that provides controller data and consumes partition configuration from `slurmd`.
-
 ```mermaid
 flowchart TD
-    Provider -- partition --> Requirer
-    Requirer -- auth_secret_id, controllers --> Provider
+    A["Provider"]
+    B["Requirer"]
+
+    A -- partitionconfig --> B
+    B -- auth_secret_id, controllers --> A
 ```
 
 ## Behavior
 
-The `slurmctld` requirer provides controller data (authentication secret and controller addresses) to the `slurmd`
-provider. In turn, the `slurmd` provider publishes its partition configuration so that `slurmctld` can incorporate
-compute nodes into the cluster configuration.
+Data is exchanged through the Juju integration application databag in both directions.
+The `slurmd` requirer sets controller data (including Juju Secret IDs for authentication keys) on
+its application databag. The `slurmd` provider sets partition configuration data on its own application databag
+as a JSON-serialized `Partition` object from `slurmutils`.
 
 ### Provider
 
@@ -56,11 +62,6 @@ compute nodes into the cluster configuration.
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `controllers` fields populated.
 
 ## Integration data
-
-Data is exchanged through the Juju integration application databag in both directions.
-The `slurmd` requirer sets controller data (including Juju Secret IDs for authentication keys) on
-its application databag. The `slurmd` provider sets partition data on its own application databag as a JSON-serialized
-`Partition` object from `slurmutils`.
 
 [[Source]](src/charmed_slurm_slurmd_interface/__init__.py)
 

@@ -2,11 +2,17 @@
 
 ## Usage
 
-This package provides the integration interface implementation for the `slurmrestd` interface. It enables
-`slurmrestd` (Slurm REST API daemon) applications to receive controller data from `slurmctld`,
-including authentication secrets and the Slurm configuration.
+This package provides the integration interface implementation for the `slurmrestd` interface.
+It enables `slurmrestd` (Slurm REST API daemon) applications to exchange data with
+`slurmctld` (Slurm central management daemon), including authentication secrets and the Slurm configuration.
 
-To install, add `charmed-slurm-slurmrestd-interface` to your Python dependencies.
+The `slurmrestd` requirer provides controller data (authentication secret and Slurm configuration) to the
+`slurmrestd` provider. The `slurmrestd` provider does not send data back; it only consumes controller
+data to configure the REST API daemon.
+
+## Installation
+
+Add `charmed-slurm-slurmrestd-interface` to your Python dependencies.
 Then in your Python code, import as:
 
 ```python
@@ -19,20 +25,16 @@ from charmed_slurm_slurmrestd_interface import (
 
 ## Direction
 
-The `slurmrestd` interface implements a provider/requirer pattern.
-The Provider is the `slurmrestd` application that receives controller data from `slurmctld`.
-The Requirer is the `slurmctld` application that provides authentication secrets and Slurm configuration to `slurmrestd`.
-
 ```mermaid
-flowchart TD
+flowchart BT
     Requirer -- auth_secret_id, slurmconfig --> Provider
 ```
 
 ## Behavior
 
-The `slurmctld` requirer provides controller data (authentication secret and Slurm configuration) to the
-`slurmrestd` provider. The `slurmrestd` provider does not send data back; it only consumes controller
-data to configure the REST API daemon.
+Data is exchanged through the Juju integration application databag. The `slurmrestd` requirer sets controller
+data including Juju Secret IDs for authentication and the Slurm configuration on its application databag.
+The `slurmrestd` provider consumes this data but does not write to its own application databag.
 
 ### Provider
 
@@ -47,10 +49,6 @@ data to configure the REST API daemon.
 - Is expected to publish `ControllerData` with at least `auth_secret_id` and `slurmconfig` fields populated.
 
 ## Integration data
-
-Data is exchanged through the Juju integration application databag. The `slurmctld` requirer sets controller
-data including Juju Secret IDs for authentication and the Slurm configuration on its application databag.
-The `slurmrestd` provider consumes this data but does not write to its own application databag.
 
 [[Source]](src/charmed_slurm_slurmrestd_interface/__init__.py)
 
