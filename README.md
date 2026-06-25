@@ -43,6 +43,7 @@ If you want to learn more about all the things you can do with the Slurm charms,
 
 * [Documentation](https://canonical-charmed-hpc.readthedocs-hosted.com/latest)
 * [Open an issue](https://github.com/canonical/slurm-charms/issues/new?title=ISSUE+TITLE&body=*Please+describe+your+issue*)
+* [Ask a question](https://discourse.ubuntu.com/c/project/hpc/151)
 
 ## 🛠️ Development
 
@@ -76,14 +77,14 @@ If you're interested in contributing, take a look at our [contributing guideline
 ## 🤝 Project and Community
 
 The Slurm charms are a project of the [Ubuntu High-Performance Computing community](https://ubuntu.com/community/governance/teams/hpc).
-Interested in contributing bug fixes, patches, documentation, or feedback? Want to join the Ubuntu HPC community? You’ve come to the right place 🤩
+Interested in contributing bug fixes, patches, documentation, or feedback? Want to join the Ubuntu HPC community? You've come to the right place 🤩
 
-Here’s some links to help you get started with joining the community:
+Here's some links to help you get started with joining the community:
 
 * [Ubuntu Code of Conduct](https://ubuntu.com/community/ethos/code-of-conduct)
 * [Contributing guidelines](./CONTRIBUTING.md)
 * [Join the conversation on Matrix](https://matrix.to/#/#hpc:ubuntu.com)
-* [Get the latest news on Discourse](https://discourse.ubuntu.com/c/hpc/151)
+* [Get the latest news or ask and answer questions on the Ubuntu Discourse](https://discourse.ubuntu.com/c/project/hpc/151)
 
 ## 📋 License
 
