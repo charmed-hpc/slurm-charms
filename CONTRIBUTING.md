@@ -9,7 +9,7 @@ you can use this guide for specific information on contributing to the `slurm-ch
 
 Have any questions? Feel free to ask them in the [Ubuntu High-Performance Computing Matrix chat].
 
-[Charmed HPC project's contributing guide]: https://github.com/canonical/charmed-hpc-docs/blob/main/CONTRIBUTING.md
+[Charmed HPC project's contributing guide]: https://github.com/canonical/hpc-team/blob/main/CONTRIBUTING.md
 [Ubuntu High-Performance Computing Matrix chat]: https://matrix.to/#/#hpc:ubuntu.com
 
 ## Hacking on `slurm-charms`
